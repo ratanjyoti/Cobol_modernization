@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-main: #0f172a;
+  --bg-sidebar: #1e293b;
+  --bg-card: #1e293b;
+  --bg-card-hover: #334155;
+  --accent: #6366f1;
+  --accent-hover: #4f46e5;
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --border: #334155;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --terminal-bg: #020617;
+}
+
+body {
+  @apply bg-slate-950 text-slate-50 antialiased;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* Custom Utility Classes for SaaS Look */
+@layer components {
+  .glass-card {
+    @apply bg-slate-800 border border-slate-700 rounded-xl shadow-sm transition-all duration-200;
+  }
+  .btn-primary {
+    @apply bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold 
+           hover:bg-indigo-700 active:scale-95 transition-all shadow-sm;
+  }
+  .btn-secondary {
+    @apply bg-slate-800 text-slate-300 border border-slate-700 px-4 py-2 rounded-lg font-medium 
+           hover:bg-slate-700 active:scale-95 transition-all;
+  }
+  .status-pill {
+    @apply px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider;
+  }
+
+  .bg-app-bg {
+    background-color: var(--bg-main);
+  }
+
+  .bg-panel {
+    background-color: var(--bg-card);
+  }
+
+  .bg-panel-solid {
+    background-color: var(--bg-card);
+  }
+
+  .bg-darkbg {
+    background-color: var(--terminal-bg);
+  }
+
+  .text-main {
+    color: var(--text-main);
+  }
+
+  .text-muted {
+    color: var(--text-muted);
+  }
+
+  .text-accent {
+    color: var(--accent);
+  }
+
+  .bg-accent {
+    background-color: var(--accent);
+  }
+
+  .border-panel {
+    border-color: var(--border);
+  }
+}
