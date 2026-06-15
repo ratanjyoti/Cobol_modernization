@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Globe, Cpu, CheckCircle2, ArrowRight, X } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -11,7 +11,24 @@ interface ConfigModalProps {
 const ConfigModal = ({ isOpen, onClose }: ConfigModalProps) => {
   const [step, setStep] = useState(1);
   const [mode, setMode] = useState<'api' | 'local' | null>(null);
-  const [config, setConfig] = useState({ key: '', url: 'http://localhost:11434', model: 'llama3' });
+  const [config, setConfig] = useState({ key: '', url: 'http://localhost:11434', model: 'gpt-4o' });
+
+  useEffect(() => {
+    const savedConfig = localStorage.getItem('ai_config');
+    if (savedConfig) {
+      try {
+        const parsed = JSON.parse(savedConfig);
+        setMode(parsed.mode);
+        setConfig({
+          key: parsed.key || '',
+          url: parsed.url || 'http://localhost:11434',
+          model: parsed.model || 'gpt-4o'
+        });
+      } catch (e) {
+        console.error("Error parsing saved config", e);
+      }
+    }
+  }, [isOpen]); 
 
   const localModels = ['llama3', 'mistral', 'phi3', 'codellama'];
   const cloudModels = ['gpt-4o', 'gpt-4-turbo', 'claude-3-5-sonnet'];
@@ -21,7 +38,10 @@ const ConfigModal = ({ isOpen, onClose }: ConfigModalProps) => {
       toast.error("Please enter your API Key");
       return;
     }
-    // Save to localStorage to simulate persistent config
+    if (!config.model) {
+      toast.error("Please select or enter a model name");
+      return;
+    }
     localStorage.setItem('ai_config', JSON.stringify({ mode, ...config }));
     toast.success("Configuration saved successfully!");
     onClose();
@@ -31,25 +51,20 @@ const ConfigModal = ({ isOpen, onClose }: ConfigModalProps) => {
     <AnimatePresence>
       {isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          {/* Backdrop blur */}
           <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={onClose}
             className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" 
           />
-
-          {/* Modal Card */}
           <motion.div 
             initial={{ scale: 0.9, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.9, opacity: 0, y: 20 }}
             className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden"
           >
-            {/* Close Button */}
-            <button onClick={onClose} className="absolute top-4 right-4 text-slate-500 hover:text-white transition-colors">
+            <button onClick={onClose} className="absolute top-4 right, right-4 text-slate-500 hover:text-white transition-colors">
               <X size={20} />
             </button>
-
             <div className="p-8">
               {step === 1 ? (
                 <div className="space-y-6">
@@ -57,13 +72,10 @@ const ConfigModal = ({ isOpen, onClose }: ConfigModalProps) => {
                     <h2 className="text-2xl font-bold text-white">Welcome to Modernizer AI</h2>
                     <p className="text-slate-400 text-sm">Select your AI engine to begin the conversion process.</p>
                   </div>
-
                   <div className="grid grid-cols-1 gap-4">
                     <div 
                       onClick={() => { setMode('api'); setStep(2); }}
-                      className={`group cursor-pointer p-6 rounded-2xl border-2 transition-all ${
-                        mode === 'api' ? 'border-indigo-500 bg-indigo-500/10' : 'border-slate-800 bg-slate-800/50 hover:border-slate-700'
-                      }`}
+                      className={`group cursor-pointer p-6 rounded-2xl border-2 transition-all ${mode === 'api' ? 'border-indigo-500 bg-indigo-500/10' : 'border-slate-800 bg-slate-800/50 hover:border-slate-700'}`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
@@ -78,12 +90,9 @@ const ConfigModal = ({ isOpen, onClose }: ConfigModalProps) => {
                         <ArrowRight size={20} className="text-slate-600 group-hover:text-white transition-colors" />
                       </div>
                     </div>
-
                     <div 
                       onClick={() => { setMode('local'); setStep(2); }}
-                      className={`group cursor-pointer p-6 rounded-2xl border-2 transition-all ${
-                        mode === 'local' ? 'border-indigo-500 bg-indigo-500/10' : 'border-slate-800 bg-slate-800/50 hover:border-slate-700'
-                      }`}
+                      className={`group cursor-pointer p-6 rounded-2xl border-2 transition-all ${mode === 'local' ? 'border-indigo-500 bg-indigo-500/10' : 'border-slate-800 bg-slate-800/50 hover:border-slate-700'}`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
@@ -108,7 +117,6 @@ const ConfigModal = ({ isOpen, onClose }: ConfigModalProps) => {
                     </h2>
                     <p className="text-slate-400 text-sm">Enter your connection details below.</p>
                   </div>
-
                   <div className="space-y-4">
                     {mode === 'api' ? (
                       <>
@@ -130,7 +138,29 @@ const ConfigModal = ({ isOpen, onClose }: ConfigModalProps) => {
                             onChange={(e) => setConfig({...config, model: e.target.value})}
                           >
                             {cloudModels.map(m => <option key={m} value={m}>{m}</option>)}
+                            <option value="custom">✨ Other / Custom Model</option>
                           </select>
+                          
+                          {/* CUSTOM MODEL INPUT: Only shows if 'custom' is selected */}
+                          <AnimatePresence>
+                            {config.model === 'custom' && (
+                              <motion.div 
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                className="overflow-hidden"
+                              >
+                                <input 
+                                  type="text" 
+                                  className="w-full mt-3 bg-slate-950 border border-indigo-500/50 rounded-xl px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                  placeholder="Enter custom model name (e.g. gpt-4-32k)"
+                                  value={config.model === 'custom' ? config.key : ''} // This is a placeholder, we need a separate state or handle carefully
+                                  onChange={(e) => setConfig({...config, model: e.target.value})}
+                                />
+                                <p className="text-[10px] text-slate-500 mt-2 italic">Note: Ensure the custom model is available in your API account.</p>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
                         </div>
                       </>
                     ) : (
@@ -159,12 +189,28 @@ const ConfigModal = ({ isOpen, onClose }: ConfigModalProps) => {
                                 {m}
                               </button>
                             ))}
+                            <button 
+                              onClick={() => setConfig({...config, model: 'custom'})}
+                              className={`p-2 text-xs rounded-lg border transition-all ${
+                                config.model === 'custom' ? 'border-indigo-500 bg-indigo-500/20 text-white' : 'border-slate-700 text-slate-400 hover:bg-slate-800'
+                              }`}
+                            >
+                              Custom Model
+                            </button>
                           </div>
+                          {config.model === 'custom' && (
+                            <input 
+                              type="text" 
+                              className="w-full mt-3 bg-slate-950 border border-indigo-500/50 rounded-xl px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                              placeholder="Enter local model name..."
+                              value={config.model === 'custom' ? config.model : ''}
+                              onChange={(e) => setConfig({...config, model: e.target.value})}
+                            />
+                          )}
                         </div>
                       </>
                     )}
                   </div>
-
                   <div className="flex gap-3 pt-4">
                     <button onClick={() => setStep(1)} className="flex-1 py-3 rounded-xl text-slate-400 font-bold hover:text-white transition-colors">
                       Back

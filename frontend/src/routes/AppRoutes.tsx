@@ -7,7 +7,7 @@ import ReverseEngineering from '../pages/ReverseEngineering';
 import DependencyGraph from '../pages/DependencyGraph';
 import BusinessLogic from '../pages/BusinessLogic';
 import DDDDiscovery from '../pages/DDDDiscovery';
-import ModernizerChat from '../pages/ModernizerChat';
+import ModernizerChat from '../pages/ModernizerChat'; // Ensure this import exists
 import ModernizationPlan from '../pages/ModernizationPlan';
 import CodeGeneration from '../pages/CodeGeneration';
 import MissionControl from '../pages/MissionControl';
@@ -27,7 +27,7 @@ const AppRoutes = () => {
           <Route path="dependency-graph" element={<DependencyGraph />} />
           <Route path="business-logic" element={<BusinessLogic />} />
           <Route path="ddd-discovery" element={<DDDDiscovery />} />
-          <Route path="chat" element={<ModernizerChat />} />
+          <Route path="chat" element={<ModernizerChat />} /> {/* THIS LINE IS CRITICAL */}
           <Route path="modernization-plan" element={<ModernizationPlan />} />
           <Route path="code-generation" element={<CodeGeneration />} />
           <Route path="mission-control" element={<MissionControl />} />
