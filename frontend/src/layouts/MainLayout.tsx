@@ -1,17 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Header from '../components/Header';
 import ConfigModal from '../components/ConfigModal';
+import HITLModal from '../components/HITLModal';
+import toast from 'react-hot-toast';
 
 const MainLayout = () => {
   const [showConfig, setShowConfig] = useState(false);
+  
+  // HITL State
+  const [hitlOpen, setHitlOpen] = useState(false);
+  const [hitlData, setHitlData] = useState({ tabName: '', message: '', reason: '' });
 
-  useEffect(() => {
-    // Check if AI configuration exists in localStorage
-    const config = localStorage.getItem('ai_config');
-    if (!config) {
-      setShowConfig(true);
-    }
+  // Global function to trigger HITL from any child page
+  const triggerHITL = (name: string, msg: string, reason: string) => {
+    setHitlData({ tabName: name, message: msg, reason: reason });
+    setHitlOpen(true);
+  };
+
+  // We attach this to the window object so any page can call it without complex props
+  React.useEffect(() => {
+    (window as any).triggerHITL = triggerHITL;
   }, []);
 
   return (
@@ -21,10 +30,17 @@ const MainLayout = () => {
         <Outlet />
       </main>
       
-      {/* The Configuration Modal */}
-      <ConfigModal 
-        isOpen={showConfig} 
-        onClose={() => setShowConfig(false)} 
+      <ConfigModal isOpen={showConfig} onClose={() => setShowConfig(false)} />
+
+      {/* HITL Modal */}
+      <HITLModal 
+        isOpen={hitlOpen} 
+        onDeny={() => setHitlOpen(false)}
+        onApprove={() => {
+          setHitlOpen(false);
+          toast.success("Approved! Pipeline resuming...");
+        }}
+        config={hitlData}
       />
     </div>
   );
