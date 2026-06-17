@@ -134,89 +134,35 @@ const menuGroups = [
   {
     group: 'Core',
     items: [
-      {
-        name: 'Dashboard',
-        path: '/dashboard',
-        icon: LayoutDashboard,
-      },
-      {
-        name: 'Projects',
-        path: '/projects',
-        icon: Database,
-      },
+      { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+      { name: 'Projects', path: '/projects', icon: Database },
     ],
   },
   {
     group: 'Reverse Engineering',
     items: [
-      {
-        name: 'Source Files',
-        path: '/source-files',
-        icon: FolderOpen,
-      },
-      {
-        name: 'Analysis',
-        path: '/reverse-engineering',
-        icon: Cpu,
-      },
-      {
-        name: 'Dependency Graph',
-        path: '/dependency-graph',
-        icon: Share2,
-      },
-      {
-        name: 'Business Logic',
-        path: '/business-logic',
-        icon: FileText,
-      },
-      {
-        name: 'DDD Discovery',
-        path: '/ddd-discovery',
-        icon: GitBranch,
-      },
+      { name: 'Source Files', path: '/source-files', icon: FolderOpen },
+      { name: 'Analysis', path: '/reverse-engineering', icon: Cpu },
+      { name: 'System Discovery', path: '/discovery', icon: Share2 }, // Combined Graph + DDD
+      { name: 'Business Logic', path: '/business-logic', icon: FileText },
     ],
   },
   {
     group: 'Modernization',
     items: [
-      {
-        name: 'Modern Plan',
-        path: '/modernization-plan',
-        icon: Map,
-      },
-      {
-        name: 'Code Gen',
-        path: '/code-generation',
-        icon: Code2,
-      },
-      {
-        name: 'Modernizer Chat',
-        path: '/chat',
-        icon: MessageSquare,
-      },
+      { name: 'Modernization Hub', path: '/modernization', icon: Code2 }, // Combined Plan + Gen
+      { name: 'Modernizer Chat', path: '/chat', icon: MessageSquare },
     ],
   },
   {
     group: 'System',
     items: [
-      {
-        name: 'Mission Control',
-        path: '/mission-control',
-        icon: Activity,
-      },
-      {
-        name: 'Prompt Studio',
-        path: '/prompt-studio',
-        icon: Settings,
-      },
-      {
-        name: 'Settings',
-        path: '/settings',
-        icon: Settings,
-      },
+      { name: 'Mission Control', path: '/mission-control', icon: Activity },
+      { name: 'System Admin', path: '/admin', icon: Settings }, // Combined Prompts + Settings
     ],
   },
 ];
+
 
 const Sidebar = ({
   isOpen,
