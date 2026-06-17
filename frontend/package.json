@@ -17,6 +17,7 @@
     "react-force-graph-2d": "^1.29.1",
     "react-hot-toast": "^2.6.0",
     "react-router-dom": "^7.17.0",
+    "react-zoom-pan-pinch": "^4.0.3",
     "reactflow": "^11.11.4"
   },
   "devDependencies": {
