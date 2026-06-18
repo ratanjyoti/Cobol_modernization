@@ -6,297 +6,352 @@ import {
   Database, ArrowUpRight, Play, Loader2, 
   Upload, GitBranch, Languages, Code, 
   ChevronRight, HelpCircle, AlertCircle, PlusCircle,
-  BookOpen, BrainCircuit, Rocket, ShieldCheck
+  BookOpen, BrainCircuit, Rocket, ShieldCheck,
+  X, Target, Info, Lightbulb
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-// --- Types & Data ---
-type MigrationScope = 'mapping' | 'reverse' | 'full';
-type RulePrecision = 'plain' | 'ddd';
-
-const SCOPE_CONFIG = {
-  mapping: { label: 'Dependency Mapping', cost: 'Low', color: 'text-emerald-400', bg: 'bg-emerald-500/10', desc: 'Visualize architecture & connections only.' },
-  reverse: { label: 'Reverse Engineering', cost: 'Medium', color: 'text-amber-400', bg: 'bg-amber-500/10', desc: 'Extract logic, complexity & rules.' },
-  full: { label: 'Full Migration', cost: 'High', color: 'text-red-400', bg: 'bg-red-500/10', desc: 'End-to-end conversion with Agentic Refinement.' },
-};
-
-const ROADMAP_STEPS = [
-  { 
-    title: "Ingestion & Planning", 
-    layer: "Layers 1-2", 
-    desc: "File size check, adaptive chunking (300-line overlap), and initial COBOL parsing.", 
-    icon: Upload 
+// --- Constants for Token Budgeting & Scope ---
+const MIGRATION_SCOPES = [
+  {
+    id: 'mapping',
+    title: 'Dependency Mapping',
+    tokens: '10k – 25k',
+    cost: 'Low',
+    color: 'text-emerald-400',
+    bg: 'bg-emerald-500/10',
+    purpose: 'Visualize architecture and relationships without deep semantic analysis.',
+    includes: ['Program-to-program dependencies', 'Copybook relationships', 'File/DB interactions', 'Entry-point identification'],
+    bestFor: 'Architecture understanding and impact analysis.'
   },
-  { 
-    title: "Intel Extraction", 
-    layer: "Layers 3-5", 
-    desc: "Complexity scoring, TPM throttling, and self-healing API loops to ensure zero data loss.", 
-    icon: BrainCircuit 
+  {
+    id: 'reverse',
+    title: 'Reverse Engineering',
+    tokens: '50k – 120k',
+    cost: 'Medium',
+    color: 'text-amber-400',
+    bg: 'bg-amber-500/10',
+    purpose: 'Understand how the legacy application behaves.',
+    includes: ['Program summaries', 'Complexity scoring', 'Functional decomposition', 'Technical documentation'],
+    bestFor: 'System understanding before migration.'
   },
-  { 
-    title: "Modern Transformation", 
-    layer: "Layers 6-8", 
-    desc: "Java/C# conversion, reconciliation of chunks, and unified application structuring.", 
-    icon: Code 
+  {
+    id: 'plain_rules',
+    title: 'Business Rule Extraction (Plain)',
+    tokens: '80k – 150k',
+    cost: 'Medium',
+    color: 'text-blue-400',
+    bg: 'bg-blue-500/10',
+    purpose: 'Extract understandable business logic from legacy code.',
+    includes: ['Rule identification', 'Conditions and actions', 'Validation rules', 'Source traceability'],
+    bestFor: 'Documentation and SME validation.'
   },
-  { 
-    title: "Agentic Refinement", 
-    layer: "Layer 9", 
-    desc: "Iterative Compile-Test-Fix loop to produce production-ready, optimized code.", 
-    icon: ShieldCheck 
+  {
+    id: 'ddd_rules',
+    title: 'Business Rule Extraction (DDD)',
+    tokens: '150k – 300k',
+    cost: 'High',
+    color: 'text-purple-400',
+    bg: 'bg-purple-500/10',
+    purpose: 'Discover the business domain behind the codebase.',
+    includes: ['Bounded Contexts', 'Entities & Aggregates', 'Domain Services', 'Ubiquitous Language'],
+    bestFor: 'Microservice decomposition.'
+  },
+  {
+    id: 'full',
+    title: 'Full Migration',
+    tokens: '250k – 600k',
+    cost: 'Very High',
+    color: 'text-red-400',
+    bg: 'bg-red-500/10',
+    purpose: 'Execute complete modernization using the full Agentic AI pipeline.',
+    includes: ['All Discovery Phases', 'Java/C# Conversion', 'Chunk Reconciliation', 'Agentic Refinement'],
+    bestFor: 'Production modernization initiatives.'
   },
 ];
 
-const KPICard = ({ label, value, icon: Icon, subtext }: any) => (
-  <div className="glass-card p-6 rounded-2xl border-slate-800 hover:border-indigo-500/50 transition-all group">
-    <div className="flex justify-between items-start mb-4">
-      <span className="text-sm font-medium text-slate-400">{label}</span>
-      <div className="p-2 bg-slate-900 rounded-lg group-hover:bg-indigo-500/20 transition-colors">
-        <Icon size={20} className="text-slate-500 group-hover:text-indigo-400" />
-      </div>
+const JOURNEY_STEPS = [
+  { name: 'Select Project', desc: 'Define the legacy system boundaries.' },
+  { name: 'Upload Source', desc: 'Ingest COBOL files and validate syntax.' },
+  { name: 'Discovery', desc: 'Map dependencies and architecture.' },
+  { name: 'Knowledge Extraction', desc: 'Translate code into business rules.' },
+  { name: 'Plan Migration', desc: 'Define target Java/C# architecture.' },
+  { name: 'Generate Code', desc: 'Transform logic into modern artifacts.' },
+  { name: 'Refinement', desc: 'Iterative compile-test-fix loop.' },
+  { name: 'Deploy', desc: 'Export production-ready application.' },
+];
+
+const PIPELINE_LAYERS = [
+  { range: 'Layer 1–2', title: 'Ingestion & Planning', tasks: ['File validation', 'Adaptive chunking', 'COBOL parsing'] },
+  { range: 'Layer 3–5', title: 'Intel Extraction', tasks: ['Complexity scoring', 'Dependency analysis', 'Self-healing API', 'TPM throttling'] },
+  { range: 'Layer 6–8', title: 'Modern Transformation', tasks: ['Java/C# conversion', 'Chunk reconciliation', 'Application assembly'] },
+  { range: 'Layer 9', title: 'Agentic Refinement', tasks: ['Compile', 'Test', 'Fix', 'Optimize'] },
+];
+
+const CustomLoadingToast = ({ message, toastId }: { message: string, toastId: any }) => (
+  <div className="flex items-center justify-between gap-4 bg-slate-900 border border-slate-700 text-white px-4 py-3 rounded-xl shadow-2xl min-w-[300px]">
+    <div className="flex items-center gap-3">
+      <Loader2 size={16} className="animate-spin text-indigo-400" />
+      <span className="text-sm font-medium text-slate-200">{message}</span>
     </div>
-    <div className="text-3xl font-bold text-white mb-1">{value}</div>
-    <div className="flex items-center justify-between">
-      <span className="text-xs text-slate-500">{subtext}</span>
-      <ArrowUpRight size={14} className="text-indigo-400" />
-    </div>
+    <button onClick={(e) => { e.stopPropagation(); toast.dismiss(toastId); }} className="p-1 hover:bg-slate-800 rounded-md text-slate-500 hover:text-white transition-colors"><X size={14} /></button>
   </div>
 );
 
+const KPICard = ({ label, value, icon: Icon, status }: any) => {
+  const statusColor = status === 'Healthy' ? 'text-emerald-400' : status === 'Review' ? 'text-amber-400' : 'text-red-400';
+  return (
+    <div className="glass-card p-5 rounded-2xl border-slate-800 hover:border-indigo-500/50 transition-all">
+      <div className="flex justify-between items-start mb-3">
+        <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">{label}</span>
+        <Icon size={18} className="text-slate-500" />
+      </div>
+      <div className="text-2xl font-bold text-white">{value}</div>
+      <div className={`text-[10px] font-bold mt-2 flex items-center gap-1 ${statusColor}`}>
+        <div className={`w-1.5 h-1.5 rounded-full bg-current`} /> {status}
+      </div>
+    </div>
+  );
+};
+
 const Dashboard = () => {
   const navigate = useNavigate();
-  
-  // --- State ---
   const [isLaunching, setIsLaunching] = useState(false);
   const [selectedProject, setSelectedProject] = useState('Payroll_System_v1');
   const [sourceMetaLang, setSourceMetaLang] = useState('en');
-  const [migrationScope, setMigrationScope] = useState<MigrationScope>('reverse');
-  const [rulePrecision, setRulePrecision] = useState<RulePrecision>('plain');
-  
-  // Ingestion states from previous version
-  const [inputMethod, setInputMethod] = useState<'file' | 'github'>('file');
-  const [targetLang, setTargetLang] = useState('java');
-  const [githubUrl, setGithubUrl] = useState('');
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [targetPlatform, setTargetPlatform] = useState('java');
+  const [selectedScope, setSelectedScope] = useState('reverse');
 
   const handleStartMigration = async () => {
     setIsLaunching(true);
-    
-    // Simulating pipeline initialization based on selected scope
-    const steps = [
-      `Initializing ${SCOPE_CONFIG[migrationScope].label}...`,
-      `Configuring ${sourceMetaLang} translation bridge...`,
-      `Setting token budget for ${rulePrecision === 'ddd' ? 'DDD' : 'Plain'} extraction...`,
-      "Connecting to Mission Control..."
-    ];
-
+    const steps = [`Initializing ${MIGRATION_SCOPES.find(s => s.id === selectedScope)?.title}...`, `Translating metadata from ${sourceMetaLang}...`, "Connecting to Mission Control..."];
     for (const step of steps) {
-        toast.loading(step);
-        await new Promise(res => setTimeout(res, 800));
+      toast((t) => <CustomLoadingToast message={step} toastId={t} />, { duration: 2000, position: 'top-right' });
+      await new Promise(res => setTimeout(res, 1200));
     }
-
-    toast.success("Pipeline Deployed Successfully!");
+    toast.success("Pipeline Deployed!");
     navigate('/mission-control');
   };
 
   return (
-    <div className="space-y-10 pb-20">
-      {/* HEADER */}
-      <div className="flex justify-between items-start">
-        <div className="space-y-2">
-          <h1 className="text-4xl font-extrabold text-white tracking-tight">Command Center</h1>
-          <p className="text-slate-400 text-lg max-w-2xl">
-            Orchestrate your legacy migration. Configure AI behavior and project scope before launch.
-          </p>
+    <div className="space-y-12 pb-20 animate-in fade-in duration-700">
+      
+      {/* SECTION 1: WELCOME COMMAND CENTER */}
+      <div className="relative overflow-hidden rounded-3xl p-8 bg-gradient-to-br from-indigo-900/40 via-slate-900 to-slate-900 border border-indigo-500/20 shadow-2xl">
+        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          <div className="space-y-4">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 text-xs font-bold uppercase tracking-widest">
+              <Rocket size={14} /> Executive Command Center
+            </div>
+            <h1 className="text-5xl font-black text-white tracking-tight">Welcome to <span className="text-indigo-500">ModernizerAI</span></h1>
+            <p className="text-slate-400 text-lg max-w-2xl">AI-powered legacy modernization platform for reverse engineering, business discovery, and agentic transformation.</p>
+            
+            <div className="flex flex-wrap gap-8 pt-4">
+              <div className="space-y-1">
+                <p className="text-slate-500 text-xs uppercase font-bold">Active Project</p>
+                <p className="text-white font-bold text-lg">{selectedProject}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-slate-500 text-xs uppercase font-bold">Current Phase</p>
+                <p className="text-indigo-400 font-bold text-lg">Reverse Engineering</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-slate-500 text-xs uppercase font-bold">Overall Progress</p>
+                <div className="flex items-center gap-3">
+                  <p className="text-white font-bold text-lg">68%</p>
+                  <div className="w-24 h-2 bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-indigo-500" style={{ width: '68%' }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="flex flex-col gap-3 w-full md:w-auto">
+            <button onClick={() => navigate('/mission-control')} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-2">
+              Continue Current Project <ChevronRight size={18} />
+            </button>
+            <button onClick={() => navigate('/projects')} className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition-all border border-slate-700 flex items-center justify-center gap-2">
+              <PlusCircle size={18} /> Start New Project
+            </button>
+          </div>
+        </div>
+        <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/10 blur-[100px] rounded-full -mr-20 -mt-20" />
+      </div>
+
+      {/* SECTION 2: MODERNIZATION JOURNEY */}
+      <div className="space-y-6">
+        <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest">
+          <Info size={16} /> Modernization Journey
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+          {JOURNEY_STEPS.map((step, i) => (
+            <div key={i} className="group relative p-4 bg-slate-900/50 border border-slate-800 rounded-2xl hover:border-indigo-500/50 transition-all">
+              <div className="text-xs font-black text-slate-600 mb-2">0{i + 1}</div>
+              <div className="text-sm font-bold text-slate-200 group-hover:text-white transition-colors">{step.name}</div>
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                <div className="bg-slate-800 text-white text-[10px] p-2 rounded shadow-xl w-32 text-center">{step.desc}</div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
-        {/* LEFT COLUMN: CONFIGURATION (8 Cols) */}
-        <div className="lg:col-span-8 space-y-8">
-          
-          {/* Section 1: Project & Language Gateway */}
-          <div className="glass-card p-8 rounded-3xl border-slate-800 bg-slate-900/50 shadow-2xl">
-            <div className="flex items-center gap-3 mb-8">
-              <div className="p-2 bg-indigo-600 rounded-lg text-white"><Database size={20}/></div>
-              <h2 className="text-xl font-bold text-white">Project & Language Context</h2>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-3">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Active Project</label>
-                <div className="flex gap-2">
-                  <select 
-                    value={selectedProject}
-                    onChange={(e) => setSelectedProject(e.target.value)}
-                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
-                  >
-                    <option value="Payroll_System_v1">Payroll System v1</option>
-                    <option value="Claims_Core_Legacy">Claims Core Legacy</option>
-                    <option value="Cust_Data_Mainframe">Cust Data Mainframe</option>
-                  </select>
-                  <button className="p-3 bg-slate-800 hover:bg-indigo-600 text-white rounded-xl transition-colors" title="New Project">
-                    <PlusCircle size={20} />
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                  <Languages size={14}/> Source Metadata Language
-                </label>
-                <select 
-                  value={sourceMetaLang}
-                  onChange={(e) => setSourceMetaLang(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
-                >
-                  <option value="en">English</option>
-                  <option value="es">Spanish (Español)</option>
-                  <option value="de">German (Deutsch)</option>
-                  <option value="fr">French (Français)</option>
-                  <option value="jp">Japanese (日本語)</option>
-                </select>
-                <p className="text-[10px] text-slate-500 italic flex items-center gap-1">
-                  <HelpCircle size={10}/> Translates COBOL comments to English for LLM optimization.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 2: Service Scope & Token Planner */}
-          <div className="glass-card p-8 rounded-3xl border-slate-800 bg-slate-900/50 shadow-2xl">
-            <div className="flex items-center gap-3 mb-8">
-              <div className="p-2 bg-amber-600 rounded-lg text-white"><Zap size={20}/></div>
-              <h2 className="text-xl font-bold text-white">Migration Scope & Token Budget</h2>
-            </div>
-
-            <div className="space-y-8">
-              {/* Migration Depth */}
-              <div className="space-y-4">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Migration Depth</label>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {(Object.keys(SCOPE_CONFIG) as MigrationScope[]).map((key) => (
-                    <div 
-                      key={key}
-                      onClick={() => setMigrationScope(key)}
-                      className={`p-4 rounded-2xl border cursor-pointer transition-all ${
-                        migrationScope === key 
-                        ? 'border-indigo-500 bg-indigo-500/10 shadow-lg shadow-indigo-500/20' 
-                        : 'border-slate-800 bg-slate-950 hover:border-slate-600'
-                      }`}
-                    >
-                      <div className="flex justify-between items-start mb-2">
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded ${SCOPE_CONFIG[key].bg} ${SCOPE_CONFIG[key].color}`}>
-                          {SCOPE_CONFIG[key].cost} Tokens
-                        </span>
-                        {migrationScope === key && <CheckCircle2 size={16} className="text-indigo-400" />}
-                      </div>
-                      <h4 className="text-white font-bold text-sm mb-1">{SCOPE_CONFIG[key].label}</h4>
-                      <p className="text-xs text-slate-500">{SCOPE_CONFIG[key].desc}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Business Rule Precision */}
-              <div className="space-y-4">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Business Rule Precision</label>
-                <div className="flex gap-4">
-                  <button 
-                    onClick={() => setRulePrecision('plain')}
-                    className={`flex-1 p-4 rounded-2xl border text-left transition-all ${
-                      rulePrecision === 'plain' ? 'border-indigo-500 bg-indigo-500/10' : 'border-slate-800 bg-slate-950'
-                    }`}
-                  >
-                    <div className="font-bold text-white text-sm">Plain Extraction</div>
-                    <div className="text-xs text-slate-500">Simple functional rules. (Low Cost)</div>
-                  </button>
-                  <button 
-                    onClick={() => setRulePrecision('ddd')}
-                    className={`flex-1 p-4 rounded-2xl border text-left transition-all ${
-                      rulePrecision === 'ddd' ? 'border-indigo-500 bg-indigo-500/10' : 'border-slate-800 bg-slate-950'
-                    }`}
-                  >
-                    <div className="font-bold text-white text-sm">DDD-Driven Extraction</div>
-                    <div className="text-xs text-slate-500">Map to Bounded Contexts & Entities. (High Cost)</div>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 3: Guided Roadmap */}
-          <div className="glass-card p-8 rounded-3xl border-slate-800 bg-slate-900/50 shadow-2xl">
-            <div className="flex items-center gap-3 mb-8">
-              <div className="p-2 bg-emerald-600 rounded-lg text-white"><BookOpen size={20}/></div>
-              <h2 className="text-xl font-bold text-white">The Path to Production</h2>
-            </div>
-            <div className="relative space-y-8 pl-8">
-              <div className="absolute left-3 top-2 bottom-2 w-0.5 bg-slate-800" />
-              {ROADMAP_STEPS.map((step, i) => (
-                <div key={i} className="relative flex gap-6 group">
-                  <div className="absolute -left-8 top-1 w-4 h-4 rounded-full bg-slate-900 border-2 border-indigo-500 group-hover:bg-indigo-500 transition-colors" />
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs font-bold text-indigo-400 uppercase tracking-tighter">{step.layer}</span>
-                      <h4 className="text-white font-bold">{step.title}</h4>
-                    </div>
-                    <p className="text-sm text-slate-500 max-w-xl">{step.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+      {/* SECTION 3: CURRENT CONFIGURATION */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="glass-card p-6 rounded-3xl border-slate-800 bg-slate-900/50 space-y-4">
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+            <Database size={14} /> Active Project
+          </label>
+          <select value={selectedProject} onChange={(e) => setSelectedProject(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="Payroll_System_v1">Payroll System v1</option>
+            <option value="Claims_Core_Legacy">Claims Core Legacy</option>
+          </select>
         </div>
 
-        {/* RIGHT COLUMN: EXECUTION & STATS (4 Cols) */}
-        <div className="lg:col-span-4 space-y-8">
-          
-          {/* Launch Panel */}
-          <div className="glass-card p-8 rounded-3xl border-slate-800 bg-indigo-600/10 border-indigo-500/30 shadow-2xl flex flex-col items-center text-center space-y-6">
-            <div className="p-4 bg-indigo-600 rounded-full text-white shadow-xl shadow-indigo-500/40">
-              <Rocket size={32} />
-            </div>
-            <div className="space-y-2">
-              <h3 className="text-xl font-bold text-white">Ready for Launch</h3>
-              <p className="text-sm text-slate-400">All 9 layers of the pipeline are configured and online.</p>
-            </div>
-            <motion.button 
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={handleStartMigration}
-              disabled={isLaunching}
-              className={`w-full py-4 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all ${
-                isLaunching 
-                ? 'bg-slate-800 text-slate-500 cursor-not-allowed' 
-                : 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-lg shadow-indigo-500/30'
-              }`}
+        <div className="glass-card p-6 rounded-3xl border-slate-800 bg-slate-900/50 space-y-4">
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+            <Languages size={14} /> Source Metadata Language
+          </label>
+          <select value={sourceMetaLang} onChange={(e) => setSourceMetaLang(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="en">English</option>
+            <option value="hi">Hindi</option>
+            <option value="jp">Japanese</option>
+            <option value="de">German</option>
+            <option value="fr">French</option>
+            <option value="es">Spanish</option>
+          </select>
+          <p className="text-[10px] text-slate-500 italic">Translates legacy comments to English for LLM accuracy.</p>
+        </div>
+
+        <div className="glass-card p-6 rounded-3xl border-slate-800 bg-slate-900/50 space-y-4">
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+            <Target size={14} /> Target Platform
+          </label>
+          <select value={targetPlatform} onChange={(e) => setTargetPlatform(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="java">Java 21 + Spring Boot</option>
+            <option value="dotnet">.NET 9</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+      </div>
+
+      {/* SECTION 4: MIGRATION SCOPE & TOKEN BUDGET */}
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest">
+            <Zap size={16} /> Migration Scope & Token Budget
+          </div>
+          <div className="text-[10px] text-slate-500 italic">Estimates based on ~400 COBOL programs</div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+          {MIGRATION_SCOPES.map((scope) => (
+            <div 
+              key={scope.id} 
+              onClick={() => setSelectedScope(scope.id)}
+              className={`p-5 rounded-2xl border transition-all cursor-pointer flex flex-col ${selectedScope === scope.id ? 'border-indigo-500 bg-indigo-500/10 shadow-lg shadow-indigo-500/20' : 'border-slate-800 bg-slate-900/50 hover:border-slate-600'}`}
             >
-              {isLaunching ? (
-                <><Loader2 className="animate-spin" size={20} /> Initializing...</>
-              ) : (
-                <><Play size={20} fill="currentColor" /> Start Migration</>
-              )}
-            </motion.button>
-            <div className="flex items-center gap-2 text-[10px] text-amber-500 uppercase font-bold">
-              <AlertCircle size={12} />
-              <span>Estimated Token Load: {SCOPE_CONFIG[migrationScope].cost}</span>
+              <div className="flex justify-between items-start mb-4">
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${scope.bg} ${scope.color}`}>{scope.cost}</span>
+                {selectedScope === scope.id && <CheckCircle2 size={16} className="text-indigo-400" />}
+              </div>
+              <h4 className="text-white font-bold text-sm mb-2">{scope.title}</h4>
+              <div className="text-xs font-mono text-indigo-400 mb-3 font-bold">{scope.tokens} Tokens</div>
+              <p className="text-xs text-slate-400 mb-4 line-clamp-2">{scope.purpose}</p>
+              <div className="mt-auto space-y-2">
+                <div className="text-[10px] font-bold text-slate-500 uppercase">Includes:</div>
+                <div className="flex flex-wrap gap-1">
+                  {scope.includes.slice(0, 2).map((inc, i) => (
+                    <span key={i} className="text-[9px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded">{inc}</span>
+                  ))}
+                  {scope.includes.length > 2 && <span className="text-[9px] text-slate-500">+{scope.includes.length - 2} more</span>}
+                </div>
+              </div>
             </div>
-          </div>
-
-          {/* Current Health Snapshot */}
-          <div className="space-y-4">
-            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest px-2">Project Health Snapshot</h3>
-            <div className="grid grid-cols-1 gap-4">
-              <KPICard label="Total COBOL Files" value="422" icon={FileText} subtext="Priority view active" />
-              <KPICard label="Complex Modules" value="14" icon={Activity} subtext="Needs review" />
-              <KPICard label="Pending Chunks" value="35" icon={Layers} subtext="Processing queue" />
-              <KPICard label="Verified Rules" value="16" icon={CheckCircle2} subtext="Ready to convert" />
-            </div>
-          </div>
-
+          ))}
         </div>
+        <div className="bg-amber-500/5 border border-amber-500/20 p-3 rounded-xl flex items-center gap-3 text-amber-500/80 text-xs">
+          <AlertCircle size={14} /> Actual usage depends on project size, complexity, and prompt customization.
+        </div>
+      </div>
+
+      {/* SECTION 5: THE PATH TO PRODUCTION (PIPELINE) */}
+      <div className="space-y-6">
+        <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest">
+          <Layers size={16} /> 9-Layer Pipeline Visualization
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {PIPELINE_LAYERS.map((layer, i) => (
+            <div key={i} className="relative p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-bold text-indigo-500 uppercase">{layer.range}</span>
+                <div className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center text-white text-xs font-bold">{i+1}</div>
+              </div>
+              <h4 className="text-white font-bold">{layer.title}</h4>
+              <ul className="space-y-2">
+                {layer.tasks.map((task, j) => (
+                  <li key={j} className="text-xs text-slate-500 flex items-center gap-2">
+                    <div className="w-1 h-1 bg-indigo-500 rounded-full" /> {task}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* SECTION 6 & 7: HEALTH & RECOMMENDATIONS */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="lg:col-span-8 space-y-6">
+          <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest">
+            <Activity size={16} /> Project Health Snapshot
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <KPICard label="Total COBOL Files" value="422" icon={FileText} status="Healthy" />
+            <KPICard label="Complex Modules" value="14" icon={AlertCircle} status="Review" />
+            <KPICard label="Pending Chunks" value="35" icon={Layers} status="Review" />
+            <KPICard label="Verified Rules" value="16" icon={CheckCircle2} status="Healthy" />
+            <KPICard label="Critical Paths" value="8" icon={GitBranch} status="Action" />
+            <KPICard label="Discovered Domains" value="4" icon={Database} status="Healthy" />
+          </div>
+        </div>
+
+        <div className="lg:col-span-4">
+          <div className="h-full glass-card p-6 rounded-3xl border-indigo-500/30 bg-indigo-500/5 space-y-6 border">
+            <div className="flex items-center gap-2 text-indigo-400 text-sm font-bold uppercase tracking-widest">
+              <Lightbulb size={16} /> AI Recommendations
+            </div>
+            <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
+              <p className="text-slate-300 text-sm leading-relaxed">
+                "Extract business rules before migration because <span className="text-amber-400 font-bold">14 complex modules</span> remain undocumented."
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-3">
+              <button onClick={() => navigate('/business-logic')} className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2">
+                Start Rule Extraction <ChevronRight size={14} />
+              </button>
+              <button onClick={() => navigate('/mission-control')} className="w-full py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-all border border-slate-700">
+                Resume Processing
+              </button>
+              <button onClick={() => navigate('/source-files')} className="w-full py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-all border border-slate-700">
+                Open Source Workspace
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* FINAL ACTION BAR */}
+      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
+        <motion.button 
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={handleStartMigration}
+          disabled={isLaunching}
+          className={`px-10 py-4 rounded-full font-black flex items-center gap-3 shadow-2xl transition-all ${isLaunching ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-indigo-500/40'}`}
+        >
+          {isLaunching ? <><Loader2 className="animate-spin" size={20} /> Initializing Pipeline...</> : <><Play size={20} fill="currentColor" /> Launch Migration Pipeline</>}
+        </motion.button>
       </div>
     </div>
   );

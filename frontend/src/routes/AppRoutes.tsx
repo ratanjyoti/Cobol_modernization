@@ -1,52 +1,49 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import MainLayout from '../layouts/MainLayout';
 
-// Existing Pages
+// Core Pages
 import Dashboard from '../pages/Dashboard';
 import Projects from '../pages/Projects';
+
+// Reverse Engineering Pipeline (The "Discovery" Flow)
 import SourceFiles from '../pages/SourceFiles';
+import SystemDiscovery from '../pages/SystemDiscovery'; // Hub for Graph & DDD
 import ReverseEngineering from '../pages/ReverseEngineering';
 import BusinessLogic from '../pages/BusinessLogic';
+
+// Modernization Pipeline
+import ModernizationHub from '../pages/ModernizationHub'; // Hub for Plan & CodeGen
 import ModernizerChat from '../pages/ModernizerChat';
+
+// System Operations
 import MissionControl from '../pages/MissionControl';
+import SystemAdmin from '../pages/SystemAdmin'; // Hub for Prompts & Settings
 
-// NEW HUB Pages (Ensure these files are created in your /pages folder)
-import SystemDiscovery from '../pages/SystemDiscovery'; // Replaces DependencyGraph & DDDDiscovery
-import ModernizationHub from '../pages/ModernizationHub'; // Replaces ModernizationPlan & CodeGeneration
-import SystemAdmin from '../pages/SystemAdmin';           // Replaces PromptStudio & Settings
-
+// ... existing imports
 const AppRoutes = () => {
   return (
     <Router>
       <Routes>
-        {/* MainLayout acts as the wrapper for the Sidebar and Header */}
         <Route path="/" element={<MainLayout />}>
-          
-          {/* Redirect root to dashboard */}
           <Route index element={<Navigate to="/dashboard" />} />
-          
-          {/* Core Group */}
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="projects" element={<Projects />} />
           
-          {/* Reverse Engineering Group */}
-          <Route path="source-files" element={<SourceFiles />} />
+          {/* Discovery is now merged into SourceFiles */}
+          <Route path="source-files" element={<SourceFiles />} /> 
           <Route path="reverse-engineering" element={<ReverseEngineering />} />
-          <Route path="discovery" element={<SystemDiscovery />} /> {/* HUB */}
           <Route path="business-logic" element={<BusinessLogic />} />
           
-          {/* Modernization Group */}
-          <Route path="modernization" element={<ModernizationHub />} /> {/* HUB */}
+          <Route path="modernization" element={<ModernizationHub />} />
           <Route path="chat" element={<ModernizerChat />} />
-          
-          {/* System Group */}
           <Route path="mission-control" element={<MissionControl />} />
-          <Route path="admin" element={<SystemAdmin />} /> {/* HUB */}
-          
+          <Route path="admin" element={<SystemAdmin />} />
+          <Route path="*" element={<Navigate to="/dashboard" />} />
         </Route>
       </Routes>
     </Router>
   );
 };
+
 
 export default AppRoutes;
