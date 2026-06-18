@@ -3,7 +3,6 @@ import {
   LayoutDashboard,
   FolderOpen,
   Cpu,
-  Share2, // Added for Discovery
   FileText,
   MessageSquare,
   Code2,
@@ -12,8 +11,8 @@ import {
   Database,
   Menu,
   Moon,
-  Sun, 
-  Map
+  Sun,
+  BrainCircuit // <--- Added this icon for System Discovery
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -24,7 +23,6 @@ interface SidebarProps {
   openConfig: () => void;
 }
 
-// ... other imports
 const menuGroups = [
   {
     group: 'Core',
@@ -36,18 +34,19 @@ const menuGroups = [
   {
     group: 'Reverse Engineering',
     items: [
-      { name: 'Source Files', path: '/source-files', icon: FolderOpen }, // This is now the Workbench
+      { name: 'Source Files', path: '/source-files', icon: FolderOpen },
+      // --- ADDED SYSTEM DISCOVERY HERE ---
+      { name: 'System Discovery', path: '/discovery', icon: BrainCircuit }, 
       { name: 'Analysis', path: '/reverse-engineering', icon: Cpu },
       { name: 'Business Logic', path: '/business-logic', icon: FileText },
     ],
   },
   {
-    group: 'Modernization',
+    group: "Modernization",
     items: [
-      { name: 'Modern Plan', path: '/modernization-plan', icon: Map },
       { name: 'Code Gen', path: '/code-generation', icon: Code2 },
       { name: 'Modernizer Chat', path: '/chat', icon: MessageSquare },
-    ],
+    ]
   },
   {
     group: 'System',
@@ -58,7 +57,6 @@ const menuGroups = [
     ],
   },
 ];
-
 
 const Sidebar = ({
   isOpen,

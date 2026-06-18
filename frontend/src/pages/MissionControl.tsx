@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Activity, Zap, ShieldAlert, CheckCircle2, Terminal, Cpu, 
+  Activity, Zap, ShieldAlert, Cpu, 
   MessageSquare, Share2, FileText, GitBranch, Settings, 
-  Pause, Play, RotateCcw, X, Send
+  Pause, Play, X, Send
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 

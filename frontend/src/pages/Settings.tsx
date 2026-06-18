@@ -1,11 +1,11 @@
 import React from 'react';
-import { Settings as SettingsIcon, Key, Cpu, Save, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Settings as SettingsIcon, Key, Cpu, RefreshCw, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const Settings = () => {
   const handleOpenConfig = () => {
-    if ((window as any).openAIConfig) {
-      (window as any).openAIConfig();
+    if (window.openAIConfig) {
+      window.openAIConfig();
     } else {
       toast.error("Configuration system not initialized");
     }

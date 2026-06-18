@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Globe,
@@ -14,80 +14,87 @@ interface ConfigModalProps {
   onClose: () => void;
 }
 
+type ConfigMode = 'api' | 'local' | null;
+
+interface AIConfigForm {
+  key: string;
+  url: string;
+  model: string;
+}
+
+const LOCAL_MODELS = [
+  'llama3',
+  'mistral',
+  'phi3',
+  'codellama',
+];
+
+const CLOUD_MODELS = [
+  'gpt-4o',
+  'gpt-4-turbo',
+  'claude-3-5-sonnet',
+];
+
+const DEFAULT_CONFIG: AIConfigForm = {
+  key: '',
+  url: 'http://localhost:11434',
+  model: 'gpt-4o',
+};
+
+const readSavedAIConfig = () => {
+  const savedConfig = localStorage.getItem('ai_config');
+
+  if (!savedConfig) {
+    return {
+      mode: null as ConfigMode,
+      config: DEFAULT_CONFIG,
+      customModel: '',
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(savedConfig) as Partial<AIConfigForm> & {
+      mode?: ConfigMode;
+    };
+    const model = parsed.model || DEFAULT_CONFIG.model;
+    const knownModels = [...CLOUD_MODELS, ...LOCAL_MODELS];
+
+    return {
+      mode: parsed.mode === 'api' || parsed.mode === 'local' ? parsed.mode : null,
+      config: {
+        key: parsed.key || '',
+        url: parsed.url || DEFAULT_CONFIG.url,
+        model,
+      },
+      customModel: model && !knownModels.includes(model) ? model : '',
+    };
+  } catch (error) {
+    console.error(
+      'Failed to parse AI config',
+      error
+    );
+
+    return {
+      mode: null as ConfigMode,
+      config: DEFAULT_CONFIG,
+      customModel: '',
+    };
+  }
+};
+
 const ConfigModal = ({
   isOpen,
   onClose,
 }: ConfigModalProps) => {
+  const [initialConfig] = useState(readSavedAIConfig);
   const [step, setStep] = useState(1);
 
-  const [mode, setMode] = useState<
-    'api' | 'local' | null
-  >(null);
+  const [mode, setMode] = useState<ConfigMode>(initialConfig.mode);
 
-  const [config, setConfig] = useState({
-    key: '',
-    url: 'http://localhost:11434',
-    model: 'gpt-4o',
-  });
+  const [config, setConfig] = useState(initialConfig.config);
 
   const [customModel, setCustomModel] =
-    useState('');
-
-  const localModels = [
-    'llama3',
-    'mistral',
-    'phi3',
-    'codellama',
-  ];
-
-  const cloudModels = [
-    'gpt-4o',
-    'gpt-4-turbo',
-    'claude-3-5-sonnet',
-  ];
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    setStep(1);
-
-    const savedConfig =
-      localStorage.getItem('ai_config');
-
-    if (savedConfig) {
-      try {
-        const parsed = JSON.parse(savedConfig);
-
-        setMode(parsed.mode || null);
-
-        setConfig({
-          key: parsed.key || '',
-          url:
-            parsed.url ||
-            'http://localhost:11434',
-          model:
-            parsed.model || 'gpt-4o',
-        });
-
-        const knownModels = [
-          ...cloudModels,
-          ...localModels,
-        ];
-
-        if (
-          parsed.model &&
-          !knownModels.includes(parsed.model)
-        ) {
-          setCustomModel(parsed.model);
-        }
-      } catch (error) {
-        console.error(
-          'Failed to parse AI config',
-          error
-        );
-      }
-    }
-  }, [isOpen]);
+    useState(initialConfig.customModel);
 
   const handleSave = () => {
     if (!mode) {
@@ -273,7 +280,7 @@ const ConfigModal = ({
                         }
                         className="w-full rounded-xl bg-slate-800 border border-slate-700 px-4 py-3 text-white"
                       >
-                        {cloudModels.map(
+                        {CLOUD_MODELS.map(
                           (model) => (
                             <option
                               key={model}
@@ -317,7 +324,7 @@ const ConfigModal = ({
                         }
                         className="w-full rounded-xl bg-slate-800 border border-slate-700 px-4 py-3 text-white"
                       >
-                        {localModels.map(
+                        {LOCAL_MODELS.map(
                           (model) => (
                             <option
                               key={model}

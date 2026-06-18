@@ -28,22 +28,14 @@ const BusinessLogic = () => {
   };
    const handleFinalApproval = () => {
     // Use the global function we attached to the window in MainLayout
-    if ((window as any).triggerHITL) {
-        (window as any).triggerHITL(
+    if (window.triggerHITL) {
+        window.triggerHITL(
         "Business Logic", 
         "Confirm Logic Baseline", 
         "The AI has extracted 890 rules. Once approved, these will be used as the source of truth for Java code generation. This action cannot be undone."
         );
     }
     };
-
-    // In the JSX:
-    <button 
-    onClick={handleFinalApproval} 
-    className="bg-accent text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-blue-600 transition-all"
-    >
-    Approve All & Proceed <ArrowRight size={18} />
-    </button>
 
   return (
     <div className="space-y-6">
@@ -52,7 +44,7 @@ const BusinessLogic = () => {
           <h1 className="text-3xl font-bold text-white">Business Logic Extraction</h1>
           <p className="text-slate-400">Review and verify rules extracted from COBOL Procedure Divisions.</p>
         </div>
-        <button className="bg-accent text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-blue-600 transition-all">
+        <button onClick={handleFinalApproval} className="bg-accent text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-blue-600 transition-all">
           Approve All & Proceed <ArrowRight size={18} />
         </button>
       </div>

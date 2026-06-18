@@ -17,7 +17,14 @@ const EXAMPLE_QUERIES = {
   ]
 };
 
-const ProcessingStep = ({ active, label, sub, icon }: any) => (
+interface ProcessingStepProps {
+  active: boolean;
+  label: string;
+  sub: string;
+  icon: React.ReactNode;
+}
+
+const ProcessingStep = ({ active, label, sub, icon }: ProcessingStepProps) => (
   <div className={`flex flex-col items-center gap-3 transition-all duration-500 ${active ? 'opacity-100 scale-110' : 'opacity-30'}`}>
     <div className={`p-4 rounded-full border-2 transition-all duration-500 ${active ? 'border-indigo-500 bg-indigo-500/20 text-indigo-400 shadow-lg shadow-indigo-500/30 animate-pulse' : 'border-slate-800 bg-slate-900 text-slate-600'}`}>
       {icon}

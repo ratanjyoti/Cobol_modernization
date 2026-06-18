@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { 
   LayoutDashboard, Share2, FileText, GitBranch, 
   AlertTriangle, FileCheck, Info, ChevronRight,
-  Database, Cpu, Layers, Download, X 
+  Database, Download, X 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -48,7 +48,7 @@ const MOCK_DATA = {
 
 const ReverseEngineering = () => {
   const [activeTab, setActiveTab] = useState('overview');
-  const [selectedNode, setSelectedNode] = useState<any>(null);
+  const [selectedNode, setSelectedNode] = useState<(typeof MOCK_DATA.dependencies.nodes)[number] | null>(null);
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },

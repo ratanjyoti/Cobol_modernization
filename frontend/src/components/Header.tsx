@@ -19,8 +19,8 @@ const Header = ({ theme, toggleTheme }: HeaderProps) => {
   const location = useLocation();
 
   const handleOpenConfig = () => {
-    if ((window as any).openAIConfig) {
-      (window as any).openAIConfig();
+    if (window.openAIConfig) {
+      window.openAIConfig();
     }
   };
 

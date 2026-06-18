@@ -1,4 +1,4 @@
-import { GitBranch, ArrowRight, Box, Database, Layers } from 'lucide-react';
+import { GitBranch, Box, Database, Layers } from 'lucide-react';
 
 const DDDDiscovery = () => {
   const mappings = [

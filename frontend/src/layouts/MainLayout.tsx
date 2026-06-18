@@ -72,7 +72,9 @@ import ConfigModal from '../components/ConfigModal';
 import HITLModal from '../components/HITLModal';
 
 const MainLayout = () => {
-  const [showConfig, setShowConfig] = useState(false);
+  const [showConfig, setShowConfig] = useState(
+    () => !localStorage.getItem('ai_config')
+  );
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const [theme, setTheme] = useState(
@@ -104,18 +106,10 @@ const MainLayout = () => {
   };
 
   useEffect(() => {
-    const config = localStorage.getItem('ai_config');
-
-    if (!config) {
-      setShowConfig(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    (window as any).openAIConfig = () =>
+    window.openAIConfig = () =>
       setShowConfig(true);
 
-    (window as any).triggerHITL = (
+    window.triggerHITL = (
       name: string,
       msg: string,
       reason: string
@@ -127,6 +121,11 @@ const MainLayout = () => {
       });
 
       setHitlOpen(true);
+    };
+
+    return () => {
+      window.openAIConfig = undefined;
+      window.triggerHITL = undefined;
     };
   }, []);
 
@@ -148,10 +147,12 @@ const MainLayout = () => {
         </div>
       </main>
 
-      <ConfigModal
-        isOpen={showConfig}
-        onClose={() => setShowConfig(false)}
-      />
+      {showConfig && (
+        <ConfigModal
+          isOpen={showConfig}
+          onClose={() => setShowConfig(false)}
+        />
+      )}
 
       <HITLModal
         isOpen={hitlOpen}
