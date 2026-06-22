@@ -33,7 +33,7 @@ const AppRoutes = () => {
           <Route index element={<Navigate to="/dashboard" />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="projects" element={<Projects />} />
-          
+
           {/* DISCOVERY HUB: Added this missing route! */}
           <Route path="discovery" element={<SystemDiscovery />} /> {/* HUB */}
           <Route path="source-files" element={<SourceFiles />} /> 

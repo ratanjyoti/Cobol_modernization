@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import {
   Upload, FileText, CheckCircle2, Clock,
   AlertCircle, Layers, Loader2, Zap, Play, GitBranch,
-  Activity, RotateCcw, Trash2 
+  Activity, RotateCcw, Trash2, Languages, Target
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -20,6 +20,8 @@ const STORAGE_KEYS = {
   files: 'modernizer_files',
   pipelineStatus: 'modernizer_pipeline_status',
   selectedScope: 'modernizer_selected_scope',
+  sourceLang: 'modernizer_source_lang',
+  targetLang: 'modernizer_target_lang',
 } as const;
 
 const MIGRATION_SCOPES = [
@@ -28,6 +30,23 @@ const MIGRATION_SCOPES = [
   { id: 'plain', title: 'Business Rules (Plain)', tokens: '80k – 150k', cost: 'Medium', color: 'text-blue-400', bg: 'bg-blue-500/10', desc: 'Simple functional rule extraction.' },
   { id: 'ddd', title: 'Business Rules (DDD)', tokens: '150k – 300k', cost: 'High', color: 'text-purple-400', bg: 'bg-purple-500/10', desc: 'Domain-driven microservice decomposition.' },
   { id: 'full', title: 'Full Migration', tokens: '250k – 600k', cost: 'Very High', color: 'text-red-400', bg: 'bg-red-500/10', desc: 'End-to-end agentic pipeline.' },
+];
+
+const SOURCE_LANGUAGES = [
+  { id: 'auto', name: '✨ Auto-Detect Language' },
+  { id: 'cobol', name: 'COBOL (Pure)' },
+  { id: 'cobol-sql', name: 'COBOL + SQL' },
+  { id: 'cobol-cics', name: 'COBOL + CICS' },
+  { id: 'telon-batch', name: 'Telon Batch (T2B)' },
+  { id: 'telon-screen', name: 'Telon Screen (T2C)' },
+  { id: 'pli', name: 'PL/I' },
+  { id: 'fortran', name: 'Fortran' },
+];
+
+const TARGET_LANGUAGES = [
+  { id: 'java', name: 'Java 21 (Spring Boot)' },
+  { id: 'csharp', name: 'C# 12 (.NET 8)' },
+  { id: 'python', name: 'Python 3.12 (FastAPI)' },
 ];
 
 const isSourceFileRecord = (value: unknown): value is SourceFileRecord => {
@@ -60,13 +79,28 @@ const SourceFiles = () => {
   const [githubUrl, setGithubUrl] = useState('');
   const [files, setFiles] = useState<SourceFileRecord[]>(readStoredFiles);
   const [selectedScope, setSelectedScope] = useState(localStorage.getItem(STORAGE_KEYS.selectedScope) || '');
+  const [sourceLang, setSourceLang] = useState(localStorage.getItem(STORAGE_KEYS.sourceLang) || 'auto');
+  const [targetLang, setTargetLang] = useState(localStorage.getItem(STORAGE_KEYS.targetLang) || 'java');
   const [isLaunching, setIsLaunching] = useState(false);
   const [isFetchingRepo, setIsFetchingRepo] = useState(false);
   const [pipelineActive, setPipelineActive] = useState(() => localStorage.getItem(STORAGE_KEYS.pipelineStatus) === 'active');
 
+  // Persistence Effects: Save state to localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.files, JSON.stringify(files));
   }, [files]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.selectedScope, selectedScope);
+  }, [selectedScope]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.sourceLang, sourceLang);
+  }, [sourceLang]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.targetLang, targetLang);
+  }, [targetLang]);
 
   const removeFile = (id: string) => {
     if (pipelineActive) {
@@ -81,13 +115,13 @@ const SourceFiles = () => {
     const uploadedFiles = e.target.files;
     if (!uploadedFiles) return;
     const newFiles: SourceFileRecord[] = Array.from(uploadedFiles).map((f) => ({
-      id: Math.random().toString(36).substring(2, 9), // FIXED: Better ID generation
+      id: Math.random().toString(36).substring(2, 9),
       name: f.name,
       size: Math.floor(Math.random() * 5000),
       status: 'Pending',
       chunks: 1,
     }));
-    setFiles(prev => [...prev, ...newFiles]); // FIXED: Used functional update
+    setFiles(prev => [...prev, ...newFiles]);
     toast.success("Files uploaded!");
   };
 
@@ -98,12 +132,12 @@ const SourceFiles = () => {
     }
     setIsFetchingRepo(true);
     await new Promise(res => setTimeout(res, 2000));
-    const mockRepoFiles: SourceFileRecord[] = [ 
+    const mockRepoFiles: SourceFileRecord[] = [
       { id: 'g1-' + Date.now(), name: 'MAIN-SVR.cbl', size: 4200, status: 'Pending', chunks: 14 },
       { id: 'g2-' + Date.now(), name: 'ACCT-PROC.cbl', size: 1100, status: 'Pending', chunks: 1 },
       { id: 'g3-' + Date.now(), name: 'CUST-DB.cob', size: 800, status: 'Pending', chunks: 1 },
     ];
-    setFiles(prev => [...prev, ...mockRepoFiles]); // FIXED: Appends files instead of wiping current list
+    setFiles(prev => [...prev, ...mockRepoFiles]);
     setIsFetchingRepo(false);
     toast.success("Repository ingested!");
   };
@@ -111,11 +145,7 @@ const SourceFiles = () => {
   const simulateProcessing = async () => {
     setPipelineActive(true);
     localStorage.setItem(STORAGE_KEYS.pipelineStatus, 'active');
-    
-    // FIXED: Iterate over IDs, not index. 
-    // This prevents errors if files are removed while processing is happening.
     const fileIds = files.map(f => f.id);
-    
     for (const id of fileIds) {
       setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'Processing' } : f));
       await new Promise(res => setTimeout(res, 800 + Math.random() * 1000));
@@ -130,7 +160,7 @@ const SourceFiles = () => {
       return;
     }
     setIsLaunching(true);
-    localStorage.setItem(STORAGE_KEYS.selectedScope, selectedScope);
+    
     await simulateProcessing();
     setIsLaunching(false);
     toast.success("Pipeline initialized!");
@@ -229,11 +259,7 @@ const SourceFiles = () => {
                   {file.chunks > 1 ? <span className="bg-blue-500/20 text-blue-400 px-2 py-1 rounded text-xs border border-blue-500/30">{file.chunks} Chunks</span> : <span className="text-slate-500 text-xs">Single File</span>}
                 </td>
                 <td className="p-4 text-right">
-                  <button 
-                    onClick={() => removeFile(file.id)} 
-                    className={`p-2 rounded-lg transition-colors ${pipelineActive ? 'text-slate-700 cursor-not-allowed' : 'text-slate-500 hover:text-red-400 hover:bg-red-500/10'}`}
-                    title={pipelineActive ? "Cannot delete during processing" : "Remove file"}
-                  >
+                  <button onClick={() => removeFile(file.id)} className={`p-2 rounded-lg transition-colors ${pipelineActive ? 'text-slate-700 cursor-not-allowed' : 'text-slate-500 hover:text-red-400 hover:bg-red-500/10'}`} title={pipelineActive ? "Cannot delete during processing" : "Remove file"}>
                     <Trash2 size={16} />
                   </button>
                 </td>
@@ -247,43 +273,96 @@ const SourceFiles = () => {
       </div>
 
       {files.length > 0 && (
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-          <div className="flex items-center gap-2 text-amber-400 text-sm font-bold uppercase tracking-widest">
-            <Zap size={16} /> Define Migration Scope & Budget
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-            {MIGRATION_SCOPES.map((scope) => (
-              <div 
-                key={scope.id} 
-                onClick={() => {
-                  if (pipelineActive) {
-                    toast.error("Scope is locked while pipeline is active. Reset pipeline to change scope.");
-                  } else {
-                    setSelectedScope(scope.id);
-                  }
-                }}
-                className={`p-4 rounded-2xl border transition-all cursor-pointer ${!pipelineActive ? 'hover:border-slate-600' : 'opacity-60 cursor-not-allowed'} ${selectedScope === scope.id ? 'border-indigo-500 bg-indigo-500/10 shadow-lg' : 'border-slate-800 bg-slate-900/50'}`}
-              >
-                <div className="flex justify-between mb-2">
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${scope.bg} ${scope.color}`}>{scope.cost}</span>
-                  {selectedScope === scope.id && <CheckCircle2 size={14} className="text-indigo-400" />}
-                </div>
-                <h4 className="text-white font-bold text-xs mb-1">{scope.title}</h4>
-                <div className="text-xs font-mono text-indigo-400 mb-2">{scope.tokens} Tokens</div>
-                <p className="text-[10px] text-slate-500 line-clamp-2">{scope.desc}</p>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="glass-card p-6 rounded-3xl border-slate-800 bg-slate-900/50 space-y-4">
+              <div className="flex items-center gap-2 text-indigo-400 text-sm font-bold uppercase tracking-widest">
+                <Languages size={16} /> Source Language Mapping
               </div>
-            ))}
+              <select 
+                value={sourceLang} 
+                onChange={(e) => setSourceLang(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
+              >
+                {SOURCE_LANGUAGES.map(lang => <option key={lang.id} value={lang.id}>{lang.name}</option>)}
+              </select>
+              <p className="text-[10px] text-slate-500 italic leading-relaxed">
+                Sets the language for prompts and source comments. System will auto-translate these to English for the LLM.
+              </p>
+            </div>
+
+            <div className="glass-card p-6 rounded-3xl border-slate-800 bg-slate-900/50 space-y-4">
+              <div className="flex items-center gap-2 text-emerald-400 text-sm font-bold uppercase tracking-widest">
+                <Target size={16} /> Target Platform Mapping
+              </div>
+              <select 
+                value={targetLang} 
+                onChange={(e) => setTargetLang(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-emerald-500 appearance-none"
+              >
+                {TARGET_LANGUAGES.map(lang => <option key={lang.id} value={lang.id}>{lang.name}</option>)}
+              </select>
+              <p className="text-[10px] text-slate-500 italic leading-relaxed">
+                Select the modern architecture you wish
+              </p>
+              <p className="text-[10px] text-slate-500 italic leading-relaxed">
+                Select the modern architecture you wish to convert your legacy code into.
+              </p>
+            </div>
           </div>
-          <div className="flex justify-center pt-6">
-            {pipelineActive ? (
-              <button onClick={() => navigate('/mission-control')} className="px-12 py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full font-black shadow-2xl transition-all flex items-center gap-3">
-                <Activity size={20} /> View Pipeline Progress
-              </button>
-            ) : (
-              <button onClick={launchPipeline} disabled={isLaunching} className="px-12 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full font-black shadow-2xl transition-all flex items-center gap-3">
-                {isLaunching ? <><Loader2 className="animate-spin" /> Initializing...</> : <><Play fill="currentColor" /> Launch Migration Pipeline</>}
-              </button>
-            )}
+
+          {/* MIGRATION SCOPE SECTION */}
+          <div className="space-y-6">
+            <div className="flex items-center gap-2 text-amber-400 text-sm font-bold uppercase tracking-widest">
+              <Zap size={16} /> Define Migration Scope & Budget
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+              {MIGRATION_SCOPES.map((scope) => (
+                <div 
+                  key={scope.id} 
+                  onClick={() => {
+                    if (pipelineActive) {
+                      toast.error("Scope is locked while pipeline is active. Reset pipeline to change scope.");
+                    } else {
+                      setSelectedScope(scope.id);
+                    }
+                  }}
+                  className={`p-4 rounded-2xl border transition-all cursor-pointer ${!pipelineActive ? 'hover:border-slate-600' : 'opacity-60 cursor-not-allowed'} ${selectedScope === scope.id ? 'border-indigo-500 bg-indigo-500/10 shadow-lg' : 'border-slate-800 bg-slate-900/50'}`}
+                >
+                  <div className="flex justify-between mb-2">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${scope.bg} ${scope.color}`}>{scope.cost}</span>
+                    {selectedScope === scope.id && <CheckCircle2 size={14} className="text-indigo-400" />}
+                  </div>
+                  <h4 className="text-white font-bold text-xs mb-1">{scope.title}</h4>
+                  <div className="text-xs font-mono text-indigo-400 mb-2">{scope.tokens} Tokens</div>
+                  <p className="text-[10px] text-slate-500 line-clamp-2">{scope.desc}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-center pt-6">
+              {pipelineActive ? (
+                <button 
+                  onClick={() => navigate('/mission-control')} 
+                  className="px-12 py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full font-black shadow-2xl transition-all flex items-center gap-3"
+                >
+                  <Activity size={20} /> View Pipeline Progress
+                </button>
+              ) : (
+                <button 
+                  onClick={launchPipeline} 
+                  disabled={isLaunching} 
+                  className="px-12 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full font-black shadow-2xl transition-all flex items-center gap-3 disabled:opacity-50"
+                >
+                  {isLaunching ? (
+                    <><Loader2 className="animate-spin" size={20} /> Initializing...</>
+                  ) : (
+                    <><Play fill="currentColor" size={20} /> Launch Migration Pipeline</>
+                  )}
+                </button>
+              )}
+            </div>
           </div>
         </motion.div>
       )}
