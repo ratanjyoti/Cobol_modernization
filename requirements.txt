@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+langchain
+neo4j
+chromadb
+python-jose[cryptography]
+passlib
+python-multipart
