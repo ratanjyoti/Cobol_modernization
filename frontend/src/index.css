@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* LIGHT MODE PALETTE */
+  --app-bg: #f8fafc;        /* Light Slate 50 */
+  --panel-bg: #ffffff;      /* Pure White */
+  --panel-border: #e2e8f0;  /* Slate 200 */
+  --text-main: #0f172a;     /* Slate 900 */
+  --text-muted: #64748b;    /* Slate 500 */
+  --accent: #4f46e5;        /* Indigo 600 */
+  --accent-hover: #4338ca;  /* Indigo 700 */
+  --terminal-bg: #f1f5f9;   /* Light Slate 100 */
+  --terminal-text: #1e293b; /* Slate 800 */
+}
+
+
+.dark {
+  /* DARK MODE PALETTE */
+  --app-bg: #0f172a;        /* Deep Slate 900 */
+  --panel-bg: #1e293b;      /* Slate 800 */
+  --panel-border: #334155;  /* Slate 700 */
+  --text-main: #f8fafc;     /* Slate 50 */
+  --text-muted: #94a3b8;    /* Slate 400 */
+  --accent: #6366f1;        /* Indigo 500 */
+  --accent-hover: #4f46e5;  /* Indigo 600 */
+  --terminal-bg: #020617;   /* Slate 950 */
+  --terminal-text: #10b981;  /* Emerald 500 */
+}
+
+body {
+  @apply bg-[var(--app-bg)] text-[var(--text-main)] transition-colors duration-300 antialiased;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-[var(--panel-bg)] border border-[var(--panel-border)] rounded-xl shadow-sm transition-all duration-200;
+  }
+  .graph-node-glow {
+    filter: drop-shadow(0 0 8px currentColor);
+  }
+  .btn-primary {
+    @apply bg-[var(--accent)] text-white px-4 py-2 rounded-lg font-semibold 
+           hover:bg-[var(--accent-hover)] active:scale-95 transition-all shadow-sm;
+  }
+  .btn-secondary {
+    @apply bg-[var(--panel-bg)] text-[var(--text-main)] border border-[var(--panel-border)] px-4 py-2 rounded-lg font-medium 
+           hover:bg-slate-100 dark:hover:bg-slate-700 active:scale-95 transition-all;
+  }
+  .status-pill {
+    @apply px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider;
+  }
+}
