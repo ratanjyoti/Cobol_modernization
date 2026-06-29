@@ -1,22 +1,5 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-.venv
-venv/
-ENV/
-
-# Database
-data/sqlite/*.db
-data/chroma/
-
-# Environment variables
+node_modules/
+*.log
 .env
-
-# IDEs
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db
+__pycache__/
+*.pyc
