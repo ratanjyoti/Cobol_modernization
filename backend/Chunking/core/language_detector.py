@@ -1,4 +1,5 @@
-from typing import Tuple
+import os
+from typing import List, Tuple
 from Chunking.interfaces.i_language_adapter import ILanguageAdapter
 from Chunking.adapters.cobol_adapter import CobolAdapter
 from Chunking.adapters.jcl_adapter import JclAdapter
@@ -62,3 +63,4 @@ class LanguageDetector:
         except Exception as e:
             print(f"Error validating {file_path}: {e}")
             return "UNKNOWN", False
+
