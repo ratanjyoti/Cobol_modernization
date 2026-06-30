@@ -7,11 +7,12 @@ import {
   BrainCircuit, Rocket, ShieldCheck, Info, Lightbulb, 
   CheckCircle2, Circle, Loader2, Clock, Zap,
   Languages, Settings, Globe, Cpu, Save,
-  Target, Code2, AlertCircle, ChevronDown // <--- FIXED: Added ChevronDown import
+  Target, Code2, AlertCircle, ChevronDown, Trash2 // <--- FIXED: Added ChevronDown import
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import ConfigPanel from '../components/ConfigPanel'; 
 import { ProjectAPI } from '../services/api';
+import type { ProjectSummary } from '../services/api';
 
 // --- Types ---
 type BlueprintActivity = string | { name: string; progress: number };
@@ -25,12 +26,6 @@ interface BlueprintStage {
   activities: BlueprintActivity[];
 }
 
-// ADDED: Type for Project History
-interface ProjectHistory {
-  run_id: string;
-  name: string;
-  status: string;
-}
 
 const BLUEPRINT_STAGES: BlueprintStage[] = [
   { id: 1, name: 'Environment Setup', status: 'Complete', indicator: 'green', desc: 'Prerequisites validated.', activities: ['AI Model Config', 'Token Budget', 'Source Lang Config'] },
@@ -72,8 +67,9 @@ const Dashboard = () => {
 
   // --- STATE ---
   const [runId, setRunId] = useState<string | null>(localStorage.getItem('active_run_id'));
-  const [projects, setProjects] = useState<ProjectHistory[]>([]); // Fixed Type
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
+  const [isDeletingRuns, setIsDeletingRuns] = useState(false);
   const [sourceMetaLang, setSourceMetaLang] = useState('en');
   const [aiMode, setAiMode] = useState<'api' | 'local'>('api');
   const [aiConfig, setAiConfig] = useState({
@@ -110,9 +106,34 @@ const Dashboard = () => {
   };
 
   const handleProjectChange = (id: string) => {
+    const project = projects.find((item) => item.run_id === id);
     setRunId(id);
     localStorage.setItem('active_run_id', id);
-    toast.success(`Switched to project ${id}`);
+    toast.success(`Switched to ${project?.name || id}`);
+  };
+
+
+  const handleDeleteAllRuns = async () => {
+    if (projects.length === 0) {
+      toast.error("No runs to delete");
+      return;
+    }
+    if (!window.confirm("Delete all runs and uploaded files?")) return;
+
+    setIsDeletingRuns(true);
+    try {
+      await ProjectAPI.deleteAllRuns();
+      setProjects([]);
+      setRunId(null);
+      localStorage.removeItem('active_run_id');
+      localStorage.removeItem('modernizer_files');
+      localStorage.removeItem('modernizer_pipeline_status');
+      toast.success("All runs deleted");
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || "Failed to delete runs");
+    } finally {
+      setIsDeletingRuns(false);
+    }
   };
 
 const getStatusStyle = (status: string | undefined) => {
@@ -142,38 +163,41 @@ const getStatusStyle = (status: string | undefined) => {
     }
   };
 
+  const getNextRunName = () => {
+    const usedNumbers = projects
+      .map((project) => project.name.match(/^Run_(\d+)$/)?.[1])
+      .filter(Boolean)
+      .map(Number);
+    const nextNumber = usedNumbers.length > 0 ? Math.max(...usedNumbers) + 1 : projects.length + 1;
+    return `Run_${nextNumber}`;
+  };
+
   const handleStartNewProject = async () => {
     try {
+      const runName = getNextRunName();
       const config = {
-        project_name: "New Migration Project",
+        project_name: runName,
         provider: aiMode,
         model: aiConfig.model,
         lang: sourceMetaLang,
-        speed_profile: 'Balanced', 
+        speed_profile: 'Balanced' as const,
         workers: 4
       };
-      
-      // 1. Call the API
       const response = await ProjectAPI.create(config);
-      
-      // 2. CORRECTED: Access run_id directly from response
-      // Because ProjectAPI.create already returns response.data
-      const newRunId = response.run_id; 
-      
+      const newRunId = response.run_id;
+
       if (!newRunId) {
         throw new Error("Backend did not return a run_id");
       }
-      
+
       localStorage.setItem('active_run_id', newRunId);
       setRunId(newRunId);
-      
-      // Refresh the dropdown list
       await fetchProjectHistory();
-      
-      toast.success(`Project created: ${newRunId}`);
-      navigate('/source-files'); 
+
+      toast.success(`Project created: ${runName}`);
+      navigate('/source-files');
     } catch (e: any) {
-      console.error("Full Project Creation Error:", e); // THIS HELPS US DEBUG
+      console.error("Full Project Creation Error:", e);
       toast.error(e.message || "Error creating project");
     }
   };
@@ -194,23 +218,32 @@ const getStatusStyle = (status: string | undefined) => {
             <div className="flex flex-wrap gap-8 pt-4">
               <div className="space-y-2">
                 <p className="text-slate-500 text-xs uppercase font-bold">Active Project</p>
-                <div className="relative group">
-                  <select 
-                    value={runId || ''} 
-                    onChange={(e) => handleProjectChange(e.target.value)}
-                    className="appearance-none pl-4 pr-10 py-2 bg-slate-950 border border-slate-700 text-white rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer hover:border-indigo-500 transition-all min-w-[200px]"
-                  >
-                    <option value="" disabled>Select a Project</option>
-                    {projects.map((proj) => (
-                      <option key={proj.run_id} value={proj.run_id}>
-                        {/* CHANGED THIS LINE BELOW */}
-                        {proj.run_id} ({proj.status})
-                      </option>
-                    ))}
-                  </select>
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                    <ChevronDown size={14} className="text-slate-500" />
+                <div className="flex items-center gap-3">
+                  <div className="relative group">
+                    <select 
+                      value={runId || ''} 
+                      onChange={(e) => handleProjectChange(e.target.value)}
+                      className="appearance-none pl-4 pr-10 py-2 bg-slate-950 border border-slate-700 text-white rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer hover:border-indigo-500 transition-all min-w-[200px]"
+                    >
+                      <option value="" disabled>Select a Project</option>
+                      {projects.map((proj) => (
+                        <option key={proj.run_id} value={proj.run_id}>
+                          {proj.name || proj.run_id} ({proj.status})
+                        </option>
+                      ))}
+                    </select>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                      <ChevronDown size={14} className="text-slate-500" />
+                    </div>
                   </div>
+                  <button
+                    onClick={handleDeleteAllRuns}
+                    disabled={isDeletingRuns || projects.length === 0}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isDeletingRuns ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
+                    Delete All Runs
+                  </button>
                 </div>
                 {runId && projects.find(p => p.run_id === runId) && (
                   <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase ${getStatusStyle(projects.find(p => p.run_id === runId)?.status)}`}>
@@ -435,3 +468,8 @@ const getStatusStyle = (status: string | undefined) => {
 };
 
 export default Dashboard;
+
+
+
+
+

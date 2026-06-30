@@ -45,6 +45,7 @@ const SOURCE_LANGUAGES = [
   { id: 'cobol', name: 'COBOL (Pure)' },
   { id: 'cobol-sql', name: 'COBOL + SQL' },
   { id: 'cobol-cics', name: 'COBOL + CICS' },
+  { id: 'jcl', name: 'JCL' },
   { id: 'telon-batch', name: 'Telon Batch (T2B)' },
   { id: 'telon-screen', name: 'Telon Screen (T2C)' },
   { id: 'pli', name: 'PL/I' },
@@ -56,6 +57,22 @@ const TARGET_LANGUAGES = [
   { id: 'csharp', name: 'C# 12 (.NET 8)' },
   { id: 'python', name: 'Python 3.12 (FastAPI)' },
 ];
+
+const LANGUAGE_LABELS: Record<string, string> = {
+  cobol: 'COBOL',
+  'cobol-sql': 'COBOL + SQL',
+  'cobol-cics': 'COBOL + CICS',
+  'cobol-sql-cics': 'COBOL + SQL + CICS',
+  jcl: 'JCL',
+  'telon-batch': 'Telon Batch',
+  'telon-screen': 'Telon Screen',
+  pli: 'PL/I',
+  fortran: 'Fortran',
+  text: 'Text',
+  unknown: 'Unknown',
+};
+
+const formatLanguageName = (lang?: string) => LANGUAGE_LABELS[(lang || '').toLowerCase()] || lang || 'Unknown';
 
 const SourceFiles = () => {
   const navigate = useNavigate();
@@ -71,6 +88,7 @@ const SourceFiles = () => {
   const [isLaunching, setIsLaunching] = useState(false);
   const [isFetchingRepo, setIsFetchingRepo] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isClearingFiles, setIsClearingFiles] = useState(false);
   const [pipelineActive, setPipelineActive] = useState(() => localStorage.getItem(STORAGE_KEYS.pipelineStatus) === 'active');
   const [detectionAlert, setDetectionAlert] = useState<DetectionAlert | null>(null);
   const [pendingDetections, setPendingDetections] = useState<DetectionAlert[]>([]);
@@ -80,9 +98,9 @@ const SourceFiles = () => {
     if (sourceLang !== 'auto') return;
 
     const detections = mappedFiles
-      .map((file) => ({ file: file.filename || file.name, lang: file.lang || file.detected_lang || 'UNKNOWN' }))
+      .map((file) => ({ file: file.filename || file.name, lang: file.lang || file.detected_lang || 'UNKNOWN', isValid: file.is_valid ?? file.isValid }))
       .filter((item) => {
-        if (!item.file || !item.lang || item.lang === 'UNKNOWN') return false;
+        if (!item.file || !item.lang || item.lang === 'UNKNOWN' || item.isValid === false) return false;
         const key = `${item.file}:${item.lang}`;
         if (queuedDetectionKeys.current.has(key)) return false;
         queuedDetectionKeys.current.add(key);
@@ -104,6 +122,36 @@ const SourceFiles = () => {
       return nextDetection;
     });
   };
+  const clearAllFiles = async () => {
+    if (!runId) {
+      toast.error("No active project found");
+      return;
+    }
+    if (pipelineActive) {
+      toast.error("Cannot clear files while the pipeline is active.");
+      return;
+    }
+    if (files.length === 0) {
+      toast.error("No uploaded files to clear.");
+      return;
+    }
+    if (!window.confirm("Clear all uploaded files for this run?")) return;
+
+    setIsClearingFiles(true);
+    try {
+      await ProjectAPI.clearAllFiles(runId);
+      setFiles([]);
+      setDetectionAlert(null);
+      setPendingDetections([]);
+      queuedDetectionKeys.current.clear();
+      localStorage.removeItem(STORAGE_KEYS.files);
+      toast.success("All uploaded files cleared");
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || "Failed to clear uploaded files");
+    } finally {
+      setIsClearingFiles(false);
+    }
+  };
 
   const showNextDetection = () => {
     setPendingDetections((prev) => {
@@ -119,7 +167,7 @@ const SourceFiles = () => {
     socket.onmessage = (event) => {
       const data = JSON.parse(event.data);
       if (data.event === 'LANGUAGE_DETECTED') {
-        enqueueLanguageDetections([{ filename: data.file, lang: data.suggested_lang }]);
+        enqueueLanguageDetections([{ filename: data.file, lang: data.suggested_lang, is_valid: data.is_valid }]);
       }
     };
     return () => socket.close();
@@ -193,7 +241,8 @@ const SourceFiles = () => {
     setIsUploading(true);
     try {
       for (const file of Array.from(uploadedFiles)) {
-        if (file.name.endsWith('.zip')) {
+        const fileName = file.name.toLowerCase();
+        if (fileName.endsWith('.zip')) {
           const zipFormData = new FormData();
           zipFormData.append('run_id', runId);
           zipFormData.append('zip_file', file);
@@ -206,7 +255,13 @@ const SourceFiles = () => {
             enqueueLanguageDetections(zipData.mapped_files);
             toast.success(`Extracted ${backendFiles.length} files`);
           }
-        } else if (file.name.endsWith('.cbl') || file.name.endsWith('.cob') || file.name.endsWith('.txt')) {
+        } else if (
+          // EXPANDED EXTENSION CHECK
+          fileName.endsWith('.cbl') || fileName.endsWith('.cob') || fileName.endsWith('.cpy') || // COBOL
+          fileName.endsWith('.jcl') ||                                                          // JCL
+          fileName.endsWith('.tln') || fileName.endsWith('.tel') ||                             // Telon
+          fileName.endsWith('.txt')                                                             // Generic
+        ) {
           const fileFormData = new FormData();
           fileFormData.append('run_id', runId);
           fileFormData.append('files', file);
@@ -374,7 +429,7 @@ const SourceFiles = () => {
         </div>
       </motion.div>
 
-      {/* SECTION 2: INGESTION (NOW SECOND) */}
+      {/* SECTION 2: INGESTION */}
       <div className="space-y-6">
         <div className="flex items-center gap-2 text-indigo-400 text-sm font-bold uppercase tracking-widest">
           <Upload size={16} /> Step 2: Source Code Ingestion
@@ -393,29 +448,38 @@ const SourceFiles = () => {
               onClick={() => fileInputRef.current?.click()}
               className="relative group border-2 border-dashed border-slate-800 hover:border-indigo-500/50 rounded-3xl p-12 transition-all text-center bg-slate-900/30 cursor-pointer"
             >
-              <input type="file" ref={fileInputRef} multiple style={{ display: 'none' }} onChange={handleFileUpload} accept=".cbl,.cob,.txt,.zip" />
+              {/* UPDATED ACCEPT ATTRIBUTE */}
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                multiple 
+                style={{ display: 'none' }} 
+                onChange={handleFileUpload} 
+                accept=".cbl,.cob,.cpy,.jcl,.tln,.tel,.txt,.zip" 
+              />
               <div className="flex flex-col items-center gap-4 pointer-events-none"> 
                 <div className={`p-4 rounded-full transition-colors ${isUploading ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400 group-hover:text-indigo-400'}`}>
                   {isUploading ? <Loader2 className="animate-spin" size={32} /> : <Upload size={32} />}
                 </div>
                 <div className="space-y-1">
-                  <p className="text-lg font-medium text-slate-300">{isUploading ? 'Uploading files...' : 'Click or drag COBOL files or a ZIP archive'}</p>
-                  <p className="text-sm text-slate-500">Supports .cbl, .cob, .txt, .zip</p>
+                  <p className="text-lg font-medium text-slate-300">{isUploading ? 'Uploading files...' : 'Click or drag legacy source files'}</p>
+                  <p className="text-sm text-slate-500">Supports .cbl, .cob, .cpy, .jcl, .tln, .tel, .txt, .zip</p>
                 </div>
               </div>
             </div>
           ) : (
+            /* ... GitHub logic remains same ... */
             <div className="glass-card p-8 rounded-3xl border-slate-800 bg-slate-900/50 flex flex-col md:flex-row gap-4 items-end">
-              <div className="flex-1 space-y-3 w-full">
+                <div className="flex-1 space-y-3 w-full">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">GitHub Repository URL</label>
                 <div className="relative">
-                  <GitBranch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-                  <input type="text" placeholder="https://github.com/username/repository" className="w-full pl-10 pr-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all" value={githubUrl} onChange={(e) => setGithubUrl(e.target.value)} />
+                    <GitBranch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                    <input type="text" placeholder="https://github.com/username/repository" className="w-full pl-10 pr-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all" value={githubUrl} onChange={(e) => setGithubUrl(e.target.value)} />
                 </div>
-              </div>
-              <button onClick={handleGithubIngest} disabled={isFetchingRepo} className="w-full md:w-auto px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                </div>
+                <button onClick={handleGithubIngest} disabled={isFetchingRepo} className="w-full md:w-auto px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50">
                 {isFetchingRepo ? <><Loader2 className="animate-spin" size={18}/> Fetching...</> : <><Zap size={18}/> Ingest Repo</>}
-              </button>
+                </button>
             </div>
           )}
         </div>
@@ -423,8 +487,18 @@ const SourceFiles = () => {
 
       {/* SECTION 3: FILE REVIEW & LAUNCH (NOW LAST) */}
       <div className="space-y-6">
-        <div className="flex items-center gap-2 text-indigo-400 text-sm font-bold uppercase tracking-widest">
-          <FileText size={16} /> Step 3: Review & Launch
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2 text-indigo-400 text-sm font-bold uppercase tracking-widest">
+            <FileText size={16} /> Step 3: Review & Launch
+          </div>
+          <button
+            onClick={clearAllFiles}
+            disabled={pipelineActive || isClearingFiles || files.length === 0}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isClearingFiles ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
+            Clear All Files
+          </button>
         </div>
         
         <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden">
@@ -449,7 +523,7 @@ const SourceFiles = () => {
                      file.status === 'Analyzed' ? <div className="flex items-center gap-2 text-emerald-400"><CheckCircle2 size={14} /> Analyzed</div> : 
                      <div className="flex items-center gap-2 text-slate-500"><Clock size={14} /> Pending</div>}
                   </td>
-                  <td className="p-4 text-sm"><span className="text-indigo-300 font-mono text-xs">{file.detectedLang || "-"}</span></td>
+                  <td className="p-4 text-sm"><span className="text-indigo-300 font-mono text-xs">{file.detectedLang ? formatLanguageName(file.detectedLang) : "-"}</span></td>
                   <td className="p-4 text-sm">
                     {file.chunks > 1 ? <span className="bg-blue-500/20 text-blue-400 px-2 py-1 rounded text-xs border border-blue-500/30">{file.chunks} Chunks</span> : <span className="text-slate-500 text-xs">Single File</span>}
                   </td>
@@ -499,7 +573,11 @@ const SourceFiles = () => {
                   <div className="space-y-2">
                     <h3 className="text-xl font-bold text-white">Language Detected</h3>
                     <p className="text-slate-400">
-                      <span className="text-white font-mono">{detectionAlert.file}</span> was detected as <span className="text-indigo-400 font-bold">{detectionAlert.lang}</span>.
+                      {detectionAlert.file.toLowerCase().endsWith('.txt') ? (
+                        <>This text file <span className="text-white font-mono">{detectionAlert.file}</span> contains <span className="text-indigo-400 font-bold">{formatLanguageName(detectionAlert.lang)}</span> code.</>
+                      ) : (
+                        <><span className="text-white font-mono">{detectionAlert.file}</span> was detected as <span className="text-indigo-400 font-bold">{formatLanguageName(detectionAlert.lang)}</span>.</>
+                      )}
                     </p>
                     <p className="text-sm text-slate-500 italic">Please confirm before continuing.</p>
                   </div>
@@ -539,15 +617,6 @@ const SourceFiles = () => {
 };
 
 export default SourceFiles;
-
-
-
-
-
-
-
-
-
 
 
 

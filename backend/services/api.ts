@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const api = axios.create({ baseURL: 'http://localhost:8000' });
+const api = axios.create({ baseURL: 'http://localhost:8001' });
 
 // Add JWT token to every request
 api.interceptors.request.use((config) => {
@@ -38,7 +38,16 @@ export const ProjectAPI = {
   },
 
   listFiles: async (runId: string) => {
-    const response = await api.get(`/discovery/files/${runId}`);
+    const response = await api.get(`/projects/${runId}/files`);
+    return response.data;
+  },
+  clearAllFiles: async (runId: string) => {
+    const response = await api.delete(`/projects/${runId}/files`);
+    return response.data;
+  },
+
+  deleteAllRuns: async () => {
+    const response = await api.delete('/projects/runs');
     return response.data;
   },
 };

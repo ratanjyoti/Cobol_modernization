@@ -7,6 +7,8 @@ from Persistence.sqlite.models import FileStatus, ProjectFile
 import shutil
 import os
 import asyncio
+import stat
+import subprocess
 from pathlib import Path
 from source.websockets.socket_manager import manager
 
@@ -19,6 +21,14 @@ def save_file_sync(upload_file: UploadFile, destination: Path):
     """Helper for asyncio.to_thread"""
     with open(destination, "wb") as buffer:
         shutil.copyfileobj(upload_file.file, buffer)
+
+def remove_tree_sync(path: Path):
+    def handle_remove_error(func, failed_path, _exc_info):
+        os.chmod(failed_path, stat.S_IWRITE)
+        func(failed_path)
+
+    if path.exists():
+        shutil.rmtree(path, onerror=handle_remove_error)
 
 @router.post("/upload-zip")
 async def upload_zip(
@@ -48,35 +58,47 @@ async def upload_zip(
             os.remove(temp_zip_path)
 
 @router.post("/github")
-async def ingest_github_repo(data: dict, db: Session = Depends(get_db)):
+async def ingest_github_repo(
+    data: dict,
+    db: Session = Depends(get_db)
+):
     run_id = data.get("run_id")
     repo_url = data.get("url")
 
     if not run_id or not repo_url:
-        raise HTTPException(status_code=400, detail="Missing run_id or repo_url")
+        raise HTTPException(status_code=400, detail="Missing run_id or url")
+
+    upload_dir = Path("data/uploads")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    temp_clone_path = upload_dir / f"temp_{run_id}"
 
     try:
-        import git
-    except ImportError:
-        raise HTTPException(status_code=500, detail="GitPython not installed")
+        await asyncio.to_thread(remove_tree_sync, temp_clone_path)
 
-    temp_clone_path = Path(f"data/uploads/temp_{run_id}")
-    try:
-        if temp_clone_path.exists():
-            await asyncio.to_thread(shutil.rmtree, temp_clone_path)
+        clone_cmd = ["git", "clone", "--depth", "1", repo_url, str(temp_clone_path)]
+        result = await asyncio.to_thread(
+            subprocess.run,
+            clone_cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Git clone failed: {(result.stderr or result.stdout).strip()}",
+            )
 
-        # Clone in thread to avoid blocking
-        await asyncio.to_thread(git.Repo.clone_from, repo_url, str(temp_clone_path))
-        
         discovery = DiscoveryProcess(db)
-        # !!! ADDED AWAIT HERE !!!
         mapped_files = await discovery.process_folder(run_id, str(temp_clone_path))
-        return {"status": "GitHub Repo Ingested", "mapped_files": mapped_files}
+        return {"status": "Success", "mapped_files": mapped_files}
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Git clone failed: {str(e)}")
     finally:
-        if temp_clone_path.exists():
-            await asyncio.to_thread(shutil.rmtree, temp_clone_path)
+        await asyncio.to_thread(remove_tree_sync, temp_clone_path)
 
 @router.post("/upload")
 async def upload_source(
