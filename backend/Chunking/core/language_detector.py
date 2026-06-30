@@ -1,4 +1,5 @@
 import os
+from itertools import islice
 from typing import List, Tuple
 from Chunking.interfaces.i_language_adapter import ILanguageAdapter
 from Chunking.adapters.cobol_adapter import CobolAdapter
@@ -27,8 +28,7 @@ class LanguageDetector:
             ext = os.path.splitext(file_path)[1].lower()
             
             with open(file_path, 'r', errors='ignore') as f:
-                head = [next(f) for _ in range(100)]
-                content = "".join(head)
+                content = "".join(islice(f, 100))
 
             # 2. Check for explicit markers (Highest Priority)
             import re
@@ -63,4 +63,5 @@ class LanguageDetector:
         except Exception as e:
             print(f"Error validating {file_path}: {e}")
             return "UNKNOWN", False
+
 

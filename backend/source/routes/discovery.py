@@ -1,13 +1,24 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 from Processes.discovery_process import DiscoveryProcess
 from Persistence.sqlite.session import get_db
+from Persistence.sqlite.models import FileStatus, ProjectFile
 import shutil
 import os
+import asyncio
+from pathlib import Path
+from source.websockets.socket_manager import manager
 
 router = APIRouter(prefix="/discovery", tags=["Discovery"])
 
+def path_safe(filename: str | None) -> str:
+    return os.path.basename(filename or "upload.zip")
+
+def save_file_sync(upload_file: UploadFile, destination: Path):
+    """Helper for asyncio.to_thread"""
+    with open(destination, "wb") as buffer:
+        shutil.copyfileobj(upload_file.file, buffer)
 
 @router.post("/upload-zip")
 async def upload_zip(
@@ -18,21 +29,23 @@ async def upload_zip(
     if not zip_file.filename or not zip_file.filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="Please upload a .zip file")
 
-    os.makedirs("data/uploads", exist_ok=True)
-    temp_zip_path = f"data/uploads/temp_{run_id}.zip"
-    with open(temp_zip_path, "wb") as buffer:
-        shutil.copyfileobj(zip_file.file, buffer)
+    upload_dir = Path("data/uploads")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    temp_zip_path = upload_dir / f"temp_{run_id}.zip"
 
     try:
+        # Save file without blocking the event loop
+        await asyncio.to_thread(save_file_sync, zip_file, temp_zip_path)
+
         discovery = DiscoveryProcess(db)
-        mapped_files = discovery.process_zip_upload(run_id, temp_zip_path)
+        # !!! ADDED AWAIT HERE !!!
+        mapped_files = await discovery.process_zip_upload(run_id, str(temp_zip_path))
         return {"status": "Success", "mapped_files": mapped_files}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing zip: {str(e)}")
     finally:
-        if os.path.exists(temp_zip_path):
+        if temp_zip_path.exists():
             os.remove(temp_zip_path)
-
 
 @router.post("/github")
 async def ingest_github_repo(data: dict, db: Session = Depends(get_db)):
@@ -44,27 +57,26 @@ async def ingest_github_repo(data: dict, db: Session = Depends(get_db)):
 
     try:
         import git
-    except ImportError as exc:
-        raise HTTPException(
-            status_code=500,
-            detail="GitPython is not installed. Install it with: pip install GitPython",
-        ) from exc
+    except ImportError:
+        raise HTTPException(status_code=500, detail="GitPython not installed")
 
-    temp_clone_path = f"data/uploads/temp_{run_id}"
+    temp_clone_path = Path(f"data/uploads/temp_{run_id}")
     try:
-        if os.path.exists(temp_clone_path):
-            shutil.rmtree(temp_clone_path)
+        if temp_clone_path.exists():
+            await asyncio.to_thread(shutil.rmtree, temp_clone_path)
 
-        git.Repo.clone_from(repo_url, temp_clone_path)
+        # Clone in thread to avoid blocking
+        await asyncio.to_thread(git.Repo.clone_from, repo_url, str(temp_clone_path))
+        
         discovery = DiscoveryProcess(db)
-        mapped_files = discovery.process_folder(run_id, temp_clone_path)
+        # !!! ADDED AWAIT HERE !!!
+        mapped_files = await discovery.process_folder(run_id, str(temp_clone_path))
         return {"status": "GitHub Repo Ingested", "mapped_files": mapped_files}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Git clone failed: {str(e)}")
     finally:
-        if os.path.exists(temp_clone_path):
-            shutil.rmtree(temp_clone_path)
-
+        if temp_clone_path.exists():
+            await asyncio.to_thread(shutil.rmtree, temp_clone_path)
 
 @router.post("/upload")
 async def upload_source(
@@ -76,22 +88,60 @@ async def upload_source(
     discovery = DiscoveryProcess(db)
 
     if zip_file:
-        os.makedirs("data/uploads", exist_ok=True)
-        temp_path = f"data/uploads/{PathSafe(zip_file.filename)}"
-        with open(temp_path, "wb") as buffer:
-            shutil.copyfileobj(zip_file.file, buffer)
+        upload_dir = Path("data/uploads")
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        temp_path = upload_dir / path_safe(zip_file.filename)
+        
         try:
-            mapped_files = discovery.process_upload(run_id, temp_path)
+            await asyncio.to_thread(save_file_sync, zip_file, temp_path)
+            # !!! ADDED AWAIT HERE !!!
+            mapped_files = await discovery.process_upload(run_id, str(temp_path))
         finally:
-            if os.path.exists(temp_path):
+            if temp_path.exists():
                 os.remove(temp_path)
     elif files:
+        # !!! ADDED AWAIT HERE !!!
         mapped_files = await discovery.process_individual_files(run_id, files)
     else:
         raise HTTPException(status_code=400, detail="No files uploaded")
 
     return {"status": "Success", "mapped_files": mapped_files}
 
+@router.websocket("/ws/{run_id}")
+async def websocket_endpoint(websocket: WebSocket, run_id: str):
+    await manager.connect(websocket, run_id)
+    try:
+        while True:
+            await websocket.receive_text() 
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, run_id)
 
-def PathSafe(filename: str | None) -> str:
-    return os.path.basename(filename or "upload.zip")
+@router.post("/confirm-language")
+async def confirm_language(data: dict, db: Session = Depends(get_db)):
+    # This remains synchronous because it's a simple DB update
+    run_id = data.get("run_id")
+    filename = data.get("filename")
+    lang = data.get("lang")
+
+    if not all([run_id, filename, lang]):
+        raise HTTPException(status_code=400, detail="Missing run_id, filename, or lang")
+
+    try:
+        file_record = db.query(ProjectFile).filter(
+            ProjectFile.run_id == run_id, 
+            ProjectFile.filename == filename
+        ).first()
+
+        if not file_record:
+            raise HTTPException(status_code=404, detail="File not found in database")
+
+        file_record.detected_lang = lang
+        file_record.status = FileStatus.CONFIRMED
+        db.commit()
+        return {"status": "Success", "message": f"Language updated to {lang} for {filename}"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+

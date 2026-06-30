@@ -13,13 +13,32 @@ export const ProjectAPI = {
   create: (config: any) => api.post('/projects/create', config),
   updateConfig: (runId: string, updates: any) => api.patch(`/projects/${runId}/config`, updates),
   getProject: (runId: string) => api.get(`/projects/${runId}`),
-  uploadFiles: async (formData: FormData) => {
-        const response = await api.post('/discovery/upload', formData);
-        return response.data; 
-    },
+  
+  // This is the missing function you need to add!
+  confirmLanguage: async (data: { run_id: string; filename: string; lang: string }) => {
+    const response = await api.post('/discovery/confirm-language', data);
+    return response.data;
+  },
 
-    ingestGithub: async (formData: FormData) => {
-        const response = await api.post('/discovery/github', formData);
-        return response.data;
-    },
- };
+  uploadFiles: async (formData: FormData) => {
+    const response = await api.post('/discovery/upload', formData);
+    return response.data; 
+  },
+
+  uploadZip: async (formData: FormData) => {
+    const response = await api.post('/discovery/upload-zip', formData);
+    return response.data;
+  },
+
+  ingestGithub: async (runId: string, url: string) => {
+    // Note: I changed this to match how you call it in SourceFiles.tsx 
+    // where you pass (runId, githubUrl) instead of formData
+    const response = await api.post('/discovery/github', { run_id: runId, url: url });
+    return response.data;
+  },
+
+  listFiles: async (runId: string) => {
+    const response = await api.get(`/discovery/files/${runId}`);
+    return response.data;
+  },
+};
