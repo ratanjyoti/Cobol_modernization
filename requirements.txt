@@ -1,8 +1,28 @@
-fastapi
-uvicorn
-langchain
-neo4j
-chromadb
-python-jose[cryptography]
-passlib
-python-multipart
+# --- Core Web Framework ---
+fastapi==0.115.0
+uvicorn==0.30.1
+python-multipart==0.0.12        # Required for File/Form uploads (UploadFile)
+python-dotenv==1.0.1            # For loading .env file (API keys, DB URLs)
+
+# --- Database & Persistence ---
+sqlalchemy==2.0.32              # SQLite ORM
+neo4j==5.23.0                   # Official Neo4j Driver for Graphing
+chromadb==0.5.5                 # Vector Database for Phase 6 RAG
+
+# --- Ingestion & File Handling ---
+GitPython==3.1.43               # For cloning GitHub Repositories
+pyyaml==6.0.2                   # For generating Technical YAML blueprints
+
+# --- Security & Authentication ---
+PyJWT==2.9.0                    # For JWT Token generation and validation
+passlib[bcrypt]==1.7.4          # For password hashing
+
+# --- AI & LLM Orchestration (Phase 3 & 4) ---
+langchain==0.3.0                # AI Chain orchestration
+langchain-openai==0.2.0         # For Azure OpenAI integration
+langchain-community==0.3.0      # For Ollama and other community tools
+pydantic==2.9.2                 # Data validation and Blueprint schemas
+
+# --- Utilities ---
+requests==2.32.3                # General HTTP requests
+asyncio==3.4.3                  # Asynchronous event loop management
