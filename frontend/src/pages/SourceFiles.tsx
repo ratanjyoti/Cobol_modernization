@@ -5,8 +5,8 @@ import { ProjectAPI, WS_BASE_URL } from '../services/api';
 
 import {
   Upload, FileText, CheckCircle2, Clock,
-  AlertCircle, Layers, Loader2, Zap, Play, GitBranch,
-  Activity, RotateCcw, Trash2, Languages, Target, XCircle
+  Layers, Loader2, Zap, Play, GitBranch,
+  Activity, RotateCcw, Trash2, Languages, Target, XCircle, FolderOpen, AlertCircle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -17,6 +17,17 @@ type SourceFileRecord = {
   status: 'Pending' | 'Processing' | 'Analyzed';
   chunks: number;
   detectedLang?: string;
+  relPath?: string;
+  isValid?: boolean;
+};
+
+// Helper to determine File Type based on extension
+const getFileType = (filename: string) => {
+  const ext = filename.toLowerCase();
+  if (ext.endsWith('.cpy')) return { label: 'Copybook', color: 'text-purple-400 bg-purple-500/10 border-purple-500/30' };
+  if (ext.endsWith('.jcl')) return { label: 'JCL Script', color: 'text-amber-400 bg-amber-500/10 border-amber-500/30' };
+  if (ext.endsWith('.cbl') || ext.endsWith('.cob')) return { label: 'Program', color: 'text-blue-400 bg-blue-500/10 border-blue-500/30' };
+  return { label: 'Other', color: 'text-slate-400 bg-slate-500/10 border-slate-500/30' };
 };
 
 type DetectionAlert = {
@@ -50,6 +61,7 @@ const SOURCE_LANGUAGES = [
   { id: 'telon-screen', name: 'Telon Screen (T2C)' },
   { id: 'pli', name: 'PL/I' },
   { id: 'fortran', name: 'Fortran' },
+  { id: 'sql', name: 'SQL' },
 ];
 
 const TARGET_LANGUAGES = [
@@ -68,6 +80,7 @@ const LANGUAGE_LABELS: Record<string, string> = {
   'telon-screen': 'Telon Screen',
   pli: 'PL/I',
   fortran: 'Fortran',
+  sql: 'SQL',
   text: 'Text',
   unknown: 'Unknown',
 };
@@ -76,17 +89,22 @@ const formatLanguageName = (lang?: string) => LANGUAGE_LABELS[(lang || '').toLow
 
 const SourceFiles = () => {
   const navigate = useNavigate();
+  
+  // Input Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const queuedDetectionKeys = useRef<Set<string>>(new Set());
 
-  const [inputMethod, setInputMethod] = useState<'file' | 'github'>('file');
+  const [inputMethod, setInputMethod] = useState<'file' | 'local' | 'github'>('file');
   const [githubUrl, setGithubUrl] = useState('');
+  const [githubToken, setGithubToken] = useState('');
+  const [localRepoPath, setLocalRepoPath] = useState('');
   const [files, setFiles] = useState<SourceFileRecord[]>([]);
   const [selectedScope, setSelectedScope] = useState(localStorage.getItem(STORAGE_KEYS.selectedScope) || '');
   const [sourceLang, setSourceLang] = useState(localStorage.getItem(STORAGE_KEYS.sourceLang) || 'auto');
   const [targetLang, setTargetLang] = useState(localStorage.getItem(STORAGE_KEYS.targetLang) || 'java');
   const [isLaunching, setIsLaunching] = useState(false);
-  const [isFetchingRepo, setIsFetchingRepo] = useState(false);
+  const [isReadingRepo, setIsReadingRepo] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isClearingFiles, setIsClearingFiles] = useState(false);
   const [pipelineActive, setPipelineActive] = useState(() => localStorage.getItem(STORAGE_KEYS.pipelineStatus) === 'active');
@@ -94,6 +112,21 @@ const SourceFiles = () => {
   const [pendingDetections, setPendingDetections] = useState<DetectionAlert[]>([]);
   
   const runId = localStorage.getItem('active_run_id');
+
+  // HELPER: Ensures mapping backend data to frontend state correctly across all handlers
+  const mapBackendFiles = (backendFiles: any[]) => {
+    return backendFiles.map((f) => ({
+      id: f.id,
+      name: f.filename || f.name,
+      size: f.size || 0,
+      status: f.status === 'PENDING_CONFIRMATION' ? 'Pending' : 'Analyzed',
+      chunks: f.chunks || 1,
+      detectedLang: f.lang || f.detected_lang,
+      relPath: f.filepath || f.rel_path,
+      isValid: f.is_valid,
+    }));
+  };
+
   const enqueueLanguageDetections = (mappedFiles: any[]) => {
     if (sourceLang !== 'auto') return;
 
@@ -122,6 +155,7 @@ const SourceFiles = () => {
       return nextDetection;
     });
   };
+
   const clearAllFiles = async () => {
     if (!runId) {
       toast.error("No active project found");
@@ -197,7 +231,6 @@ const SourceFiles = () => {
     }
   };
 
-
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.selectedScope, selectedScope);
     localStorage.setItem(STORAGE_KEYS.sourceLang, sourceLang);
@@ -211,14 +244,7 @@ const SourceFiles = () => {
   const fetchProjectFiles = async () => {
     try {
       const response = await ProjectAPI.listFiles(runId!); 
-      const mapped = response.files.map((f: any) => ({
-        id: f.id,
-        name: f.filename,
-        size: f.size || 0,
-        status: f.status === 'PENDING_CONFIRMATION' ? 'Pending' : 'Analyzed',
-        chunks: 1,
-        detectedLang: f.detected_lang || f.lang,
-      }));
+      const mapped = mapBackendFiles(response.files);
       setFiles(mapped);
     } catch (e) { console.error("Failed to fetch files", e); }
   };
@@ -248,28 +274,22 @@ const SourceFiles = () => {
           zipFormData.append('zip_file', file);
           const zipData = await ProjectAPI.uploadZip(zipFormData);
           if (zipData && zipData.mapped_files) {
-            const backendFiles = zipData.mapped_files.map((f: any) => ({
-              id: f.id, name: f.filename, size: f.size || 0, status: 'Pending' as const, chunks: 1, detectedLang: f.lang || f.detected_lang,
-            }));
+            const backendFiles = mapBackendFiles(zipData.mapped_files);
             setFiles(prev => [...prev, ...backendFiles]);
             enqueueLanguageDetections(zipData.mapped_files);
             toast.success(`Extracted ${backendFiles.length} files`);
           }
         } else if (
-          // EXPANDED EXTENSION CHECK
-          fileName.endsWith('.cbl') || fileName.endsWith('.cob') || fileName.endsWith('.cpy') || // COBOL
-          fileName.endsWith('.jcl') ||                                                          // JCL
-          fileName.endsWith('.tln') || fileName.endsWith('.tel') ||                             // Telon
-          fileName.endsWith('.txt')                                                             // Generic
+          fileName.endsWith('.cbl') || fileName.endsWith('.cob') || fileName.endsWith('.cpy') || 
+          fileName.endsWith('.jcl') || fileName.endsWith('.sql') || fileName.endsWith('.tln') || fileName.endsWith('.tel') || 
+          fileName.endsWith('.txt')
         ) {
           const fileFormData = new FormData();
           fileFormData.append('run_id', runId);
           fileFormData.append('files', file);
           const fileResponse = await ProjectAPI.uploadFiles(fileFormData);
           const uploadedRecords = fileResponse.mapped_files || [];
-          const backendFiles = uploadedRecords.map((f: any) => ({
-            id: f.id, name: f.filename, size: f.size || file.size, status: 'Pending' as const, chunks: 1, detectedLang: f.lang || f.detected_lang,
-          }));
+          const backendFiles = mapBackendFiles(uploadedRecords);
           setFiles(prev => [...prev, ...backendFiles]);
           enqueueLanguageDetections(uploadedRecords);
           toast.success(`Uploaded ${file.name}`);
@@ -278,30 +298,96 @@ const SourceFiles = () => {
         }
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || "File upload failed");
+      console.error("Detailed Error:", error);
+      const serverMessage = error.response?.data?.detail || "Connection timed out or file too large";
+      toast.error(`Upload failed: ${serverMessage}`);
     } finally {
       setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleFolderUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const uploadedFiles = e.target.files;
+    if (!uploadedFiles || !runId) return;
+
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('run_id', runId);
+
+      Array.from(uploadedFiles).forEach((file) => {
+        formData.append('files', file);
+        formData.append('paths', file.webkitRelativePath || file.name);
+      });
+
+      const response = await ProjectAPI.uploadFolder(formData);
+      const backendFiles = mapBackendFiles(response.mapped_files || []);
+      
+      setFiles(prev => [...prev, ...backendFiles]);
+      enqueueLanguageDetections(response.mapped_files || []);
+      toast.success(`Local repository ingested successfully!`);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error.response?.data?.detail || "Folder upload failed. Try a smaller folder or ZIP.");
+    } finally {
+      setIsUploading(false);
+      if (folderInputRef.current) folderInputRef.current.value = '';
+    }
+  };
+
+  const handleLocalRepoIngest = async () => {
+    if (!localRepoPath.trim() || !runId) {
+      toast.error("Paste a local Git repository path first");
+      return;
+    }
+
+    setIsReadingRepo(true);
+    try {
+      const formData = new FormData();
+      formData.append('run_id', runId);
+      formData.append('repo_path', localRepoPath.trim());
+
+      const response = await ProjectAPI.ingestLocalRepo(formData);
+      const backendFiles = mapBackendFiles(response.mapped_files || []);
+
+      setFiles(prev => [...prev, ...backendFiles]);
+      enqueueLanguageDetections(response.mapped_files || []);
+      toast.success(`Inventory created for ${backendFiles.length} files`);
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.detail || "Failed to read local repository";
+      toast.error(errorMsg);
+    } finally {
+      setIsReadingRepo(false);
     }
   };
 
   const handleGithubIngest = async () => {
     if (!githubUrl.trim() || !runId) {
-      toast.error("Invalid GitHub URL or no project found");
+      toast.error("Please enter a GitHub repository URL");
       return;
     }
-    setIsFetchingRepo(true);
+
+    setIsReadingRepo(true);
     try {
-      const response = await ProjectAPI.ingestGithub(runId!, githubUrl);
-      const backendFiles = response.mapped_files.map((f: any) => ({
-        id: f.id, name: f.filename, size: f.size || 0, status: 'Pending' as const, chunks: 1, detectedLang: f.lang || f.detected_lang,
-      }));
+      const formData = new FormData();
+      formData.append('run_id', runId);
+      formData.append('repo_url', githubUrl.trim());
+      if (githubToken) {
+        formData.append('github_token', githubToken.trim());
+      }
+
+      const response = await ProjectAPI.ingestGithub(formData);
+      const backendFiles = mapBackendFiles(response.mapped_files || []);
+
       setFiles(prev => [...prev, ...backendFiles]);
       enqueueLanguageDetections(response.mapped_files || []);
-      toast.success("Repository ingested successfully!");
-    } catch (error) {
-      toast.error("Failed to ingest GitHub repository");
+      toast.success(`Successfully ingested ${backendFiles.length} files from GitHub`);
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.detail || "GitHub ingestion failed";
+      toast.error(errorMsg);
     } finally {
-      setIsFetchingRepo(false);
+      setIsReadingRepo(false);
     }
   };
 
@@ -362,7 +448,7 @@ const SourceFiles = () => {
         </div>
       </div>
 
-      {/* SECTION 1: CONFIGURATION (NOW FIRST) */}
+      {/* SECTION 1: CONFIGURATION */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
         <div className="flex items-center gap-2 text-indigo-400 text-sm font-bold uppercase tracking-widest">
           <Layers size={16} /> Step 1: Project Configuration
@@ -438,54 +524,116 @@ const SourceFiles = () => {
         <div className="flex justify-center">
           <div className="flex p-1 bg-slate-950 rounded-xl border border-slate-800 w-full max-w-md">
             <button onClick={() => setInputMethod('file')} className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${inputMethod === 'file' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}><Upload size={14}/> Local Upload</button>
-            <button onClick={() => setInputMethod('github')} className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${inputMethod === 'github' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}><GitBranch size={14}/> GitHub Repository</button>
+            <button onClick={() => setInputMethod('local')} className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${inputMethod === 'local' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}><GitBranch size={14}/> Local Git</button>
+            <button onClick={() => setInputMethod('github')} className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${inputMethod === 'github' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}><GitBranch size={14}/> GitHub URL</button>
           </div>
         </div>
 
         <div className="grid grid-cols-1 gap-6">
           {inputMethod === 'file' ? (
-            <div 
-              onClick={() => fileInputRef.current?.click()}
-              className="relative group border-2 border-dashed border-slate-800 hover:border-indigo-500/50 rounded-3xl p-12 transition-all text-center bg-slate-900/30 cursor-pointer"
-            >
-              {/* UPDATED ACCEPT ATTRIBUTE */}
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                multiple 
-                style={{ display: 'none' }} 
-                onChange={handleFileUpload} 
-                accept=".cbl,.cob,.cpy,.jcl,.tln,.tel,.txt,.zip" 
-              />
-              <div className="flex flex-col items-center gap-4 pointer-events-none"> 
-                <div className={`p-4 rounded-full transition-colors ${isUploading ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400 group-hover:text-indigo-400'}`}>
-                  {isUploading ? <Loader2 className="animate-spin" size={32} /> : <Upload size={32} />}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div 
+                onClick={() => fileInputRef.current?.click()}
+                className="relative group border-2 border-dashed border-slate-800 hover:border-indigo-500/50 rounded-3xl p-12 transition-all text-center bg-slate-900/30 cursor-pointer"
+              >
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  multiple 
+                  style={{ display: 'none' }} 
+                  onChange={handleFileUpload} 
+                  accept=".cbl,.cob,.cpy,.jcl,.sql,.tln,.tel,.txt,.zip" 
+                />
+                <div className="flex flex-col items-center gap-4 pointer-events-none"> 
+                  <div className={`p-4 rounded-full transition-colors ${isUploading ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400 group-hover:text-indigo-400'}`}>
+                    {isUploading ? <Loader2 className="animate-spin" size={32} /> : <Upload size={32} />}
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-lg font-medium text-slate-300">Upload Files or ZIP</p>
+                    <p className="text-sm text-slate-500">Supports .cbl, .cob, .zip, etc.</p>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <p className="text-lg font-medium text-slate-300">{isUploading ? 'Uploading files...' : 'Click or drag legacy source files'}</p>
-                  <p className="text-sm text-slate-500">Supports .cbl, .cob, .cpy, .jcl, .tln, .tel, .txt, .zip</p>
+              </div>
+
+              <div 
+                onClick={() => folderInputRef.current?.click()}
+                className="relative group border-2 border-dashed border-slate-800 hover:border-indigo-500/50 rounded-3xl p-12 transition-all text-center bg-slate-900/30 cursor-pointer"
+              >
+                <input 
+                  type="file" 
+                  ref={folderInputRef}
+                  webkitdirectory="true"
+                  multiple 
+                  style={{ display: 'none' }} 
+                  onChange={handleFolderUpload} 
+                />
+                <div className="flex flex-col items-center gap-4 pointer-events-none"> 
+                  <div className={`p-4 rounded-full transition-colors ${isUploading ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400 group-hover:text-indigo-400'}`}>
+                    {isUploading ? <Loader2 className="animate-spin" size={32} /> : <FolderOpen size={32} />}
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-lg font-medium text-slate-300">Upload Local Folder</p>
+                    <p className="text-sm text-slate-500">Preserves directory structure</p>
+                  </div>
                 </div>
               </div>
             </div>
-          ) : (
-            /* ... GitHub logic remains same ... */
+          ) : inputMethod === 'local' ? (
             <div className="glass-card p-8 rounded-3xl border-slate-800 bg-slate-900/50 flex flex-col md:flex-row gap-4 items-end">
-                <div className="flex-1 space-y-3 w-full">
+              <div className="flex-1 space-y-3 w-full">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Local Git Repository Path</label>
+                <div className="relative">
+                  <GitBranch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                  <input
+                    type="text"
+                    placeholder="C:\Projects\Banking"
+                    className="w-full pl-10 pr-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                    value={localRepoPath}
+                    onChange={(e) => setLocalRepoPath(e.target.value)}
+                  />
+                </div>
+              </div>
+              <button onClick={handleLocalRepoIngest} disabled={isReadingRepo} className="w-full md:w-auto px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                {isReadingRepo ? <><Loader2 className="animate-spin" size={18}/> Reading...</> : <><Zap size={18}/> Create Inventory</>}
+              </button>
+            </div>
+          ) : (
+            <div className="glass-card p-8 rounded-3xl border-slate-800 bg-slate-900/50 flex flex-col md:flex-row gap-4 items-end">
+              <div className="flex-1 space-y-3 w-full">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">GitHub Repository URL</label>
                 <div className="relative">
-                    <GitBranch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-                    <input type="text" placeholder="https://github.com/username/repository" className="w-full pl-10 pr-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all" value={githubUrl} onChange={(e) => setGithubUrl(e.target.value)} />
+                  <GitBranch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                  <input
+                    type="text"
+                    placeholder="https://github.com/username/repository"
+                    className="w-full pl-10 pr-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                    value={githubUrl}
+                    onChange={(e) => setGithubUrl(e.target.value)}
+                  />
                 </div>
+              </div>
+              <div className="flex-1 space-y-3 w-full">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">GitHub Token (Optional)</label>
+                <div className="relative">
+                  <Target className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                  <input
+                    type="password"
+                    placeholder="ghp_xxxxxxxxxxxx"
+                    className="w-full pl-10 pr-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                    value={githubToken}
+                    onChange={(e) => setGithubToken(e.target.value)}
+                  />
                 </div>
-                <button onClick={handleGithubIngest} disabled={isFetchingRepo} className="w-full md:w-auto px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-                {isFetchingRepo ? <><Loader2 className="animate-spin" size={18}/> Fetching...</> : <><Zap size={18}/> Ingest Repo</>}
-                </button>
+              </div>
+              <button onClick={handleGithubIngest} disabled={isReadingRepo} className="w-full md:w-auto px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                {isReadingRepo ? <><Loader2 className="animate-spin" size={18}/> Cloning...</> : <><Zap size={18}/> Ingest Repo</>}
+              </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* SECTION 3: FILE REVIEW & LAUNCH (NOW LAST) */}
+      {/* SECTION 3: FILE REVIEW & LAUNCH */}
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-indigo-400 text-sm font-bold uppercase tracking-widest">
@@ -505,34 +653,94 @@ const SourceFiles = () => {
           <table className="w-full text-left border-collapse">
             <thead className="bg-slate-800/50 text-slate-300 text-xs uppercase tracking-wider">
               <tr className="border-b border-slate-700">
-                <th className="p-4 font-semibold">File Name</th>
+                <th className="p-4 font-semibold">File & Path</th>
+                <th className="p-4 font-semibold">Type</th>
+                <th className="p-4 font-semibold">Language</th>
+                <th className="p-4 font-semibold">Validity</th>
                 <th className="p-4 font-semibold">Size</th>
                 <th className="p-4 font-semibold">Status</th>
-                <th className="p-4 font-semibold">Language</th>
-                <th className="p-4 font-semibold">Chunks</th>
                 <th className="p-4 font-semibold text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="text-slate-300">
-              {files.map(file => (
-                <tr key={file.id} className="border-t border-slate-700 hover:bg-slate-800/30 transition-colors">
-                  <td className="p-4 flex items-center gap-3"><FileText size={16} className="text-slate-500" /><span className="font-medium">{file.name}</span></td>
-                  <td className="p-4 text-sm">{file.size} LLOC</td>
-                  <td className="p-4 text-sm">
-                    {file.status === 'Processing' ? <div className="flex items-center gap-2 text-amber-400 font-medium"><Loader2 size={14} className="animate-spin" /> Processing...</div> : 
-                     file.status === 'Analyzed' ? <div className="flex items-center gap-2 text-emerald-400"><CheckCircle2 size={14} /> Analyzed</div> : 
-                     <div className="flex items-center gap-2 text-slate-500"><Clock size={14} /> Pending</div>}
-                  </td>
-                  <td className="p-4 text-sm"><span className="text-indigo-300 font-mono text-xs">{file.detectedLang ? formatLanguageName(file.detectedLang) : "-"}</span></td>
-                  <td className="p-4 text-sm">
-                    {file.chunks > 1 ? <span className="bg-blue-500/20 text-blue-400 px-2 py-1 rounded text-xs border border-blue-500/30">{file.chunks} Chunks</span> : <span className="text-slate-500 text-xs">Single File</span>}
-                  </td>
-                  <td className="p-4 text-right">
-                    <button onClick={() => removeFile(file.id)} className={`p-2 rounded-lg transition-colors ${pipelineActive ? 'text-slate-700 cursor-not-allowed' : 'text-slate-500 hover:text-red-400 hover:bg-red-500/10'}`}><Trash2 size={16} /></button>
+              {files.map(file => {
+                const type = getFileType(file.name);
+                return (
+                  <tr key={file.id} className="border-t border-slate-700 hover:bg-slate-800/30 transition-colors">
+                    <td className="p-4">
+                      <div className="flex flex-col whitespace-normal break-words max-w-xs">
+                        <div className="flex items-center gap-2 font-medium text-white">
+                          <FileText size={14} className="text-indigo-400" />
+                          {file.name}
+                        </div>
+                        {file.relPath && (
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            {file.relPath}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${type.color}`}>
+                        {type.label}
+                      </span>
+                    </td>
+                    <td className="p-4">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono text-indigo-300">{formatLanguageName(file.detectedLang)}</span>
+                        {file.status === 'Analyzed' ? (
+                          <CheckCircle2 size={12} className="text-emerald-500" title="Confirmed" />
+                        ) : (
+                          <Clock size={12} className="text-slate-500" title="Suggested" />
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      {file.isValid === true ? (
+                        <div className="flex items-center gap-1 text-emerald-400 text-xs font-medium">
+                          <CheckCircle2 size={14} /> Valid
+                        </div>
+                      ) : file.isValid === false ? (
+                        <div className="flex items-center gap-1 text-amber-400 text-xs font-medium">
+                          <AlertCircle size={14} /> Suspicious
+                        </div>
+                      ) : (
+                        <span className="text-slate-600 text-xs">Unknown</span>
+                      )}
+                    </td>
+                    <td className="p-4 text-sm font-mono text-slate-400">
+                      {file.size} LLOC
+                    </td>
+                    <td className="p-4">
+                      {file.status === 'Processing' ? (
+                        <div className="flex items-center gap-2 text-amber-400 text-xs font-medium">
+                          <Loader2 size={12} className="animate-spin" /> Processing
+                        </div>
+                      ) : file.status === 'Analyzed' ? (
+                        <div className="flex items-center gap-2 text-emerald-400 text-xs font-medium">
+                          <CheckCircle2 size={12} /> Confirmed
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-slate-500 text-xs font-medium">
+                          <Clock size={12} /> Pending
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-4 text-right">
+                      <button onClick={() => removeFile(file.id)} className={`p-2 rounded-lg transition-colors ${pipelineActive ? 'text-slate-700 cursor-not-allowed' : 'text-slate-500 hover:text-red-400 hover:bg-red-500/10'}`}>
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {files.length === 0 && (
+                <tr className="border-t border-slate-700">
+                  <td colSpan={7} className="p-12 text-center text-slate-500 italic">
+                    No source code ingested. Upload files above to begin.
                   </td>
                 </tr>
-              ))}
-              {files.length === 0 && (<tr className="border-t border-slate-700"><td colSpan={6} className="p-12 text-center text-slate-500 italic">No source code ingested. Upload files above to begin.</td></tr>)}
+              )}
             </tbody>
           </table>
         </div>
@@ -617,7 +825,3 @@ const SourceFiles = () => {
 };
 
 export default SourceFiles;
-
-
-
-

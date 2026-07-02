@@ -36,7 +36,19 @@ export interface ProjectSummary {
   language_counts?: Record<string, number>;
 }
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://cobol-modernization.onrender.com';
+const getDefaultApiBaseUrl = () => {
+  if (typeof window === 'undefined') {
+    return 'http://localhost:8000';
+  }
+
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return 'http://localhost:8000';
+  }
+
+  return import.meta.env.VITE_API_BASE_URL || 'https://cobol-modernization.onrender.com';
+};
+
+export const API_BASE_URL = getDefaultApiBaseUrl();
 export const WS_BASE_URL = API_BASE_URL.replace(/^http/, 'ws');
 
 const api = axios.create({
@@ -109,8 +121,24 @@ export const ProjectAPI = {
     return response.data;
   },
 
-  ingestGithub: async (runId: string, url: string) => {
-    const response = await api.post('/discovery/github', { run_id: runId, url });
+  uploadFolder: async (formData: FormData) => {
+    const response = await api.post('/discovery/upload-folder', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
+  ingestLocalRepo: async (formData: FormData) => {
+    const response = await api.post('/discovery/local-repo', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
+  ingestGithub: async (formData: FormData) => {
+    const response = await api.post('/discovery/github', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     return response.data;
   },
 

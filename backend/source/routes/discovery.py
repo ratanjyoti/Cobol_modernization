@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Request, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 from Processes.discovery_process import DiscoveryProcess
 from Persistence.sqlite.session import get_db
@@ -8,7 +8,6 @@ import shutil
 import os
 import asyncio
 import stat
-import subprocess
 from pathlib import Path
 from source.websockets.socket_manager import manager
 
@@ -44,11 +43,8 @@ async def upload_zip(
     temp_zip_path = upload_dir / f"temp_{run_id}.zip"
 
     try:
-        # Save file without blocking the event loop
         await asyncio.to_thread(save_file_sync, zip_file, temp_zip_path)
-
         discovery = DiscoveryProcess(db)
-        # !!! ADDED AWAIT HERE !!!
         mapped_files = await discovery.process_zip_upload(run_id, str(temp_zip_path))
         return {"status": "Success", "mapped_files": mapped_files}
     except Exception as e:
@@ -56,49 +52,89 @@ async def upload_zip(
     finally:
         if temp_zip_path.exists():
             os.remove(temp_zip_path)
-
-@router.post("/github")
-async def ingest_github_repo(
-    data: dict,
+            
+@router.post("/upload-folder")
+async def upload_folder(
+    run_id: str = Form(...),
+    files: List[UploadFile] = File(...), 
+    paths: List[str] = Form(...), 
     db: Session = Depends(get_db)
 ):
-    run_id = data.get("run_id")
-    repo_url = data.get("url")
+    try:
+        discovery = DiscoveryProcess(db)
+        # We pass the lists to the process method
+        mapped_files = await discovery.process_folder_upload(run_id, files, paths)
+        return {"status": "Success", "mapped_files": mapped_files}
+    except Exception as e:
+        print(f"Folder upload error: {e}")
+        raise HTTPException(status_code=500, detail=f"Folder upload failed: {str(e)}")
+
+@router.post("/local-repo")
+async def ingest_local_repo(
+    run_id: str = Form(...),
+    repo_path: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """
+    Ingests an existing local Git repository from the backend machine.
+    The path must point to a folder containing a .git directory or file.
+    """
+    try:
+        discovery = DiscoveryProcess(db)
+        mapped_files = await discovery.ingest_local_git_repo(run_id, repo_path)
+        return {
+            "status": "Success",
+            "message": f"Successfully inventoried {len(mapped_files)} files from local repository",
+            "mapped_files": mapped_files,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Local repository ingestion failed: {str(e)}")
+
+@router.post("/github")
+async def ingest_github(
+    request: Request,
+    run_id: Optional[str] = Form(None),
+    repo_url: Optional[str] = Form(None),
+    github_token: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Ingests a GitHub repository using the DiscoveryProcess logic.
+    Accepts multipart form data from the current UI and JSON from older clients.
+    """
+    if run_id is None or repo_url is None:
+        content_type = request.headers.get("content-type", "")
+        if "application/json" in content_type:
+            payload = await request.json()
+            run_id = run_id or payload.get("run_id")
+            repo_url = repo_url or payload.get("repo_url") or payload.get("url")
+            github_token = github_token or payload.get("github_token")
 
     if not run_id or not repo_url:
-        raise HTTPException(status_code=400, detail="Missing run_id or url")
+        raise HTTPException(status_code=400, detail="Missing run_id or repo_url")
 
-    upload_dir = Path("data/uploads")
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    temp_clone_path = upload_dir / f"temp_{run_id}"
+    repo_url = repo_url.strip()
+    github_token = github_token.strip() if github_token else None
+
+    if not repo_url.startswith("https://github.com/"):
+        raise HTTPException(status_code=400, detail="Invalid GitHub URL. Must be a github.com URL.")
 
     try:
-        await asyncio.to_thread(remove_tree_sync, temp_clone_path)
-
-        clone_cmd = ["git", "clone", "--depth", "1", repo_url, str(temp_clone_path)]
-        result = await asyncio.to_thread(
-            subprocess.run,
-            clone_cmd,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if result.returncode != 0:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Git clone failed: {(result.stderr or result.stdout).strip()}",
-            )
-
         discovery = DiscoveryProcess(db)
-        mapped_files = await discovery.process_folder(run_id, str(temp_clone_path))
-        return {"status": "Success", "mapped_files": mapped_files}
-
-    except HTTPException:
-        raise
+        # This now clones directly and processes in one flow
+        mapped_files = await discovery.ingest_github_repo(run_id, repo_url, github_token)
+        
+        return {
+            "status": "Success", 
+            "message": f"Successfully ingested {len(mapped_files)} files from GitHub",
+            "mapped_files": mapped_files,
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Git clone failed: {str(e)}")
-    finally:
-        await asyncio.to_thread(remove_tree_sync, temp_clone_path)
+        # Log the error on server for debugging
+        print(f"GitHub Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"GitHub ingestion failed: {str(e)}")
 
 @router.post("/upload")
 async def upload_source(
@@ -116,13 +152,11 @@ async def upload_source(
         
         try:
             await asyncio.to_thread(save_file_sync, zip_file, temp_path)
-            # !!! ADDED AWAIT HERE !!!
             mapped_files = await discovery.process_upload(run_id, str(temp_path))
         finally:
             if temp_path.exists():
                 os.remove(temp_path)
     elif files:
-        # !!! ADDED AWAIT HERE !!!
         mapped_files = await discovery.process_individual_files(run_id, files)
     else:
         raise HTTPException(status_code=400, detail="No files uploaded")
@@ -140,7 +174,6 @@ async def websocket_endpoint(websocket: WebSocket, run_id: str):
 
 @router.post("/confirm-language")
 async def confirm_language(data: dict, db: Session = Depends(get_db)):
-    # This remains synchronous because it's a simple DB update
     run_id = data.get("run_id")
     filename = data.get("filename")
     lang = data.get("lang")
@@ -164,6 +197,3 @@ async def confirm_language(data: dict, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-
-
-

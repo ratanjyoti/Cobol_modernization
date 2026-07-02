@@ -38,7 +38,7 @@ const Projects = () => {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<FileRecord[]>([]);
-  const [activeRunId, setActiveRunId] = useState(localStorage.getItem('active_run_id'));
+  const [activeRunId, setActiveRunId] = useState<string | null>(localStorage.getItem('active_run_id'));
   const [loading, setLoading] = useState(true);
   const [detailsLoading, setDetailsLoading] = useState(false);
 
@@ -51,8 +51,12 @@ const Projects = () => {
     try {
       const data = await ProjectAPI.list();
       setProjects(data);
-      const preferred = data.find((project) => project.run_id === localStorage.getItem('active_run_id')) || data[0] || null;
+      
+      const storedId = localStorage.getItem('active_run_id');
+      const preferred = data.find((project) => project.run_id === storedId) || data[0] || null;
+      
       if (preferred) {
+        setActiveRunId(preferred.run_id); 
         await selectProject(preferred.run_id, data);
       } else {
         setSelectedProject(null);
@@ -68,6 +72,8 @@ const Projects = () => {
   const selectProject = async (runId: string, projectList = projects) => {
     setDetailsLoading(true);
     try {
+      setActiveRunId(runId); 
+      localStorage.setItem('active_run_id', runId);
       const projectFromList = projectList.find((project) => project.run_id === runId) || null;
       setSelectedProject(projectFromList);
       const [projectDetail, fileData] = await Promise.all([
@@ -85,7 +91,7 @@ const Projects = () => {
 
   const handleActivate = (runId: string) => {
     localStorage.setItem('active_run_id', runId);
-    setActiveRunId(runId);
+    setActiveRunId(runId); 
     toast.success(`Switched to ${projects.find((project) => project.run_id === runId)?.name || runId}`);
     navigate('/source-files');
   };
@@ -185,7 +191,13 @@ const Projects = () => {
                 <button
                   key={project.run_id}
                   onClick={() => selectProject(project.run_id)}
-                  className={`glass-card text-left p-6 rounded-2xl border-slate-800 transition-all group ${isActive ? 'ring-2 ring-indigo-500 border-indigo-500/50' : isSelected ? 'border-slate-500' : 'hover:border-slate-600'}`}
+                  className={`glass-card text-left p-6 rounded-2xl border-slate-800 transition-all group 
+                    ${isActive 
+                      ? 'ring-2 ring-indigo-500 border-indigo-500 bg-indigo-500/10 shadow-lg shadow-indigo-500/20' 
+                      // : isSelected 
+                        : 'border-slate-500 bg-slate-800/50' 
+                        // : 'hover:border-slate-600'
+                    }`}
                 >
                   <div className="flex justify-between items-start mb-4">
                     <div className="p-2 bg-slate-800 rounded-lg text-slate-400">
@@ -233,7 +245,6 @@ const Projects = () => {
                         <Trash2 size={16} />
                       </span>
                     </div>
-
                     {project.status === 'DEPLOYED' && (
                       <span className="flex items-center gap-1 text-xs font-bold text-emerald-400">
                         <Download size={14} /> Export
@@ -341,4 +352,3 @@ const Projects = () => {
 };
 
 export default Projects;
-

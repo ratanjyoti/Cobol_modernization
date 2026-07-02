@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
   FileText, Activity, Layers, Database, 
@@ -64,12 +64,14 @@ const KPICard = ({ label, value, icon: Icon, status }: any) => {
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   // --- STATE ---
   const [runId, setRunId] = useState<string | null>(localStorage.getItem('active_run_id'));
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
   const [isDeletingRuns, setIsDeletingRuns] = useState(false);
+  const [hasTriggeredNewProject, setHasTriggeredNewProject] = useState(false);
   const [sourceMetaLang, setSourceMetaLang] = useState('en');
   const [aiMode, setAiMode] = useState<'api' | 'local'>('api');
   const [aiConfig, setAiConfig] = useState({
@@ -93,13 +95,22 @@ const Dashboard = () => {
     }
   }, []);
 
+  useEffect(() => {
+    if (searchParams.get('new') === 'true' && !hasTriggeredNewProject) {
+      setHasTriggeredNewProject(true);
+      void handleStartNewProject();
+    }
+  }, [searchParams, hasTriggeredNewProject]);
+
   const fetchProjectHistory = async () => {
     setIsLoadingProjects(true);
     try {
       const data = await ProjectAPI.list();
       setProjects(data);
+      return data;
     } catch (e) {
       toast.error("Failed to load project history");
+      return [] as ProjectSummary[];
     } finally {
       setIsLoadingProjects(false);
     }
@@ -163,18 +174,19 @@ const getStatusStyle = (status: string | undefined) => {
     }
   };
 
-  const getNextRunName = () => {
-    const usedNumbers = projects
+  const getNextRunName = (projectList: ProjectSummary[] = projects) => {
+    const usedNumbers = projectList
       .map((project) => project.name.match(/^Run_(\d+)$/)?.[1])
       .filter(Boolean)
       .map(Number);
-    const nextNumber = usedNumbers.length > 0 ? Math.max(...usedNumbers) + 1 : projects.length + 1;
+    const nextNumber = usedNumbers.length > 0 ? Math.max(...usedNumbers) + 1 : projectList.length + 1;
     return `Run_${nextNumber}`;
   };
 
   const handleStartNewProject = async () => {
     try {
-      const runName = getNextRunName();
+      const projectHistory = await fetchProjectHistory();
+      const runName = getNextRunName(projectHistory);
       const config = {
         project_name: runName,
         provider: aiMode,
@@ -198,7 +210,7 @@ const getStatusStyle = (status: string | undefined) => {
       navigate('/source-files');
     } catch (e: any) {
       console.error("Full Project Creation Error:", e);
-      toast.error(e.message || "Error creating project");
+      toast.error(e.response?.data?.detail || e.message || "Error creating project");
     }
   };
 

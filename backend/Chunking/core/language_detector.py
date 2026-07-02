@@ -24,7 +24,8 @@ class LanguageDetector:
             'TELON': ['.tln', '.tel', '.tlb', '.tlc'],
             'PLI': ['.pli', '.pl1'],
             'FORTRAN': ['.f', '.for', '.f90'],
-            'TEXT': ['.txt']
+            'TEXT': ['.txt'],
+            'SQL': ['.sql']
         }
 
     def _language_id(self, language_name: str) -> str:
@@ -34,6 +35,7 @@ class LanguageDetector:
             "TELON": "telon",
             "PL/I": "pli",
             "Fortran": "fortran",
+            "SQL": "sql",
         }
         return language_ids.get(language_name, language_name.lower())
 

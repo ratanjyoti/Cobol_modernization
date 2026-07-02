@@ -4,7 +4,8 @@ import asyncio
 import shutil
 from pathlib import Path
 from typing import List, Dict, Any, Set
-
+import stat 
+from git import GitCommandError, Repo
 from Persistence.sqlite.models import ProjectFile, FileStatus
 from Chunking.core.language_detector import LanguageDetector
 from source.websockets.socket_manager import manager
@@ -15,20 +16,24 @@ class DiscoveryProcess:
         self.upload_dir = Path(upload_dir)
         self.detector = LanguageDetector()
         
-        # Keep only source-code extensions requested for repository ingestion.
         self.allowed_extensions: Set[str] = {
             ".cbl", ".cob", ".cpy",
-            ".jcl",
+            ".jcl", ".sql",
             ".tln", ".tel",
             ".txt",
         }
 
+    def _force_remove_tree(self, path: Path):
+        def handle_remove_readonly(func, path, excinfo):
+            os.chmod(path, stat.S_IWRITE)
+            func(path)
+        if path.exists():
+            shutil.rmtree(path, onerror=handle_remove_readonly)
+
     def _is_supported_file(self, file_path: Path) -> bool:
-        """Checks if the file has an extension we care about."""
-        if file_path.is_dir():
-            return False
-        if file_path.name.startswith('.'): # Ignore hidden files like .git
-            return False
+        if file_path.is_dir(): return False
+        if ".git" in file_path.parts: return False
+        if file_path.name.startswith('.'): return False
         return file_path.suffix.lower() in self.allowed_extensions
 
     def _save_project_file(self, run_id: str, filename: str, filepath: str, detected_lang: str, size: int = 0):
@@ -47,8 +52,9 @@ class DiscoveryProcess:
             "filepath": filepath,
             "rel_path": filepath,
             "lang": detected_lang,
-            "status": FileStatus.PENDING_CONFIRMATION.value,
+            "status": FileStatus.PENDING_CONFIRMATION.value, # "Pending"
             "size": size,
+            "chunks": 1
         }
 
     async def _notify_detection(self, run_id: str, filename: str, lang: str, is_valid: bool):
@@ -58,6 +64,100 @@ class DiscoveryProcess:
             "suggested_lang": lang,
             "is_valid": is_valid
         })
+
+    # --- FIXED: Added missing method for Local Git ---
+    async def ingest_local_git_repo(self, run_id: str, repo_path: str) -> List[Dict[str, Any]]:
+        source_path = Path(repo_path).expanduser().resolve()
+        if not source_path.exists() or not source_path.is_dir():
+            raise ValueError(f"Repository path does not exist: {repo_path}")
+        
+        if not (source_path / ".git").exists():
+            raise ValueError(f"Not a Git repository (missing .git folder)")
+
+        return await self.process_folder(run_id, str(source_path))
+
+    async def ingest_github_repo(self, run_id: str, repo_url: str, github_token: str = None) -> List[Dict[str, Any]]:
+        project_folder = self.upload_dir / run_id
+        if project_folder.exists():
+            self._force_remove_tree(project_folder) 
+        project_folder.mkdir(parents=True, exist_ok=True)
+
+        try:
+            if github_token:
+                repo_url = repo_url.replace("https://", f"https://{github_token}@")
+
+            await asyncio.to_thread(Repo.clone_from, repo_url, str(project_folder), depth=1)
+            git_dir = project_folder / ".git"
+            if git_dir.exists():
+                self._force_remove_tree(git_dir)
+
+            return await self.process_folder(run_id, str(project_folder))
+
+        except Exception as e:
+            self._force_remove_tree(project_folder)
+            raise e
+
+    async def process_folder(self, run_id: str, folder_path: str) -> List[Dict[str, Any]]:
+        source_path = Path(folder_path)
+        project_folder = self.upload_dir / run_id
+        project_folder.mkdir(parents=True, exist_ok=True)
+        mapped_files = []
+
+        all_files = sorted(
+            (f for f in source_path.rglob("*") if self._is_supported_file(f)),
+            key=lambda path: str(path.relative_to(source_path)).lower()
+        )
+
+        for full_path in all_files:
+            rel_path = str(full_path.relative_to(source_path))
+            filename = full_path.name
+            lang, is_valid = await asyncio.to_thread(self.detector.validate_and_detect, str(full_path))
+            size = full_path.stat().st_size
+
+            file_record = self._save_project_file(run_id, filename, rel_path, lang, size)
+            file_record["is_valid"] = is_valid
+            mapped_files.append(file_record)
+            await self._notify_detection(run_id, filename, lang, is_valid)
+
+        self.db.commit()
+        return mapped_files
+
+
+
+    async def process_folder_upload(self, run_id: str, files: List[Any], paths: List[str]):
+        project_folder = self.upload_dir / run_id / "local_repo"
+        project_folder.mkdir(parents=True, exist_ok=True)
+
+        mapped_files = []
+
+        for file_obj, rel_path in zip(files, paths):
+            if ".git" in rel_path: continue
+            
+            if Path(rel_path).suffix.lower() not in self.allowed_extensions:
+                continue
+
+            destination = project_folder / rel_path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            
+            # OPTIMIZATION: Write file in chunks instead of loading the whole thing into memory
+            with open(destination, "wb") as buffer:
+                while content := await file_obj.read(1024 * 1024): # Read 1MB at a time
+                    buffer.write(content)
+            
+            # Now get the size from the saved file on disk
+            file_size = destination.stat().st_size
+            filename = Path(rel_path).name
+            
+            lang, is_valid = await asyncio.to_thread(self.detector.validate_and_detect, str(destination))
+            file_record = self._save_project_file(run_id, filename, rel_path, lang, file_size)
+            file_record["is_valid"] = is_valid
+            mapped_files.append(file_record)
+            await self._notify_detection(run_id, filename, lang, is_valid)
+
+        self.db.commit()
+        return mapped_files
+
+    
 
     async def process_zip_upload(self, run_id: str, zip_file_path: str) -> List[Dict[str, Any]]:
         project_folder = self.upload_dir / run_id
@@ -70,7 +170,6 @@ class DiscoveryProcess:
         await asyncio.to_thread(extract_zip)
 
         mapped_files = []
-        # Filtered iteration: only process files that match allowed extensions
         for full_path in project_folder.rglob("*"):
             if not self._is_supported_file(full_path):
                 continue
@@ -89,35 +188,6 @@ class DiscoveryProcess:
         self.db.commit()
         return mapped_files
 
-    async def process_folder(self, run_id: str, folder_path: str) -> List[Dict[str, Any]]:
-        source_path = Path(folder_path)
-        project_folder = self.upload_dir / run_id
-        project_folder.mkdir(parents=True, exist_ok=True)
-        mapped_files = []
-
-        all_files = [f for f in source_path.rglob("*") if self._is_supported_file(f)]
-
-        for full_path in all_files:
-            rel_path = full_path.relative_to(source_path)
-            destination = project_folder / rel_path
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            await asyncio.to_thread(shutil.copy2, full_path, destination)
-
-            rel_path_str = str(rel_path)
-            filename = full_path.name
-            lang, is_valid = await asyncio.to_thread(self.detector.validate_and_detect, str(destination))
-            size = destination.stat().st_size
-
-            file_record = self._save_project_file(run_id, filename, rel_path_str, lang, size)
-            file_record["is_valid"] = is_valid
-            mapped_files.append(file_record)
-
-            await self._notify_detection(run_id, filename, lang, is_valid)
-
-        self.db.commit()
-        return mapped_files
-
-
     async def process_individual_files(self, run_id: str, files) -> List[Dict[str, Any]]:
         project_folder = self.upload_dir / run_id
         project_folder.mkdir(parents=True, exist_ok=True)
@@ -126,7 +196,6 @@ class DiscoveryProcess:
         for upload in files:
             filename = Path(upload.filename).name
             
-            # Check extension before saving to disk
             if not self._is_supported_file(Path(filename)):
                 continue
 

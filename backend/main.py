@@ -22,7 +22,14 @@ app = FastAPI(
 # This allows your React frontend (usually on port 3000 or 5173) to talk to this API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, replace with ["http://localhost:3000"]
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+        "https://cobol-modernization-git-main-rjrk9793s-projects.vercel.app",
+        "https://cobol-modernization.onrender.com",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
