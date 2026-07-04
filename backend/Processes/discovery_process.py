@@ -6,17 +6,25 @@ from pathlib import Path
 from typing import List, Dict, Any, Set
 import stat 
 from git import GitCommandError, Repo
-from Persistence.sqlite.models import ProjectFile, FileStatus
+
+# Models and Services
+from Persistence.sqlite.models import ProjectFile, FileStatus, ProjectComplexity
 from Chunking.core.language_detector import LanguageDetector
-from source.websockets.socket_manager import manager
-# --- ADDED IMPORT ---
+from Chunking.core.complexity_scorer import ComplexityScorer
+from Chunking.core.sizing_router import SizingRouter
+from Chunking.chunking_orchestrator import ChunkingOrchestrator
 from Chunking.dependency_scanner.dependency_manager import DependencyManager 
+from source.websockets.socket_manager import manager
 
 class DiscoveryProcess:
     def __init__(self, db_session, upload_dir="data/uploads"):
         self.db = db_session
         self.upload_dir = Path(upload_dir)
         self.detector = LanguageDetector()
+        
+        # Initialize the "Intelligence" tools
+        self.scorer = ComplexityScorer()
+        self.chunking_orchestrator = ChunkingOrchestrator(self.db)
         
         self.allowed_extensions: Set[str] = {
             ".cbl", ".cob", ".cpy",
@@ -47,38 +55,80 @@ class DiscoveryProcess:
             status=FileStatus.PENDING_CONFIRMATION,
         )
         self.db.add(project_file)
-        self.db.flush() 
+        self.db.flush() # Ensures project_file.id is generated
+        return project_file
+
+    # --- CORE PIPELINE: Save -> Scan -> Score -> Chunk ---
+    async def _save_and_scan(self, run_id: str, full_path: Path, filename: str, rel_path: str, lang: str):
+        # 1. Save Basic File Info to DB
+        size = full_path.stat().st_size
+        project_file = self._save_project_file(run_id, filename, rel_path, lang, size)
+        
+        # We read the content once and reuse it for all steps
+        content = ""
+        try:
+            content = full_path.read_text(errors='ignore')
+        except Exception as e:
+            print(f"Could not read file {filename}: {e}")
+
+        # 2. Perform Dependency Scan, Complexity Scoring, and Chunking
+        # We wrap these in to_thread because they are CPU-intensive Regex operations
+        def process_intelligence():
+            # A. Dependency Scan (CALLs, COPYs, SQL)
+            dep_manager = DependencyManager(self.db)
+            dep_manager.scan_and_store(run_id, filename, content, lang)
+
+            # B. Complexity Scoring
+            # Store one run-level record and keep the highest score seen across files.
+            comp_data = self.scorer.calculate_score(content)
+            existing_complexity = self.db.query(ProjectComplexity).filter(
+                ProjectComplexity.run_id == run_id
+            ).first()
+            if existing_complexity:
+                if comp_data["score"] > (existing_complexity.score or 0):
+                    existing_complexity.score = comp_data["score"]
+                    existing_complexity.tier = comp_data["tier"]
+                    existing_complexity.reasoning_effort = comp_data["reasoning_effort"]
+            else:
+                complexity_record = ProjectComplexity(
+                    run_id=run_id,
+                    score=comp_data["score"],
+                    tier=comp_data["tier"],
+                    reasoning_effort=comp_data["reasoning_effort"]
+                )
+                self.db.add(complexity_record)
+
+            # C. Smart Chunking
+            # Only chunks if the SizingRouter says the file is too large
+            if SizingRouter.needs_chunking(content):
+                self.chunking_orchestrator.process_file(
+                    run_id=run_id, 
+                    file_id=project_file.id, 
+                    filename=filename, 
+                    content=content, 
+                    lang=lang
+                )
+            else:
+                # Even if not chunked, we store it as a single chunk (Index 0) 
+                # so the SLM knows where to look.
+                self.chunking_orchestrator.process_file(run_id, project_file.id, filename, content, lang)
+
+        try:
+            await asyncio.to_thread(process_intelligence)
+        except Exception as e:
+            print(f"Intelligence processing failed for {filename}: {e}")
+
+        # Return the record for the frontend
         return {
             "id": str(project_file.id),
             "filename": filename,
-            "filepath": filepath,
-            "rel_path": filepath,
-            "lang": detected_lang,
+            "filepath": rel_path,
+            "rel_path": rel_path,
+            "lang": lang,
             "status": FileStatus.PENDING_CONFIRMATION.value,
             "size": size,
-            "chunks": 1
+            "chunks": 1 # This will be updated in DB, but we return 1 for basic UI
         }
-
-    # --- NEW HELPER METHOD: Handles DB save + Dependency Scan ---
-    async def _save_and_scan(self, run_id: str, full_path: Path, filename: str, rel_path: str, lang: str):
-        # 1. Save to Database
-        size = full_path.stat().st_size
-        file_record = self._save_project_file(run_id, filename, rel_path, lang, size)
-        
-        # 2. Perform Dependency Scan
-        try:
-            # We run this in a thread to avoid blocking the event loop during file I/O
-            def scan_file():
-                dep_manager = DependencyManager(self.db)
-                with open(full_path, 'r', errors='ignore') as f:
-                    content = f.read()
-                dep_manager.scan_and_store(run_id, filename, content, lang)
-            
-            await asyncio.to_thread(scan_file)
-        except Exception as e:
-            print(f"Dependency scan failed for {filename}: {e}")
-
-        return file_record
 
     async def _notify_detection(self, run_id: str, filename: str, lang: str, is_valid: bool):
         await manager.send_notification(run_id, {
@@ -88,36 +138,66 @@ class DiscoveryProcess:
             "is_valid": is_valid
         })
 
+    # --- Ingestion Methods ---
     async def ingest_local_git_repo(self, run_id: str, repo_path: str) -> List[Dict[str, Any]]:
         source_path = Path(repo_path).expanduser().resolve()
         if not source_path.exists() or not source_path.is_dir():
             raise ValueError(f"Repository path does not exist: {repo_path}")
-        
+
         if not (source_path / ".git").exists():
-            raise ValueError(f"Not a Git repository (missing .git folder)")
+            raise ValueError("Not a Git repository (missing .git folder)")
 
         return await self.process_folder(run_id, str(source_path))
 
     async def ingest_github_repo(self, run_id: str, repo_url: str, github_token: str = None) -> List[Dict[str, Any]]:
         project_folder = self.upload_dir / run_id
         if project_folder.exists():
-            self._force_remove_tree(project_folder) 
+            self._force_remove_tree(project_folder)
         project_folder.mkdir(parents=True, exist_ok=True)
 
-        try:
-            if github_token:
-                repo_url = repo_url.replace("https://", f"https://{github_token}@")
+        clone_url = repo_url
+        if github_token:
+            clone_url = repo_url.replace("https://", f"https://{github_token}@", 1)
 
-            await asyncio.to_thread(Repo.clone_from, repo_url, str(project_folder), depth=1)
+        try:
+            await asyncio.to_thread(Repo.clone_from, clone_url, str(project_folder), depth=1)
             git_dir = project_folder / ".git"
             if git_dir.exists():
                 self._force_remove_tree(git_dir)
 
             return await self.process_folder(run_id, str(project_folder))
-
-        except Exception as e:
+        except Exception:
             self._force_remove_tree(project_folder)
-            raise e
+            raise
+
+    async def process_folder_upload(self, run_id: str, files: List[Any], paths: List[str]) -> List[Dict[str, Any]]:
+        project_folder = self.upload_dir / run_id / "local_repo"
+        project_folder.mkdir(parents=True, exist_ok=True)
+        mapped_files = []
+
+        for file_obj, rel_path in zip(files, paths):
+            rel_path_obj = Path(rel_path)
+            if ".git" in rel_path_obj.parts:
+                continue
+            if rel_path_obj.suffix.lower() not in self.allowed_extensions:
+                continue
+
+            destination = project_folder / rel_path_obj
+            destination.parent.mkdir(parents=True, exist_ok=True)
+
+            with open(destination, "wb") as buffer:
+                while content := await file_obj.read(1024 * 1024):
+                    buffer.write(content)
+
+            filename = rel_path_obj.name
+            lang, is_valid = await asyncio.to_thread(self.detector.validate_and_detect, str(destination))
+            file_record = await self._save_and_scan(run_id, destination, filename, str(rel_path_obj), lang)
+            file_record["is_valid"] = is_valid
+            mapped_files.append(file_record)
+            await self._notify_detection(run_id, filename, lang, is_valid)
+
+        self.db.commit()
+        return mapped_files
 
     async def process_folder(self, run_id: str, folder_path: str) -> List[Dict[str, Any]]:
         source_path = Path(folder_path)
@@ -135,38 +215,7 @@ class DiscoveryProcess:
             filename = full_path.name
             lang, is_valid = await asyncio.to_thread(self.detector.validate_and_detect, str(full_path))
 
-            # FIXED: Now calls _save_and_scan
             file_record = await self._save_and_scan(run_id, full_path, filename, rel_path, lang)
-            file_record["is_valid"] = is_valid
-            mapped_files.append(file_record)
-            await self._notify_detection(run_id, filename, lang, is_valid)
-
-        self.db.commit()
-        return mapped_files
-
-    async def process_folder_upload(self, run_id: str, files: List[Any], paths: List[str]):
-        project_folder = self.upload_dir / run_id / "local_repo"
-        project_folder.mkdir(parents=True, exist_ok=True)
-
-        mapped_files = []
-
-        for file_obj, rel_path in zip(files, paths):
-            if ".git" in rel_path: continue
-            if Path(rel_path).suffix.lower() not in self.allowed_extensions:
-                continue
-
-            destination = project_folder / rel_path
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            
-            with open(destination, "wb") as buffer:
-                while content := await file_obj.read(1024 * 1024):
-                    buffer.write(content)
-            
-            filename = Path(rel_path).name
-            lang, is_valid = await asyncio.to_thread(self.detector.validate_and_detect, str(destination))
-            
-            # FIXED: Now calls _save_and_scan
-            file_record = await self._save_and_scan(run_id, destination, filename, rel_path, lang)
             file_record["is_valid"] = is_valid
             mapped_files.append(file_record)
             await self._notify_detection(run_id, filename, lang, is_valid)
@@ -193,7 +242,6 @@ class DiscoveryProcess:
             filename = full_path.name
             lang, is_valid = await asyncio.to_thread(self.detector.validate_and_detect, str(full_path))
             
-            # FIXED: Now calls _save_and_scan
             file_record = await self._save_and_scan(run_id, full_path, filename, rel_path, lang)
             file_record["is_valid"] = is_valid
             mapped_files.append(file_record)
@@ -219,7 +267,6 @@ class DiscoveryProcess:
 
             detected_lang, is_valid = await asyncio.to_thread(self.detector.validate_and_detect, str(destination))
             
-            # FIXED: Now calls _save_and_scan
             file_record = await self._save_and_scan(run_id, destination, filename, filename, detected_lang)
             file_record["is_valid"] = is_valid
             mapped_files.append(file_record)
@@ -231,3 +278,5 @@ class DiscoveryProcess:
 
     async def process_upload(self, run_id: str, zip_path: str):
         return await self.process_zip_upload(run_id, zip_path)
+
+

@@ -15,11 +15,25 @@ router = APIRouter(prefix="/projects", tags=["Projects"])
 
 def remove_tree_sync(path: Path):
     def handle_remove_error(func, failed_path, _exc_info):
-        os.chmod(failed_path, stat.S_IWRITE)
-        func(failed_path)
+        try:
+            os.chmod(failed_path, stat.S_IWRITE)
+            func(failed_path)
+        except PermissionError:
+            pass
 
-    if path.exists():
+    if not path.exists():
+        return
+
+    try:
+        for child in path.rglob("*"):
+            try:
+                os.chmod(child, stat.S_IWRITE)
+            except OSError:
+                pass
+        os.chmod(path, stat.S_IWRITE)
         shutil.rmtree(path, onerror=handle_remove_error)
+    except PermissionError as exc:
+        print(f"Warning: could not fully remove upload directory {path}: {exc}")
 
 
 def clear_uploads_sync(upload_dir: Path):
@@ -170,5 +184,6 @@ async def update_project_config(run_id: str, updates: dict, db: Session = Depend
     if not success:
         raise HTTPException(status_code=404, detail="Project not found")
     return {"status": "Configuration updated"}
+
 
 

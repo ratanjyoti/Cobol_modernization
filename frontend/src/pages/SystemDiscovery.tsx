@@ -11,7 +11,48 @@ const withoutExtension = (value: string) => value.replace(/\.[^.\/]+$/, '');
 const isProgramFile = (file: FileRecord) => {
   const lang = (file.detected_lang || '').toLowerCase();
   const name = file.filename.toLowerCase();
-  return lang.includes('cobol') || lang.includes('jcl') || name.endsWith('.cbl') || name.endsWith('.cob') || name.endsWith('.jcl');
+  return lang.includes('cobol') || name.endsWith('.cbl') || name.endsWith('.cob');
+};
+
+const getFileType = (file: FileRecord): DependencyNode['type'] => {
+  const lang = (file.detected_lang || '').toLowerCase();
+  const name = file.filename.toLowerCase();
+
+  if (lang.includes('jcl') || name.endsWith('.jcl')) return 'job';
+  if (lang.includes('copy') || name.endsWith('.cpy')) return 'copybook';
+  if (isProgramFile(file)) return 'program';
+  if (name.endsWith('.sql')) return 'table';
+  return 'file';
+};
+
+const getTargetType = (relationType: string): DependencyNode['type'] => {
+  switch (relationType) {
+    case 'CALLS':
+      return 'external';
+    case 'INCLUDES':
+      return 'copybook';
+    case 'READS_WRITES':
+      return 'table';
+    default:
+      return 'external';
+  }
+};
+
+const formatType = (type: DependencyNode['type']) => {
+  switch (type) {
+    case 'copybook':
+      return 'copybook';
+    case 'table':
+      return 'data store';
+    case 'job':
+      return 'jcl job';
+    case 'program':
+      return 'program';
+    case 'external':
+      return 'external target';
+    default:
+      return 'file';
+  }
 };
 
 const findFileForRelationName = (files: FileRecord[], relationName: string) => {
@@ -35,52 +76,107 @@ const findFileForRelationName = (files: FileRecord[], relationName: string) => {
   });
 };
 
-const buildGraphNodes = (files: FileRecord[]): DependencyNode[] => {
-  if (files.length === 0) return [];
+const placeLayeredNodes = (nodes: DependencyNode[]) => {
+  const layers: Record<DependencyNode['type'], number> = {
+    job: 0,
+    program: 1,
+    copybook: 2,
+    table: 3,
+    file: 4,
+    external: 4,
+  };
 
-  const centerX = 520;
-  const centerY = 320;
-  const radiusX = Math.max(320, files.length * 42);
-  const radiusY = Math.max(180, files.length * 24);
+  const grouped = new Map<number, DependencyNode[]>();
 
-  return files.map((file, index) => {
-    const angle = (Math.PI * 2 * index) / files.length - Math.PI / 2;
-    const single = files.length === 1;
+  nodes.forEach((node) => {
+    const layer = layers[node.type] ?? 4;
+    if (!grouped.has(layer)) grouped.set(layer, []);
+    grouped.get(layer)?.push(node);
+  });
 
-    return {
-      id: file.id,
-      label: file.filename,
-      type: isProgramFile(file) ? 'program' : 'file',
-      x: Math.round(single ? centerX : centerX + Math.cos(angle) * radiusX),
-      y: Math.round(single ? centerY : centerY + Math.sin(angle) * radiusY),
-      file,
-    };
+  grouped.forEach((layerNodes, layer) => {
+    layerNodes
+      .sort((a, b) => (b.incoming + b.outgoing) - (a.incoming + a.outgoing) || a.label.localeCompare(b.label))
+      .forEach((node, index) => {
+        node.x = 120 + layer * 360;
+        node.y = 100 + index * 110;
+      });
   });
 };
 
-const buildGraphLinks = (files: FileRecord[], relations: DependencyRelation[]): DependencyLink[] => {
+const buildGraphData = (files: FileRecord[], relations: DependencyRelation[]) => {
+  const nodesById = new Map<string, DependencyNode>();
   const links: DependencyLink[] = [];
-  const seen = new Set<string>();
+  const seenLinks = new Set<string>();
+
+  files.forEach((file) => {
+    const type = getFileType(file);
+    nodesById.set(file.id, {
+      id: file.id,
+      label: file.filename,
+      type,
+      x: 0,
+      y: 0,
+      file,
+      subtitle: `${formatType(type)} - ${file.detected_lang || 'unknown'}`,
+      incoming: 0,
+      outgoing: 0,
+      isResolved: true,
+    });
+  });
 
   relations.forEach((relation) => {
     const source = findFileForRelationName(files, relation.source_file);
-    const target = findFileForRelationName(files, relation.target_item);
+    if (!source) return;
 
-    if (!source || !target || source.id === target.id) return;
+    const resolvedTarget = findFileForRelationName(files, relation.target_item);
+    const targetType = resolvedTarget ? getFileType(resolvedTarget) : getTargetType(relation.relation_type);
+    const targetId = resolvedTarget?.id || `target:${relation.relation_type}:${normalizeName(relation.target_item)}`;
 
-    const key = `${source.id}->${target.id}:${relation.relation_type}`;
-    if (seen.has(key)) return;
-    seen.add(key);
+    if (!nodesById.has(targetId)) {
+      nodesById.set(targetId, {
+        id: targetId,
+        label: relation.target_item,
+        type: targetType,
+        x: 0,
+        y: 0,
+        subtitle: `${formatType(targetType)} - unresolved`,
+        incoming: 0,
+        outgoing: 0,
+        isResolved: Boolean(resolvedTarget),
+      });
+    }
+
+    const key = `${source.id}->${targetId}:${relation.relation_type}`;
+    if (seenLinks.has(key)) return;
+    seenLinks.add(key);
 
     links.push({
       id: key,
       from: source.id,
-      to: target.id,
+      to: targetId,
       relationType: relation.relation_type,
     });
   });
 
-  return links;
+  links.forEach((link) => {
+    const source = nodesById.get(link.from);
+    const target = nodesById.get(link.to);
+    if (source) source.outgoing += 1;
+    if (target) target.incoming += 1;
+  });
+
+  nodesById.forEach((node) => {
+    const relationSummary = `${node.incoming} in - ${node.outgoing} out`;
+    node.subtitle = node.isResolved
+      ? `${formatType(node.type)} - ${relationSummary}`
+      : `${formatType(node.type)} - unresolved`;
+  });
+
+  const nodes = [...nodesById.values()];
+  placeLayeredNodes(nodes);
+
+  return { nodes, links };
 };
 
 const SystemDiscovery = () => {
@@ -119,7 +215,7 @@ const SystemDiscovery = () => {
         setRelations(relationData.relations || []);
       } catch {
         if (!active) return;
-        setError('Unable to load uploaded files for this run.');
+        setError('Unable to load dependency graph for this run.');
         setFiles([]);
         setRelations([]);
         setSelectedNode(null);
@@ -135,15 +231,15 @@ const SystemDiscovery = () => {
     };
   }, [runId]);
 
-  const nodes = useMemo(() => buildGraphNodes(files), [files]);
-  const links = useMemo(() => buildGraphLinks(files, relations), [files, relations]);
+  const graphData = useMemo(() => buildGraphData(files, relations), [files, relations]);
+  const { nodes, links } = graphData;
 
   useEffect(() => {
     setSelectedNode((current) => {
       if (current && nodes.some((node) => node.id === current.id)) {
         return nodes.find((node) => node.id === current.id) || current;
       }
-      return nodes[0] || null;
+      return nodes.find((node) => node.outgoing > 0) || nodes[0] || null;
     });
   }, [nodes]);
 
@@ -163,7 +259,7 @@ const SystemDiscovery = () => {
             <h1 className="text-3xl font-bold text-white">System Discovery</h1>
           </div>
           <p className="text-slate-400">
-            Dependency view for the active run. Nodes are loaded from uploaded backend files only.
+            Layered dependency view for the active run, showing focused impact paths instead of the full mesh.
           </p>
         </div>
         
@@ -174,7 +270,7 @@ const SystemDiscovery = () => {
           </div>
           <div className="flex items-center gap-2 text-slate-500">
             <div className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span>{links.length} File Links</span>
+            <span>{links.length} Relations</span>
           </div>
         </div>
       </div>
@@ -207,16 +303,16 @@ const SystemDiscovery = () => {
           <div ref={detailSectionRef} className="flex items-center justify-between px-2 scroll-mt-6">
             <div className="flex items-center gap-2 text-white font-bold text-sm">
               <FileText size={16} className="text-emerald-400" />
-              File Details
+              Node Details
             </div>
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-500">
               <GitBranch size={14} className="text-emerald-500" />
-              Uploaded File Data
+              Dependency Data
             </div>
           </div>
 
           <div className="min-h-[320px] rounded-2xl border border-slate-800 bg-slate-900/50 p-4 shadow-inner">
-            <DDDDiscovery selectedNode={selectedNode} files={files} links={links} />
+            <DDDDiscovery selectedNode={selectedNode} files={files} links={links} nodes={nodes} />
           </div>
         </div>
       </div>

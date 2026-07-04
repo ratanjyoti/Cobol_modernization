@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enum  # <--- ADD Enum HERE
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enum, Text  # <--- ADD Enum HERE
 from sqlalchemy.ext.declarative import declarative_base
 import enum  # This is the python module for the class definition
 import datetime
@@ -46,6 +46,24 @@ class ProjectFile(Base):
     # Use the SQLAlchemy Enum type here. 
     # Because we imported 'Enum' from sqlalchemy, this now works.
     status = Column(Enum(FileStatus), default=FileStatus.PENDING_CONFIRMATION)
+
+class ProjectComplexity(Base):
+    __tablename__ = "project_complexity"
+    run_id = Column(String, ForeignKey("projects.run_id"), primary_key=True)
+    score = Column(Integer)
+    tier = Column(String) # Low, Medium, High
+    reasoning_effort = Column(String) # Turbo, Fast, Balanced, Thorough
+
+class FileChunk(Base):
+    __tablename__ = "file_chunks"
+    id = Column(Integer, primary_key=True)
+    run_id = Column(String, ForeignKey("projects.run_id"), nullable=False)
+    file_id = Column(Integer, ForeignKey("project_files.id"), nullable=False)
+    chunk_index = Column(Integer, nullable=False) # Chunk 0, 1, 2...
+    content = Column(Text, nullable=False)
+    start_line = Column(Integer)
+    end_line = Column(Integer)
+    overlap_content = Column(Text) # The 300 lines from previous chunk
 
 class FileRelation(Base):
     __tablename__ = "file_relations"
