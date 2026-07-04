@@ -1,25 +1,44 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Request, WebSocket, WebSocketDisconnect
-from sqlalchemy.orm import Session
-from Processes.discovery_process import DiscoveryProcess
-from Persistence.sqlite.session import get_db
-from Persistence.sqlite.models import FileStatus, ProjectFile
-import shutil
-import os
 import asyncio
+import os
+import shutil
 import stat
 from pathlib import Path
+
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from sqlalchemy.orm import Session
+
+from Persistence.neo4j.graph_service import GraphService
+from Persistence.sqlite.models import FileStatus, ProjectFile
+from Persistence.sqlite.session import SessionLocal, get_db
+from Processes.discovery_process import DiscoveryProcess
+from Processes.graphing_process import GraphingProcess
 from source.websockets.socket_manager import manager
 
+
 router = APIRouter(prefix="/discovery", tags=["Discovery"])
+
 
 def path_safe(filename: str | None) -> str:
     return os.path.basename(filename or "upload.zip")
 
+
 def save_file_sync(upload_file: UploadFile, destination: Path):
-    """Helper for asyncio.to_thread"""
+    """Helper for asyncio.to_thread."""
     with open(destination, "wb") as buffer:
         shutil.copyfileobj(upload_file.file, buffer)
+
 
 def remove_tree_sync(path: Path):
     def handle_remove_error(func, failed_path, _exc_info):
@@ -28,6 +47,7 @@ def remove_tree_sync(path: Path):
 
     if path.exists():
         shutil.rmtree(path, onerror=handle_remove_error)
+
 
 @router.post("/upload-zip")
 async def upload_zip(
@@ -52,22 +72,81 @@ async def upload_zip(
     finally:
         if temp_zip_path.exists():
             os.remove(temp_zip_path)
-            
+
+
+@router.post("/launch")
+async def launch_pipeline(
+    background_tasks: BackgroundTasks,
+    run_id: str = Form(...),
+    source_lang: str = Form(""),
+    target_lang: str = Form(""),
+    scope: str = Form(""),
+):
+    """
+    Triggers the transition from ingestion to analysis and starts Neo4j graphing.
+    """
+    background_tasks.add_task(run_graphing_task, run_id)
+
+    return {
+        "status": "Pipeline Launched",
+        "run_id": run_id,
+        "source_lang": source_lang,
+        "target_lang": target_lang,
+        "scope": scope,
+        "parallel_tasks": ["Neo4j_Graphing"],
+    }
+
+
+def run_graphing_task(run_id: str):
+    """Execute graphing with a fresh database session for the background task."""
+    db = SessionLocal()
+    try:
+        graph_proc = GraphingProcess(db)
+        graph_proc.build_full_graph(run_id)
+        print(f"Graph successfully built for {run_id}")
+    except Exception as e:
+        print(f"Background Graphing Error for {run_id}: {str(e)}")
+    finally:
+        db.close()
+
+
+@router.get("/impact-analysis/{item_name}")
+async def get_impact_analysis(item_name: str):
+    """
+    Returns programs affected by the selected dependency item.
+    """
+    graph_service = None
+    try:
+        graph_service = GraphService()
+        impacted_programs = graph_service.get_impacted_programs(item_name)
+
+        return {
+            "target": item_name,
+            "impacted_programs": impacted_programs,
+            "count": len(impacted_programs),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if graph_service is not None:
+            graph_service.close()
+
+
 @router.post("/upload-folder")
 async def upload_folder(
     run_id: str = Form(...),
-    files: List[UploadFile] = File(...), 
-    paths: List[str] = Form(...), 
-    db: Session = Depends(get_db)
+    files: List[UploadFile] = File(...),
+    paths: List[str] = Form(...),
+    db: Session = Depends(get_db),
 ):
     try:
         discovery = DiscoveryProcess(db)
-        # We pass the lists to the process method
         mapped_files = await discovery.process_folder_upload(run_id, files, paths)
         return {"status": "Success", "mapped_files": mapped_files}
     except Exception as e:
         print(f"Folder upload error: {e}")
         raise HTTPException(status_code=500, detail=f"Folder upload failed: {str(e)}")
+
 
 @router.post("/local-repo")
 async def ingest_local_repo(
@@ -91,6 +170,7 @@ async def ingest_local_repo(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Local repository ingestion failed: {str(e)}")
+
 
 @router.post("/github")
 async def ingest_github(
@@ -123,18 +203,17 @@ async def ingest_github(
 
     try:
         discovery = DiscoveryProcess(db)
-        # This now clones directly and processes in one flow
         mapped_files = await discovery.ingest_github_repo(run_id, repo_url, github_token)
-        
+
         return {
-            "status": "Success", 
+            "status": "Success",
             "message": f"Successfully ingested {len(mapped_files)} files from GitHub",
             "mapped_files": mapped_files,
         }
     except Exception as e:
-        # Log the error on server for debugging
         print(f"GitHub Error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"GitHub ingestion failed: {str(e)}")
+
 
 @router.post("/upload")
 async def upload_source(
@@ -149,7 +228,7 @@ async def upload_source(
         upload_dir = Path("data/uploads")
         upload_dir.mkdir(parents=True, exist_ok=True)
         temp_path = upload_dir / path_safe(zip_file.filename)
-        
+
         try:
             await asyncio.to_thread(save_file_sync, zip_file, temp_path)
             mapped_files = await discovery.process_upload(run_id, str(temp_path))
@@ -163,14 +242,16 @@ async def upload_source(
 
     return {"status": "Success", "mapped_files": mapped_files}
 
+
 @router.websocket("/ws/{run_id}")
 async def websocket_endpoint(websocket: WebSocket, run_id: str):
     await manager.connect(websocket, run_id)
     try:
         while True:
-            await websocket.receive_text() 
+            await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket, run_id)
+
 
 @router.post("/confirm-language")
 async def confirm_language(data: dict, db: Session = Depends(get_db)):
@@ -183,8 +264,8 @@ async def confirm_language(data: dict, db: Session = Depends(get_db)):
 
     try:
         file_record = db.query(ProjectFile).filter(
-            ProjectFile.run_id == run_id, 
-            ProjectFile.filename == filename
+            ProjectFile.run_id == run_id,
+            ProjectFile.filename == filename,
         ).first()
 
         if not file_record:

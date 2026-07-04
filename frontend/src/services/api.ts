@@ -19,6 +19,13 @@ export interface FileRecord {
   size?: number;
 }
 
+export interface DependencyRelation {
+  id: string;
+  source_file: string;
+  target_item: string;
+  relation_type: string;
+}
+
 export interface ProjectSummary {
   run_id: string;
   name: string;
@@ -97,6 +104,11 @@ export const ProjectAPI = {
     return response.data;
   },
 
+  listRelations: async (runId: string): Promise<{ relations: DependencyRelation[] }> => {
+    const response = await api.get(`/projects/${runId}/relations`);
+    return response.data;
+  },
+
   clearAllFiles: async (runId: string) => {
     const response = await api.delete(`/projects/${runId}/files`);
     return response.data;
@@ -154,4 +166,5 @@ export const ProjectAPI = {
     return response.data;
   },
 };
+
 

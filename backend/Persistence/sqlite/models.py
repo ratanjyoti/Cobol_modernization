@@ -46,3 +46,12 @@ class ProjectFile(Base):
     # Use the SQLAlchemy Enum type here. 
     # Because we imported 'Enum' from sqlalchemy, this now works.
     status = Column(Enum(FileStatus), default=FileStatus.PENDING_CONFIRMATION)
+
+class FileRelation(Base):
+    __tablename__ = "file_relations"
+    
+    id = Column(Integer, primary_key=True)
+    run_id = Column(String, ForeignKey("projects.run_id"), nullable=False)
+    source_file = Column(String, nullable=False) # e.g., 'ACCOUNT.cbl'
+    target_item = Column(String, nullable=False) # e.g., 'CUST-PROC' or 'CUST_TABLE'
+    relation_type = Column(String, nullable=False) # 'CALLS', 'INCLUDES', 'READS_WRITES'

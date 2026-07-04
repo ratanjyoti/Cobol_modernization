@@ -9,6 +9,8 @@ from git import GitCommandError, Repo
 from Persistence.sqlite.models import ProjectFile, FileStatus
 from Chunking.core.language_detector import LanguageDetector
 from source.websockets.socket_manager import manager
+# --- ADDED IMPORT ---
+from Chunking.dependency_scanner.dependency_manager import DependencyManager 
 
 class DiscoveryProcess:
     def __init__(self, db_session, upload_dir="data/uploads"):
@@ -52,10 +54,31 @@ class DiscoveryProcess:
             "filepath": filepath,
             "rel_path": filepath,
             "lang": detected_lang,
-            "status": FileStatus.PENDING_CONFIRMATION.value, # "Pending"
+            "status": FileStatus.PENDING_CONFIRMATION.value,
             "size": size,
             "chunks": 1
         }
+
+    # --- NEW HELPER METHOD: Handles DB save + Dependency Scan ---
+    async def _save_and_scan(self, run_id: str, full_path: Path, filename: str, rel_path: str, lang: str):
+        # 1. Save to Database
+        size = full_path.stat().st_size
+        file_record = self._save_project_file(run_id, filename, rel_path, lang, size)
+        
+        # 2. Perform Dependency Scan
+        try:
+            # We run this in a thread to avoid blocking the event loop during file I/O
+            def scan_file():
+                dep_manager = DependencyManager(self.db)
+                with open(full_path, 'r', errors='ignore') as f:
+                    content = f.read()
+                dep_manager.scan_and_store(run_id, filename, content, lang)
+            
+            await asyncio.to_thread(scan_file)
+        except Exception as e:
+            print(f"Dependency scan failed for {filename}: {e}")
+
+        return file_record
 
     async def _notify_detection(self, run_id: str, filename: str, lang: str, is_valid: bool):
         await manager.send_notification(run_id, {
@@ -65,7 +88,6 @@ class DiscoveryProcess:
             "is_valid": is_valid
         })
 
-    # --- FIXED: Added missing method for Local Git ---
     async def ingest_local_git_repo(self, run_id: str, repo_path: str) -> List[Dict[str, Any]]:
         source_path = Path(repo_path).expanduser().resolve()
         if not source_path.exists() or not source_path.is_dir():
@@ -112,17 +134,15 @@ class DiscoveryProcess:
             rel_path = str(full_path.relative_to(source_path))
             filename = full_path.name
             lang, is_valid = await asyncio.to_thread(self.detector.validate_and_detect, str(full_path))
-            size = full_path.stat().st_size
 
-            file_record = self._save_project_file(run_id, filename, rel_path, lang, size)
+            # FIXED: Now calls _save_and_scan
+            file_record = await self._save_and_scan(run_id, full_path, filename, rel_path, lang)
             file_record["is_valid"] = is_valid
             mapped_files.append(file_record)
             await self._notify_detection(run_id, filename, lang, is_valid)
 
         self.db.commit()
         return mapped_files
-
-
 
     async def process_folder_upload(self, run_id: str, files: List[Any], paths: List[str]):
         project_folder = self.upload_dir / run_id / "local_repo"
@@ -132,32 +152,27 @@ class DiscoveryProcess:
 
         for file_obj, rel_path in zip(files, paths):
             if ".git" in rel_path: continue
-            
             if Path(rel_path).suffix.lower() not in self.allowed_extensions:
                 continue
 
             destination = project_folder / rel_path
             destination.parent.mkdir(parents=True, exist_ok=True)
             
-            # OPTIMIZATION: Write file in chunks instead of loading the whole thing into memory
             with open(destination, "wb") as buffer:
-                while content := await file_obj.read(1024 * 1024): # Read 1MB at a time
+                while content := await file_obj.read(1024 * 1024):
                     buffer.write(content)
             
-            # Now get the size from the saved file on disk
-            file_size = destination.stat().st_size
             filename = Path(rel_path).name
-            
             lang, is_valid = await asyncio.to_thread(self.detector.validate_and_detect, str(destination))
-            file_record = self._save_project_file(run_id, filename, rel_path, lang, file_size)
+            
+            # FIXED: Now calls _save_and_scan
+            file_record = await self._save_and_scan(run_id, destination, filename, rel_path, lang)
             file_record["is_valid"] = is_valid
             mapped_files.append(file_record)
             await self._notify_detection(run_id, filename, lang, is_valid)
 
         self.db.commit()
         return mapped_files
-
-    
 
     async def process_zip_upload(self, run_id: str, zip_file_path: str) -> List[Dict[str, Any]]:
         project_folder = self.upload_dir / run_id
@@ -176,10 +191,10 @@ class DiscoveryProcess:
             
             rel_path = str(full_path.relative_to(project_folder))
             filename = full_path.name
-            lang, is_valid = self.detector.validate_and_detect(str(full_path))
-            size = full_path.stat().st_size
+            lang, is_valid = await asyncio.to_thread(self.detector.validate_and_detect, str(full_path))
             
-            file_record = self._save_project_file(run_id, filename, rel_path, lang, size)
+            # FIXED: Now calls _save_and_scan
+            file_record = await self._save_and_scan(run_id, full_path, filename, rel_path, lang)
             file_record["is_valid"] = is_valid
             mapped_files.append(file_record)
 
@@ -195,7 +210,6 @@ class DiscoveryProcess:
         mapped_files = []
         for upload in files:
             filename = Path(upload.filename).name
-            
             if not self._is_supported_file(Path(filename)):
                 continue
 
@@ -203,8 +217,10 @@ class DiscoveryProcess:
             contents = await upload.read()
             await asyncio.to_thread(destination.write_bytes, contents)
 
-            detected_lang, is_valid = self.detector.validate_and_detect(str(destination))
-            file_record = self._save_project_file(run_id, filename, filename, detected_lang, len(contents))
+            detected_lang, is_valid = await asyncio.to_thread(self.detector.validate_and_detect, str(destination))
+            
+            # FIXED: Now calls _save_and_scan
+            file_record = await self._save_and_scan(run_id, destination, filename, filename, detected_lang)
             file_record["is_valid"] = is_valid
             mapped_files.append(file_record)
             

@@ -6,6 +6,7 @@ import os
 import shutil
 import stat
 from Processes.onboarding_process import OnboardingProcess
+from Persistence.sqlite.models import FileRelation
 from Persistence.sqlite.project_repo import ProjectRepository
 from Persistence.sqlite.session import get_db
 
@@ -83,6 +84,14 @@ def serialize_file(project_file):
     }
 
 
+def serialize_relation(relation):
+    return {
+        "id": str(relation.id),
+        "source_file": relation.source_file,
+        "target_item": relation.target_item,
+        "relation_type": relation.relation_type,
+    }
+
 @router.get("")
 async def list_projects(db: Session = Depends(get_db)):
     repo = ProjectRepository(db)
@@ -145,6 +154,15 @@ async def list_project_files(run_id: str, db: Session = Depends(get_db)):
     return {"files": [serialize_file(project_file) for project_file in files]}
 
 
+@router.get("/{run_id}/relations")
+async def list_project_relations(run_id: str, db: Session = Depends(get_db)):
+    repo = ProjectRepository(db)
+    if not repo.get_by_run_id(run_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    relations = db.query(FileRelation).filter(FileRelation.run_id == run_id).all()
+    return {"relations": [serialize_relation(relation) for relation in relations]}
+
+
 @router.patch("/{run_id}/config")
 async def update_project_config(run_id: str, updates: dict, db: Session = Depends(get_db)):
     process = OnboardingProcess(db)
@@ -152,3 +170,5 @@ async def update_project_config(run_id: str, updates: dict, db: Session = Depend
     if not success:
         raise HTTPException(status_code=404, detail="Project not found")
     return {"status": "Configuration updated"}
+
+
