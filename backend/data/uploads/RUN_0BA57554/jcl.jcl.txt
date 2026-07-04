@@ -1,0 +1,11 @@
+//MYJOB01  JOB (ACCT123),'HELLO WORLD',CLASS=A,MSGCLASS=X,NOTIFY=&SYSUID
+//*------------------------------------------------------------------*
+//* THIS STEP COPIES IN-STREAM DATA TO THE SYSTEM PRINTER (SPOOL)
+//*------------------------------------------------------------------*
+//STEP1    EXEC PGM=IEBGENER
+//SYSPRINT DD SYSOUT=*
+//SYSUT1   DD *
+HELLO WORLD! THIS IS MY FIRST JCL JOB.
+/*
+//SYSUT2   DD SYSOUT=*
+//SYSIN    DD DUMMY

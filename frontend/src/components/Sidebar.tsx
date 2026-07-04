@@ -14,6 +14,7 @@ import {
   Sun,
   BrainCircuit // <--- Added this icon for System Discovery
 } from 'lucide-react';
+import Tooltip from './Tooltip';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -22,38 +23,36 @@ interface SidebarProps {
   toggleTheme: () => void;
   openConfig: () => void;
 }
-
 const menuGroups = [
   {
     group: 'Core',
     items: [
-      { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-      { name: 'Projects', path: '/projects', icon: Database },
+      { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, desc: 'View project health, progress, and next modernization actions.' },
+      { name: 'Projects', path: '/projects', icon: Database, desc: 'Create a new migration run or resume an existing project.' },
     ],
   },
   {
     group: 'Reverse Engineering',
     items: [
-      { name: 'Source Files', path: '/source-files', icon: FolderOpen },
-      // --- ADDED SYSTEM DISCOVERY HERE ---
-      { name: 'System Discovery', path: '/discovery', icon: BrainCircuit }, 
-      { name: 'Analysis', path: '/reverse-engineering', icon: Cpu },
-      { name: 'Business Logic', path: '/business-logic', icon: FileText },
+      { name: 'Source Files', path: '/source-files', icon: FolderOpen, desc: 'Upload, inspect, and manage legacy source files for analysis.' },
+      { name: 'System Discovery', path: '/discovery', icon: BrainCircuit, desc: 'Analyze calls, copybooks, SQL tables, and dependency relationships.' }, 
+      { name: 'Analysis', path: '/reverse-engineering', icon: Cpu, desc: 'Review technical analysis, structure, and modernization insights.' },
+      { name: 'Business Logic', path: '/business-logic', icon: FileText, desc: 'Translate legacy code behavior into plain-English business rules.' },
     ],
   },
   {
     group: "Modernization",
     items: [
-      { name: 'Code Gen', path: '/code-generation', icon: Code2 },
-      { name: 'Modernizer Chat', path: '/chat', icon: MessageSquare },
+      { name: 'Code Gen', path: '/code-generation', icon: Code2, desc: 'Generate modern application code from the analyzed legacy system.' },
+      { name: 'Modernizer Chat', path: '/chat', icon: MessageSquare, desc: 'Ask guided questions about the migration and generated outputs.' },
     ]
   },
   {
     group: 'System',
     items: [
-      { name: 'Mission Control', path: '/mission-control', icon: Activity },
-      { name: 'Prompt Studio', path: '/prompt-studio', icon: Settings },
-      { name: 'Settings', path: '/settings', icon: Settings },
+      { name: 'Mission Control', path: '/mission-control', icon: Activity, desc: 'Monitor pipeline execution, validation loops, and run status.' },
+      { name: 'Prompt Studio', path: '/prompt-studio', icon: Settings, desc: 'Edit and tune prompts used by modernization agents.' },
+      { name: 'Settings', path: '/settings', icon: Settings, desc: 'Manage application preferences and system configuration.' },
     ],
   },
 ];
@@ -124,34 +123,32 @@ const Sidebar = ({
             {group.items.map(item => {
               const isActive = location.pathname === item.path;
               return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`
-                    relative flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 group mb-1
-                    ${isActive 
-                      ? 'bg-indigo-600/10 text-indigo-400' 
-                      : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'}
-                  `}
-                >
-                  {isActive && (
-                    <div className="absolute left-0 w-1 h-6 bg-indigo-500 rounded-r-full" />
-                  )}
-                  <item.icon 
-                    size={20} 
-                    className={`${isActive ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'} transition-colors`} 
-                  />
-                  {isOpen && (
-                    <span className={`text-sm font-medium transition-all ${isActive ? 'text-indigo-400' : 'text-slate-400 group-hover:text-slate-200'}`}>
-                      {item.name}
-                    </span>
-                  )}
-                  {!isOpen && (
-                    <div className="absolute left-full ml-4 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
-                      {item.name}
-                    </div>
-                  )}
-                </Link>
+                <Tooltip key={item.path} title={item.name}text={item.desc} position="right" className="w-full">
+                  <Link
+                    to={item.path}
+                    aria-label={`${item.name}: ${item.desc}`}
+                    className={`
+                      relative flex w-full items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 group mb-1
+                      ${!isOpen ? 'justify-center' : ''}
+                      ${isActive 
+                        ? 'bg-indigo-600/10 text-indigo-400' 
+                        : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'}
+                    `}
+                  >
+                    {isActive && (
+                      <div className="absolute left-0 w-1 h-6 bg-indigo-500 rounded-r-full" />
+                    )}
+                    <item.icon 
+                      size={20} 
+                      className={`${isActive ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'} transition-colors`} 
+                    />
+                    {isOpen && (
+                      <span className={`text-sm font-medium transition-all ${isActive ? 'text-indigo-400' : 'text-slate-400 group-hover:text-slate-200'}`}>
+                        {item.name}
+                      </span>
+                    )}
+                  </Link>
+                </Tooltip>
               );
             })}
           </div>

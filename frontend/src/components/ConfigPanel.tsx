@@ -1,6 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { Globe, Cpu, CheckCircle2, ArrowRight } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom'; // FIXED: Added these
+import { Globe, Cpu, CheckCircle2, ArrowRight, LayoutDashboard, Settings, FileText, Activity } from 'lucide-react'; // Added missing icons
 import toast from 'react-hot-toast';
+import Tooltip from './Tooltip';
+
+// --- CONSTANTS ---
+const LOCAL_MODELS = ['llama3', 'mistral', 'phi3', 'codellama'];
+const CLOUD_MODELS = ['gpt-4o', 'gpt-4-turbo', 'claude-3-5-sonnet'];
+const DEFAULT_CONFIG = { key: '', url: 'http://localhost:11434', model: 'gpt-4o' };
+
+// FIXED: Defined NAV_ITEMS so the map function actually works
+const NAV_ITEMS = [
+  { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, desc: 'Project Overview' },
+  { name: 'Source Files', path: '/source-files', icon: FileText, desc: 'Manage Code' },
+  { name: 'Mission Control', path: '/mission-control', icon: Activity, desc: 'Pipeline Status' },
+  { name: 'Settings', path: '/settings', icon: Settings, desc: 'AI Configuration' },
+];
 
 type ConfigMode = 'api' | 'local' | null;
 
@@ -10,20 +25,45 @@ interface AIConfigForm {
   model: string;
 }
 
-const LOCAL_MODELS = ['llama3', 'mistral', 'phi3', 'codellama'];
-const CLOUD_MODELS = ['gpt-4o', 'gpt-4-turbo', 'claude-3-5-sonnet'];
+// --- COMPONENT 1: SIDEBAR (Moved OUTSIDE ConfigPanel) ---
+const Sidebar = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
 
-const DEFAULT_CONFIG: AIConfigForm = {
-  key: '',
-  url: 'http://localhost:11434',
-  model: 'gpt-4o',
+  return (
+    <div className="w-64 h-screen bg-slate-950 border-r border-slate-800 flex flex-col p-4">
+      <div className="mb-10 px-4">
+        <h1 className="text-indigo-500 font-black text-xl tracking-tighter">ModernizerAI</h1>
+      </div>
+
+      <nav className="flex-1 space-y-2">
+        {NAV_ITEMS.map((item) => (
+          <Tooltip key={item.path} text={item.desc} position="right">
+            <button 
+              onClick={() => navigate(item.path)}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm font-medium ${
+                location.pathname === item.path 
+                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
+                : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+              }`}
+            >
+              <item.icon size={18} />
+              {item.name}
+            </button>
+          </Tooltip>
+        ))}
+      </nav>
+    </div>
+  );
 };
+
+// --- COMPONENT 2: CONFIG PANEL ---
 interface ConfigPanelProps {
   runId: string | null;
 }
+
 const ConfigPanel = ({ runId }: ConfigPanelProps) => {
-  // Now you can use runId inside this component to make API calls
-  console.log("Current Project ID:", runId);  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(1);
   const [mode, setMode] = useState<ConfigMode>(null);
   const [config, setConfig] = useState<AIConfigForm>(DEFAULT_CONFIG);
   const [customModel, setCustomModel] = useState('');

@@ -52,4 +52,15 @@ body {
   .status-pill {
     @apply px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider;
   }
+  .tab-tooltip {
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+  .tab-item:hover .tab-tooltip {
+    visibility: visible;
+    opacity: 1;
+  }
+
 }

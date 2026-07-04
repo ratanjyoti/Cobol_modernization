@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -7,12 +7,13 @@ import {
   BrainCircuit, Rocket, ShieldCheck, Info, Lightbulb, 
   CheckCircle2, Circle, Loader2, Clock, Zap,
   Languages, Settings, Globe, Cpu, Save,
-  Target, Code2, AlertCircle, ChevronDown, Trash2 // <--- FIXED: Added ChevronDown import
+  Target, Code2, AlertCircle, ChevronDown, Trash2 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import ConfigPanel from '../components/ConfigPanel'; 
 import { ProjectAPI } from '../services/api';
 import type { ProjectSummary } from '../services/api';
+import Tooltip from '../components/Tooltip';
 
 // --- Types ---
 type BlueprintActivity = string | { name: string; progress: number };
@@ -26,6 +27,12 @@ interface BlueprintStage {
   activities: BlueprintActivity[];
 }
 
+interface KPICardProps {
+  label: string;
+  value: string | number;
+  icon: React.ElementType;
+  status: 'Healthy' | 'Review' | 'Action';
+}
 
 const BLUEPRINT_STAGES: BlueprintStage[] = [
   { id: 1, name: 'Environment Setup', status: 'Complete', indicator: 'green', desc: 'Prerequisites validated.', activities: ['AI Model Config', 'Token Budget', 'Source Lang Config'] },
@@ -36,17 +43,17 @@ const BLUEPRINT_STAGES: BlueprintStage[] = [
 ];
 
 const JOURNEY_STEPS = [
-  { name: 'Select Project', path: '/projects', icon: Database },
-  { name: 'Upload Source', path: '/source-files', icon: FileText },
-  { name: 'Discovery', path: '/discovery', icon: BrainCircuit },
-  { name: 'Knowledge Extraction', path: '/business-logic', icon: Layers },
-  { name: 'Plan Migration', path: '/dashboard', icon: Target },
-  { name: 'Generate Code', path: '/code-generation', icon: Code2 },
-  { name: 'Refinement', path: '/mission-control', icon: ShieldCheck },
-  { name: 'Deploy', path: '/code-generation', icon: Rocket },
+  { name: 'Select Project', path: '/projects', icon: Database, desc: 'Create a new migration run or resume a previous project.' },
+  { name: 'Upload Source', path: '/source-files', icon: FileText, desc: 'Ingest ZIP archives or GitHub repos and perform language detection.' },
+  { name: 'Discovery', path: '/discovery', icon: BrainCircuit, desc: 'Scan for CALLs, COPY-books, and SQL tables to build the dependency graph.' },
+  { name: 'Knowledge Extraction', path: '/business-logic', icon: Layers, desc: 'Convert technical COBOL logic into human-readable business rules.' },
+  { name: 'Plan Migration', path: '/dashboard', icon: Target, desc: 'Define target architecture and map legacy paragraphs to modern methods.' },
+  { name: 'Generate Code', path: '/code-generation', icon: Code2, desc: 'Run the AI Factory to generate production-ready Java/C# code.' },
+  { name: 'Refinement', path: '/mission-control', icon: ShieldCheck, desc: 'Run compile-test-fix loops to ensure syntactical health.' },
+  { name: 'Deploy', path: '/code-generation', icon: Rocket, desc: 'Export the final codebase and generate the modernization audit report.' },
 ];
 
-const KPICard = ({ label, value, icon: Icon, status }: any) => {
+const KPICard = ({ label, value, icon: Icon, status }: KPICardProps) => {
   const statusColor = status === 'Healthy' ? 'text-emerald-400' : status === 'Review' ? 'text-amber-400' : 'text-red-400';
   return (
     <div className="glass-card p-5 rounded-2xl border-slate-800 hover:border-indigo-500/50 transition-all">
@@ -66,7 +73,6 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  // --- STATE ---
   const [runId, setRunId] = useState<string | null>(localStorage.getItem('active_run_id'));
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
@@ -74,15 +80,15 @@ const Dashboard = () => {
   const [hasTriggeredNewProject, setHasTriggeredNewProject] = useState(false);
   const [sourceMetaLang, setSourceMetaLang] = useState('en');
   const [aiMode, setAiMode] = useState<'api' | 'local'>('api');
-  const [aiConfig, setAiConfig] = useState({
-    key: '',
-    url: 'http://localhost:11434',
-    model: 'gpt-4o',
-  });
+  const [aiConfig, setAiConfig] = useState({ key: '', url: 'http://localhost:11434', model: 'gpt-4o' });
+
+  const activeProject = useMemo(() => 
+    projects.find((p) => p.run_id === runId), 
+    [projects, runId]
+  );
 
   useEffect(() => {
     fetchProjectHistory();
-    
     const savedLang = localStorage.getItem('modernizer_source_lang');
     const savedAiConfig = localStorage.getItem('ai_config');
     if (savedLang) setSourceMetaLang(savedLang);
@@ -123,7 +129,6 @@ const Dashboard = () => {
     toast.success(`Switched to ${project?.name || id}`);
   };
 
-
   const handleDeleteAllRuns = async () => {
     if (projects.length === 0) {
       toast.error("No runs to delete");
@@ -147,19 +152,14 @@ const Dashboard = () => {
     }
   };
 
-const getStatusStyle = (status: string | undefined) => {
-  switch (status?.toLowerCase()) {
-    case 'completed': 
-      return 'text-emerald-400 bg-emerald-500/10';
-    case 'running': 
-      return 'text-amber-400 bg-amber-500/10';
-    case 'incomplete': 
-      return 'text-red-400 bg-red-500/10'; // Red for incomplete
-    default: 
-      return 'text-slate-400 bg-slate-500/10';
-  }
-};
-
+  const getStatusStyle = (status: string | undefined) => {
+    switch (status?.toLowerCase()) {
+      case 'completed': return 'text-emerald-400 bg-emerald-500/10';
+      case 'running': return 'text-amber-400 bg-amber-500/10';
+      case 'incomplete': return 'text-red-400 bg-red-500/10';
+      default: return 'text-slate-400 bg-slate-500/10';
+    }
+  };
 
   const saveLang = async (lang: string) => {
     setSourceMetaLang(lang);
@@ -174,11 +174,17 @@ const getStatusStyle = (status: string | undefined) => {
     }
   };
 
+  // FIXED: Regular Expression moved to a constant to avoid Vite/Babel parser error
   const getNextRunName = (projectList: ProjectSummary[] = projects) => {
+    const runRegex = /^Run_(\d+)$/;
     const usedNumbers = projectList
-      .map((project) => project.name.match(/^Run_(\d+)$/)?.[1])
-      .filter(Boolean)
+      .map((project) => {
+        const match = project.name.match(runRegex);
+        return match ? match[1] : null;
+      })
+      .filter((val): val is string => val !== null)
       .map(Number);
+
     const nextNumber = usedNumbers.length > 0 ? Math.max(...usedNumbers) + 1 : projectList.length + 1;
     return `Run_${nextNumber}`;
   };
@@ -198,27 +204,29 @@ const getStatusStyle = (status: string | undefined) => {
       const response = await ProjectAPI.create(config);
       const newRunId = response.run_id;
 
-      if (!newRunId) {
-        throw new Error("Backend did not return a run_id");
-      }
+      if (!newRunId) throw new Error("Backend did not return a run_id");
 
       localStorage.setItem('active_run_id', newRunId);
       setRunId(newRunId);
       await fetchProjectHistory();
-
       toast.success(`Project created: ${runName}`);
       navigate('/source-files');
     } catch (e: any) {
-      console.error("Full Project Creation Error:", e);
       toast.error(e.response?.data?.detail || e.message || "Error creating project");
     }
   };
 
+  const calculateOverallProgress = () => {
+    if (!activeProject) return 0;
+    const counts = activeProject.file_status_counts || {};
+    const total = activeProject.files_count || 0;
+    if (total === 0) return 0;
+    const confirmed = counts.CONFIRMED || 0;
+    return Math.round((confirmed / total) * 100);
+  };
 
   return (
     <div className="space-y-12 pb-20 animate-in fade-in duration-700">
-      
-      {/* SECTION 1: WELCOME COMMAND CENTER */}
       <div className="relative overflow-hidden rounded-3xl p-8 bg-gradient-to-br from-indigo-900/40 via-slate-900 to-slate-900 border border-indigo-500/20 shadow-2xl">
         <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div className="space-y-4">
@@ -226,7 +234,6 @@ const getStatusStyle = (status: string | undefined) => {
               <Rocket size={14} /> Executive Command Center
             </div>
             <h1 className="text-5xl font-black text-white tracking-tight">Welcome to <span className="text-indigo-500">ModernizerAI</span></h1>
-            
             <div className="flex flex-wrap gap-8 pt-4">
               <div className="space-y-2">
                 <p className="text-slate-500 text-xs uppercase font-bold">Active Project</p>
@@ -257,26 +264,24 @@ const getStatusStyle = (status: string | undefined) => {
                     Delete All Runs
                   </button>
                 </div>
-                {runId && projects.find(p => p.run_id === runId) && (
-                  <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase ${getStatusStyle(projects.find(p => p.run_id === runId)?.status)}`}>
+                {activeProject && (
+                  <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase ${getStatusStyle(activeProject.status)}`}>
                     <div className={`w-1.5 h-1.5 rounded-full bg-current`} /> 
-                    {projects.find(p => p.run_id === runId)?.status}
+                    {activeProject.status}
                   </div>
                 )}
               </div>
-
               <div className="space-y-1">
                 <p className="text-slate-500 text-xs uppercase font-bold">Overall Progress</p>
                 <div className="flex items-center gap-3">
-                  <p className="text-white font-bold text-lg">68%</p>
+                  <p className="text-white font-bold text-lg">{calculateOverallProgress()}%</p>
                   <div className="w-24 h-2 bg-slate-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-indigo-500" style={{ width: '68%' }} />
+                    <div className="h-full bg-indigo-500 transition-all duration-500" style={{ width: `${calculateOverallProgress()}%` }} />
                   </div>
                 </div>
               </div>
             </div>
           </div>
-          
           <div className="flex flex-col gap-3 w-full md:w-auto">
             <button onClick={() => navigate('/projects')} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-2">
               Continue Current Project <ChevronRight size={18} />
@@ -288,12 +293,10 @@ const getStatusStyle = (status: string | undefined) => {
         </div>
       </div>
 
-      {/* SECTION 2: SYSTEM CONFIGURATION */}
       <div className="space-y-6">
         <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest">
           <Settings size={16} /> System & AI Configuration
         </div>
-        
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="glass-card p-6 rounded-3xl border-slate-800 bg-slate-900/50 space-y-4">
             <div className="flex items-center gap-2 text-white font-bold">
@@ -311,43 +314,46 @@ const getStatusStyle = (status: string | undefined) => {
               <option value="fr">French</option>
               <option value="es">Spanish</option>
             </select>
-            <p className="text-[10px] text-slate-500 italic leading-relaxed">
-              Sets the language for prompts and source comments.
-            </p>
+            <p className="text-[10px] text-slate-500 italic leading-relaxed">Sets the language for prompts and source comments.</p>
           </div>
-
           <div className="lg:col-span-2 glass-card p-6 rounded-3xl border-slate-800 bg-slate-900/50">
             <ConfigPanel runId={runId} />
           </div>
         </div>
       </div>
 
-      {/* SECTION 3: MODERNIZATION JOURNEY */}
       <div className="space-y-6">
         <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest">
           <Info size={16} /> Modernization Journey
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
           {JOURNEY_STEPS.map((step, i) => (
-            <motion.div whileHover={{ y: -5 }} key={i} onClick={() => navigate(step.path)} className="group relative p-4 bg-slate-900/50 border border-slate-800 rounded-2xl hover:border-indigo-500/50 transition-all cursor-pointer">
-              <div className="flex justify-between items-start mb-2">
-                <div className="text-xs font-black text-slate-600">0{i + 1}</div>
-                <step.icon size={14} className="text-slate-500 group-hover:text-indigo-400" />
-              </div>
-              <div className="text-sm font-bold text-slate-200 group-hover:text-white transition-colors">{step.name}</div>
-            </motion.div>
+            <Tooltip key={i} text={step.desc}>
+              <motion.div 
+                whileHover={{ y: -5 }} 
+                onClick={() => navigate(step.path)} 
+                className="group relative p-4 bg-slate-900/50 border border-slate-800 rounded-2xl hover:border-indigo-500/50 transition-all cursor-pointer"
+              >
+                <div className="flex justify-between items-start mb-2">
+                  <div className="text-xs font-black text-slate-600">0{i + 1}</div>
+                  <step.icon size={14} className="text-slate-500 group-hover:text-indigo-400" />
+                </div>
+                <div className="text-sm font-bold text-slate-200 group-hover:text-white transition-colors">
+                  {step.name}
+                </div>
+              </motion.div>
+            </Tooltip>
           ))}
         </div>
       </div>
 
-      {/* SECTION 4: PROJECT HEALTH SNAPSHOT */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-8 space-y-6">
           <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest">
             <Activity size={16} /> Project Health Snapshot
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <KPICard label="Total COBOL Files" value="422" icon={FileText} status="Healthy" />
+            <KPICard label="Total COBOL Files" value={activeProject?.files_count || 0} icon={FileText} status="Healthy" />
             <KPICard label="Complex Modules" value="14" icon={AlertCircle} status="Review" />
             <KPICard label="Pending Chunks" value="35" icon={Layers} status="Review" />
             <KPICard label="Verified Rules" value="16" icon={CheckCircle2} status="Healthy" />
@@ -377,7 +383,6 @@ const getStatusStyle = (status: string | undefined) => {
         </div>
       </div>
 
-      {/* SECTION 5: MODERNIZATION BLUEPRINT */}
       <div className="space-y-8">
         <div className="space-y-2">
           <h2 className="text-3xl font-bold text-white">Modernization Blueprint</h2>
@@ -439,7 +444,6 @@ const getStatusStyle = (status: string | undefined) => {
         </div>
       </div>
 
-      {/* SECTION 6: WHAT'S NEXT? */}
       <div className="space-y-6">
         <h2 className="text-2xl font-bold text-white">What's Next?</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -464,7 +468,6 @@ const getStatusStyle = (status: string | undefined) => {
         </div>
       </div>
 
-      {/* GLOBAL ACTION BAR */}
       <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
         <motion.button 
           whileHover={{ scale: 1.05 }}
@@ -480,8 +483,3 @@ const getStatusStyle = (status: string | undefined) => {
 };
 
 export default Dashboard;
-
-
-
-
-
