@@ -1,4 +1,4 @@
-import os
+﻿import os
 import zipfile
 import asyncio
 import shutil
@@ -8,7 +8,7 @@ import stat
 from git import GitCommandError, Repo
 
 # Models and Services
-from Persistence.sqlite.models import ProjectFile, FileStatus, ProjectComplexity
+from Persistence.sqlite.models import FileChunk, FileComplexity, ProjectFile, FileStatus, ProjectComplexity
 from Chunking.core.language_detector import LanguageDetector
 from Chunking.core.complexity_scorer import ComplexityScorer
 from Chunking.core.sizing_router import SizingRouter
@@ -79,8 +79,36 @@ class DiscoveryProcess:
             dep_manager.scan_and_store(run_id, filename, content, lang)
 
             # B. Complexity Scoring
-            # Store one run-level record and keep the highest score seen across files.
+            # Store both per-file scoring details and the highest run-level score.
             comp_data = self.scorer.calculate_score(content)
+            existing_file_complexity = self.db.query(FileComplexity).filter(
+                FileComplexity.run_id == run_id,
+                FileComplexity.file_id == project_file.id,
+            ).first()
+            file_complexity_values = {
+                "filename": filename,
+                "filepath": rel_path,
+                "score": comp_data["score"],
+                "tier": comp_data["tier"],
+                "effort": comp_data["reasoning_effort"],
+                "logic_count": comp_data["logic_count"],
+                "table_count": comp_data["table_count"],
+                "table_bonus": comp_data["table_bonus"],
+                "if_count": comp_data["if_count"],
+                "perform_until_count": comp_data["perform_until_count"],
+                "perform_varying_count": comp_data["perform_varying_count"],
+                "evaluate_count": comp_data["evaluate_count"],
+            }
+            if existing_file_complexity:
+                for key, value in file_complexity_values.items():
+                    setattr(existing_file_complexity, key, value)
+            else:
+                self.db.add(FileComplexity(
+                    run_id=run_id,
+                    file_id=project_file.id,
+                    **file_complexity_values,
+                ))
+
             existing_complexity = self.db.query(ProjectComplexity).filter(
                 ProjectComplexity.run_id == run_id
             ).first()
@@ -118,6 +146,11 @@ class DiscoveryProcess:
         except Exception as e:
             print(f"Intelligence processing failed for {filename}: {e}")
 
+        chunk_count = self.db.query(FileChunk).filter(
+            FileChunk.run_id == run_id,
+            FileChunk.file_id == project_file.id,
+        ).count()
+
         # Return the record for the frontend
         return {
             "id": str(project_file.id),
@@ -127,7 +160,7 @@ class DiscoveryProcess:
             "lang": lang,
             "status": FileStatus.PENDING_CONFIRMATION.value,
             "size": size,
-            "chunks": 1 # This will be updated in DB, but we return 1 for basic UI
+            "chunks": chunk_count or 1
         }
 
     async def _notify_detection(self, run_id: str, filename: str, lang: str, is_valid: bool):
@@ -278,5 +311,8 @@ class DiscoveryProcess:
 
     async def process_upload(self, run_id: str, zip_path: str):
         return await self.process_zip_upload(run_id, zip_path)
+
+
+
 
 

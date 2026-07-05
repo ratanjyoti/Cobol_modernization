@@ -1,4 +1,4 @@
-# Implementation for chunking_orchestrator.py
+﻿# Implementation for chunking_orchestrator.py
 from Chunking.core.sizing_router import SizingRouter
 from Chunking.interfaces.cobol_chunker import CobolChunker
 from Chunking.interfaces.jcl_chunker import JclChunker
@@ -15,6 +15,10 @@ class ChunkingOrchestrator:
         }
 
     def process_file(self, run_id: str, file_id: int, filename: str, content: str, lang: str):
+        self.db.query(FileChunk).filter(
+            FileChunk.run_id == run_id,
+            FileChunk.file_id == file_id,
+        ).delete(synchronize_session=False)
         # 1. Check if chunking is even needed
         if not SizingRouter.needs_chunking(content):
             # Store as a single chunk
@@ -55,3 +59,4 @@ class ChunkingOrchestrator:
         
         self.db.commit()
         return list(range(len(slices)))
+

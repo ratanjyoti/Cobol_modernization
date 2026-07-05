@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  ArrowLeft,
   Crosshair,
   Database,
   Cpu,
@@ -46,11 +47,11 @@ type DependencyGraphProps = {
   links: DependencyLink[];
   selectedNodeId?: string;
   onNodeSelect?: (node: DependencyNode) => void;
+  onOverviewSelect?: () => void;
 };
 
 const NODE_WIDTH = 240;
 const NODE_HEIGHT = 64;
-const OVERVIEW_LIMIT = 80;
 const RELATION_FILTERS: RelationFilter[] = ['ALL', 'CALLS', 'INCLUDES', 'READS_WRITES'];
 
 const getNodeChrome = (type: DependencyNode['type']) => {
@@ -83,11 +84,31 @@ const getLinkColor = (relationType: string) => {
   }
 };
 
-const DependencyGraph = ({ nodes, links, selectedNodeId, onNodeSelect }: DependencyGraphProps) => {
+const DependencyGraph = ({ nodes, links, selectedNodeId, onNodeSelect, onOverviewSelect }: DependencyGraphProps) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeRelation, setActiveRelation] = useState<RelationFilter>('ALL');
+  const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(new Set());
 
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
+  const selectedNodeIds = expandedNodeIds.size > 0
+    ? expandedNodeIds
+    : selectedNodeId
+      ? new Set([selectedNodeId])
+      : new Set<string>();
+  const isExpandMode = selectedNodeIds.size > 0;
+
+  useEffect(() => {
+    setExpandedNodeIds((current) => {
+      const validIds = new Set(nodes.map((node) => node.id));
+      const next = new Set([...current].filter((id) => validIds.has(id)));
+
+      if (selectedNodeId && validIds.has(selectedNodeId)) {
+        next.add(selectedNodeId);
+      }
+
+      return next;
+    });
+  }, [nodes, selectedNodeId]);
 
   const filteredLinks = useMemo(() => {
     if (activeRelation === 'ALL') return links;
@@ -95,35 +116,26 @@ const DependencyGraph = ({ nodes, links, selectedNodeId, onNodeSelect }: Depende
   }, [activeRelation, links]);
 
   const visibleLinks = useMemo(() => {
-    if (!selectedNodeId) {
-      return filteredLinks.slice(0, OVERVIEW_LIMIT);
+    if (!isExpandMode) {
+      return [];
     }
 
-    return filteredLinks.filter((link) => link.from === selectedNodeId || link.to === selectedNodeId);
-  }, [filteredLinks, selectedNodeId]);
+    return filteredLinks.filter((link) => selectedNodeIds.has(link.from) || selectedNodeIds.has(link.to));
+  }, [filteredLinks, isExpandMode, selectedNodeIds]);
 
   const visibleNodeIds = useMemo(() => {
-    if (!selectedNodeId) {
-      const ids = new Set<string>();
-      nodes
-        .slice()
-        .sort((a, b) => (b.incoming + b.outgoing) - (a.incoming + a.outgoing))
-        .slice(0, OVERVIEW_LIMIT)
-        .forEach((node) => ids.add(node.id));
-      visibleLinks.forEach((link) => {
-        ids.add(link.from);
-        ids.add(link.to);
-      });
-      return ids;
+    if (!isExpandMode) {
+      const uploadedIds = nodes.filter((node) => node.isResolved).map((node) => node.id);
+      return new Set(uploadedIds.length > 0 ? uploadedIds : nodes.map((node) => node.id));
     }
 
-    const ids = new Set<string>([selectedNodeId]);
+    const ids = new Set<string>(selectedNodeIds);
     visibleLinks.forEach((link) => {
       ids.add(link.from);
       ids.add(link.to);
     });
     return ids;
-  }, [nodes, selectedNodeId, visibleLinks]);
+  }, [isExpandMode, nodes, selectedNodeIds, visibleLinks]);
 
   const visibleNodes = useMemo(() => {
     return nodes.filter((node) => visibleNodeIds.has(node.id));
@@ -135,12 +147,21 @@ const DependencyGraph = ({ nodes, links, selectedNodeId, onNodeSelect }: Depende
     return { width: maxX, height: maxY };
   }, [visibleNodes]);
 
-  const hiddenCount = Math.max(0, links.length - visibleLinks.length);
+  const hiddenCount = Math.max(0, filteredLinks.length - visibleLinks.length);
+  const handleNodeClick = (node: DependencyNode) => {
+    setExpandedNodeIds((current) => new Set([...current, node.id]));
+    onNodeSelect?.(node);
+  };
+
+  const handleOverviewClick = () => {
+    setExpandedNodeIds(new Set());
+    onOverviewSelect?.();
+  };
 
   return (
     <div className={isFullscreen ? 'fixed inset-4 z-[100] rounded-2xl bg-slate-950 shadow-2xl shadow-black/60' : 'h-full w-full'}>
       <TransformWrapper
-        key={`${visibleNodes.length}-${visibleLinks.length}-${selectedNodeId || 'overview'}-${activeRelation}`}
+        key={`${visibleNodes.length}-${visibleLinks.length}-${[...selectedNodeIds].join(',') || 'overview'}-${activeRelation}`}
         initialScale={1}
         minScale={0.1}
         maxScale={4}
@@ -164,8 +185,18 @@ const DependencyGraph = ({ nodes, links, selectedNodeId, onNodeSelect }: Depende
                   {type}
                 </button>
               ))}
+              {isExpandMode && (
+                <button
+                  type="button"
+                  onClick={handleOverviewClick}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-2 text-xs font-bold text-slate-200 transition-colors hover:bg-slate-700"
+                >
+                  <ArrowLeft size={14} />
+                  Back / Overview
+                </button>
+              )}
               <div className="rounded-lg border border-slate-800 bg-slate-900/80 px-3 py-2 text-xs font-semibold text-slate-400">
-                {selectedNodeId ? 'Selected node impact' : 'Overview'} - {visibleLinks.length} shown{hiddenCount > 0 ? `, ${hiddenCount} hidden` : ''}
+                {isExpandMode ? 'Expand mode' : 'Overview mode'} - {visibleNodes.length} nodes, {visibleLinks.length} edges{hiddenCount > 0 ? `, ${hiddenCount} hidden` : ''}
               </div>
             </div>
 
@@ -263,10 +294,10 @@ const DependencyGraph = ({ nodes, links, selectedNodeId, onNodeSelect }: Depende
                             fill="none"
                             stroke={color}
                             strokeWidth="2"
-                            strokeOpacity={selectedNodeId ? 0.9 : 0.35}
+                            strokeOpacity={isExpandMode ? 0.9 : 0.35}
                             strokeDasharray={toNode.isResolved ? undefined : '7 7'}
                           />
-                          {selectedNodeId && (
+                          {isExpandMode && (
                             <text
                               x={(x1 + x2) / 2}
                               y={(y1 + y2) / 2 - 8}
@@ -290,7 +321,7 @@ const DependencyGraph = ({ nodes, links, selectedNodeId, onNodeSelect }: Depende
                       <button
                         type="button"
                         key={node.id}
-                        onClick={() => onNodeSelect?.(node)}
+                        onClick={() => handleNodeClick(node)}
                         className={`absolute min-h-[64px] rounded-xl border px-4 py-3 flex items-center gap-3 cursor-pointer hover:scale-105 transition-all shadow-lg text-left ${chrome.className} ${isSelected ? 'ring-2 ring-emerald-400 ring-offset-2 ring-offset-slate-950 scale-105' : ''}`}
                         style={{ left: node.x, top: node.y, width: `${NODE_WIDTH}px` }}
                         aria-pressed={isSelected}

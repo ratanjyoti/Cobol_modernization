@@ -1,6 +1,6 @@
-# Implementation for project_repo.py
+﻿# Implementation for project_repo.py
 from sqlalchemy.orm import Session
-from Persistence.sqlite.models import FileChunk, FileRelation, Project, ProjectComplexity, ProjectFile
+from Persistence.sqlite.models import FileChunk, FileComplexity, FileRelation, Project, ProjectComplexity, ProjectFile
 
 
 class ProjectRepository:
@@ -52,6 +52,7 @@ class ProjectRepository:
         """Deletes all file, chunk, relation, and complexity records for a project."""
         self.session.query(FileChunk).filter(FileChunk.run_id == run_id).delete(synchronize_session=False)
         self.session.query(FileRelation).filter(FileRelation.run_id == run_id).delete(synchronize_session=False)
+        self.session.query(FileComplexity).filter(FileComplexity.run_id == run_id).delete(synchronize_session=False)
         self.session.query(ProjectComplexity).filter(ProjectComplexity.run_id == run_id).delete(synchronize_session=False)
         count = self.session.query(ProjectFile).filter(ProjectFile.run_id == run_id).delete(synchronize_session=False)
         self.session.commit()
@@ -61,6 +62,7 @@ class ProjectRepository:
         """Deletes one project and all data records owned by the run."""
         self.session.query(FileChunk).filter(FileChunk.run_id == run_id).delete(synchronize_session=False)
         self.session.query(FileRelation).filter(FileRelation.run_id == run_id).delete(synchronize_session=False)
+        self.session.query(FileComplexity).filter(FileComplexity.run_id == run_id).delete(synchronize_session=False)
         self.session.query(ProjectComplexity).filter(ProjectComplexity.run_id == run_id).delete(synchronize_session=False)
         file_count = self.session.query(ProjectFile).filter(ProjectFile.run_id == run_id).delete(synchronize_session=False)
         project_count = self.session.query(Project).filter(Project.run_id == run_id).delete(synchronize_session=False)
@@ -71,8 +73,10 @@ class ProjectRepository:
         """Deletes all projects and run-owned data records."""
         self.session.query(FileChunk).delete(synchronize_session=False)
         self.session.query(FileRelation).delete(synchronize_session=False)
+        self.session.query(FileComplexity).delete(synchronize_session=False)
         self.session.query(ProjectComplexity).delete(synchronize_session=False)
         file_count = self.session.query(ProjectFile).delete(synchronize_session=False)
         project_count = self.session.query(Project).delete(synchronize_session=False)
         self.session.commit()
         return {"projects_deleted": project_count, "files_deleted": file_count}
+

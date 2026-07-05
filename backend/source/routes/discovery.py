@@ -1,4 +1,4 @@
-from typing import List, Optional
+﻿from typing import List, Optional
 import asyncio
 import os
 import shutil
@@ -20,11 +20,12 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from Persistence.neo4j.graph_service import GraphService
-from Persistence.sqlite.models import FileStatus, ProjectFile
+from Persistence.sqlite.models import FileChunk, FileComplexity, FileRelation, FileStatus, ProjectFile, ProjectComplexity
 from Persistence.sqlite.session import SessionLocal, get_db
 from Processes.discovery_process import DiscoveryProcess
 from Processes.graphing_process import GraphingProcess
 from source.websockets.socket_manager import manager
+from Chunking.chunking_orchestrator import ChunkingOrchestrator
 
 
 router = APIRouter(prefix="/discovery", tags=["Discovery"])
@@ -48,7 +49,126 @@ def remove_tree_sync(path: Path):
     if path.exists():
         shutil.rmtree(path, onerror=handle_remove_error)
 
+# 1. THE COMPLEXITY TAB DATA
+@router.get("/complexity/{run_id}")
+async def get_complexity(run_id: str, db: Session = Depends(get_db)):
+    proj_comp = db.query(ProjectComplexity).filter_by(run_id=run_id).first()
+    file_scores = db.query(FileComplexity).filter_by(run_id=run_id).order_by(FileComplexity.score.desc()).all()
 
+    file_breakdown = []
+    total_score = 0
+    for fs in file_scores:
+        chunk_count = db.query(FileChunk).filter(
+            FileChunk.run_id == run_id,
+            FileChunk.file_id == fs.file_id,
+        ).count()
+        total_score += fs.score or 0
+        file_breakdown.append({
+            "id": str(fs.file_id or fs.id),
+            "name": fs.filename,
+            "filename": fs.filename,
+            "filepath": fs.filepath,
+            "score": fs.score or 0,
+            "tier": fs.tier or "Low",
+            "effort": fs.effort or "Turbo",
+            "mode": fs.effort or "Turbo",
+            "chunks": chunk_count or 1,
+            "logic_count": fs.logic_count or 0,
+            "table_count": fs.table_count or 0,
+            "table_bonus": fs.table_bonus or 0,
+            "if_count": fs.if_count or 0,
+            "perform_until_count": fs.perform_until_count or 0,
+            "perform_varying_count": fs.perform_varying_count or 0,
+            "evaluate_count": fs.evaluate_count or 0,
+            "calculation": [
+                {"label": "IF statements", "value": fs.if_count or 0, "points": fs.if_count or 0},
+                {"label": "PERFORM UNTIL loops", "value": fs.perform_until_count or 0, "points": fs.perform_until_count or 0},
+                {"label": "PERFORM VARYING loops", "value": fs.perform_varying_count or 0, "points": fs.perform_varying_count or 0},
+                {"label": "EVALUATE branches", "value": fs.evaluate_count or 0, "points": fs.evaluate_count or 0},
+                {"label": "Unique SQL tables", "value": fs.table_count or 0, "points": fs.table_bonus or 0},
+            ],
+        })
+
+    average_score = round(total_score / len(file_scores), 1) if file_scores else 0
+    return {
+        "overall_tier": proj_comp.tier if proj_comp else "Unknown",
+        "overall_effort": proj_comp.reasoning_effort if proj_comp else "Balanced",
+        "average_score": average_score,
+        "files": file_breakdown,
+        "method": "Score = IF + PERFORM UNTIL + PERFORM VARYING + EVALUATE counts, plus 5 points when more than 3 unique SQL tables are referenced. Score < 5 uses Turbo, 5-14 uses Balanced, and 15+ uses Thorough.",
+    }
+
+
+# 2. THE DEPENDENCIES TAB DATA
+@router.get("/graph/{run_id}")
+async def get_graph_data(run_id: str, db: Session = Depends(get_db)):
+    files = db.query(ProjectFile).filter(ProjectFile.run_id == run_id).all()
+    relations = db.query(FileRelation).filter(FileRelation.run_id == run_id).all()
+
+    nodes_by_id = {}
+    for file in files:
+        nodes_by_id[file.filename] = {
+            "id": file.filename,
+            "label": file.filename,
+            "type": file.detected_lang or "file",
+            "filepath": file.filepath,
+            "resolved": True,
+        }
+
+    edges = []
+    for relation in relations:
+        target_id = relation.target_item
+        if target_id not in nodes_by_id:
+            nodes_by_id[target_id] = {
+                "id": target_id,
+                "label": target_id,
+                "type": relation.relation_type,
+                "filepath": None,
+                "resolved": False,
+            }
+        edges.append({
+            "from": relation.source_file,
+            "to": target_id,
+            "type": relation.relation_type,
+        })
+
+    return {"nodes": list(nodes_by_id.values()), "edges": edges}
+
+# 3. THE DDD TAB DATA
+@router.get("/ddd/{run_id}")
+async def get_ddd_discovery(run_id: str, db: Session = Depends(get_db)):
+    files = db.query(ProjectFile).filter(ProjectFile.run_id == run_id).all()
+    relations = db.query(FileRelation).filter(FileRelation.run_id == run_id).all()
+
+    domain_map = {
+        "READS_WRITES": {"name": "Data Access", "programs": set(), "rules": 0, "color": "bg-rose-500"},
+        "CALLS": {"name": "Program Orchestration", "programs": set(), "rules": 0, "color": "bg-blue-500"},
+        "INCLUDES": {"name": "Shared Copybooks", "programs": set(), "rules": 0, "color": "bg-emerald-500"},
+        "UNLINKED": {"name": "Standalone Modules", "programs": set(), "rules": 0, "color": "bg-amber-500"},
+    }
+
+    linked_sources = set()
+    for relation in relations:
+        bucket = domain_map.get(relation.relation_type, domain_map["UNLINKED"])
+        bucket["programs"].add(relation.source_file)
+        bucket["rules"] += 1
+        linked_sources.add(relation.source_file)
+
+    for file in files:
+        if file.filename not in linked_sources:
+            domain_map["UNLINKED"]["programs"].add(file.filename)
+
+    domains = []
+    for domain in domain_map.values():
+        if domain["programs"] or domain["rules"]:
+            domains.append({
+                "name": domain["name"],
+                "programs": sorted(domain["programs"]),
+                "rules": domain["rules"],
+                "color": domain["color"],
+            })
+
+    return domains
 @router.post("/upload-zip")
 async def upload_zip(
     run_id: str = Form(...),
@@ -82,30 +202,58 @@ async def launch_pipeline(
     target_lang: str = Form(""),
     scope: str = Form(""),
 ):
-    """
-    Triggers the transition from ingestion to analysis and starts Neo4j graphing.
-    """
+    # 1. Run Neo4j Graphing in background
     background_tasks.add_task(run_graphing_task, run_id)
+    
+    # 2. Run Smart Chunking in background (Slicing the code)
+    background_tasks.add_task(run_chunking_task, run_id)
 
     return {
         "status": "Pipeline Launched",
         "run_id": run_id,
-        "source_lang": source_lang,
-        "target_lang": target_lang,
-        "scope": scope,
-        "parallel_tasks": ["Neo4j_Graphing"],
+        "parallel_tasks": ["Neo4j_Graphing", "Semantic_Chunking"],
     }
 
-
 def run_graphing_task(run_id: str):
-    """Execute graphing with a fresh database session for the background task."""
+    """Best-effort Neo4j graph build; SQLite remains the dependency source of truth."""
     db = SessionLocal()
     try:
-        graph_proc = GraphingProcess(db)
-        graph_proc.build_full_graph(run_id)
-        print(f"Graph successfully built for {run_id}")
+        GraphingProcess(db).build_full_graph(run_id)
+        print(f"Graphing completed for project {run_id}")
     except Exception as e:
-        print(f"Background Graphing Error for {run_id}: {str(e)}")
+        print(f"Graphing skipped for {run_id}: {str(e)}")
+    finally:
+        db.close()
+def run_chunking_task(run_id: str):
+    """Process all confirmed files through the Smart Chunker."""
+    db = SessionLocal()
+    try:
+        # 1. Get only files that the human confirmed the language for
+        from Persistence.sqlite.models import ProjectFile, FileStatus
+        confirmed_files = db.query(ProjectFile).filter(
+            ProjectFile.run_id == run_id,
+            ProjectFile.status == FileStatus.CONFIRMED
+        ).all()
+
+        orchestrator = ChunkingOrchestrator(db)
+        
+        for f in confirmed_files:
+            # Construct path to the file
+            full_path = Path(f"data/uploads/{run_id}") / f.filename
+            if full_path.exists():
+                with open(full_path, 'r', errors='ignore') as file_handle:
+                    content = file_handle.read()
+                    # This does the Sizing -> Slicing -> SQLite storing
+                    orchestrator.process_file(
+                        run_id=run_id,
+                        file_id=f.id,
+                        filename=f.filename,
+                        content=content,
+                        lang=f.detected_lang
+                    )
+        print(f"Chunking completed for project {run_id}")
+    except Exception as e:
+        print(f"Chunking Error for {run_id}: {str(e)}")
     finally:
         db.close()
 
@@ -278,3 +426,6 @@ async def confirm_language(data: dict, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+

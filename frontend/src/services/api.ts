@@ -99,6 +99,19 @@ export const ProjectAPI = {
     return response.data;
   },
 
+  getComplexity: async (runId: string) => {
+    const response = await api.get(`/discovery/complexity/${runId}`);
+    return response.data;
+  },
+  getGraph: async (runId: string) => {
+    const response = await api.get(`/discovery/graph/${runId}`);
+    return response.data;
+  },
+  getDDD: async (runId: string) => {
+    const response = await api.get(`/discovery/ddd/${runId}`);
+    return response.data;
+  },
+
   listFiles: async (runId: string): Promise<{ files: FileRecord[] }> => {
     const response = await api.get(`/projects/${runId}/files`);
     return response.data;

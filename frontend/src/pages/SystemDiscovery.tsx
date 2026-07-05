@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import DependencyGraph, { type DependencyLink, type DependencyNode } from './DependencyGraph';
 import DDDDiscovery from './DDDDiscovery';
 import { FileText, GitBranch, Loader2, Share2 } from 'lucide-react';
@@ -7,6 +7,7 @@ import type { DependencyRelation, FileRecord } from '../services/api';
 
 const normalizeName = (value: string) => value.trim().toLowerCase().replace(/\\/g, '/');
 const withoutExtension = (value: string) => value.replace(/\.[^.\/]+$/, '');
+const nodeWidth = 240;
 
 const isProgramFile = (file: FileRecord) => {
   const lang = (file.detected_lang || '').toLowerCase();
@@ -76,31 +77,64 @@ const findFileForRelationName = (files: FileRecord[], relationName: string) => {
   });
 };
 
-const placeLayeredNodes = (nodes: DependencyNode[]) => {
-  const layers: Record<DependencyNode['type'], number> = {
-    job: 0,
-    program: 1,
-    copybook: 2,
-    table: 3,
-    file: 4,
-    external: 4,
-  };
+const placeUnlinkedNodes = (nodes: DependencyNode[]) => {
+  const groups: DependencyNode['type'][] = ['job', 'program', 'copybook', 'table', 'file', 'external'];
+  let index = 0;
 
-  const grouped = new Map<number, DependencyNode[]>();
+  groups.forEach((type) => {
+    nodes
+      .filter((node) => node.type === type)
+      .forEach((node) => {
+        node.x = 120 + (index % 3) * 300;
+        node.y = 120 + Math.floor(index / 3) * 110;
+        index += 1;
+      });
+  });
+};
 
-  nodes.forEach((node) => {
-    const layer = layers[node.type] ?? 4;
-    if (!grouped.has(layer)) grouped.set(layer, []);
-    grouped.get(layer)?.push(node);
+const placeConnectedNodes = (nodes: DependencyNode[], links: DependencyLink[]) => {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const hub = [...nodes].sort((a, b) => (b.incoming + b.outgoing) - (a.incoming + a.outgoing))[0];
+
+  if (!hub) return;
+
+  hub.x = 520;
+  hub.y = 310;
+
+  const neighborIds = new Set<string>();
+  links.forEach((link) => {
+    if (link.from === hub.id) neighborIds.add(link.to);
+    if (link.to === hub.id) neighborIds.add(link.from);
   });
 
-  grouped.forEach((layerNodes, layer) => {
-    layerNodes
-      .sort((a, b) => (b.incoming + b.outgoing) - (a.incoming + a.outgoing) || a.label.localeCompare(b.label))
-      .forEach((node, index) => {
-        node.x = 120 + layer * 360;
-        node.y = 100 + index * 110;
-      });
+  const neighbors = [...neighborIds]
+    .map((id) => byId.get(id))
+    .filter((node): node is DependencyNode => Boolean(node))
+    .sort((a, b) => b.outgoing + b.incoming - (a.outgoing + a.incoming));
+
+  const radiusX = Math.max(340, Math.min(620, neighbors.length * 62));
+  const radiusY = Math.max(190, Math.min(360, neighbors.length * 36));
+
+  neighbors.forEach((node, index) => {
+    const angle = (Math.PI * 2 * index) / Math.max(neighbors.length, 1) - Math.PI / 2;
+    node.x = Math.round(hub.x + Math.cos(angle) * radiusX);
+    node.y = Math.round(hub.y + Math.sin(angle) * radiusY);
+  });
+
+  const placed = new Set([hub.id, ...neighbors.map((node) => node.id)]);
+  const remaining = nodes.filter((node) => !placed.has(node.id));
+  const linkedRemaining = remaining.filter((node) => node.incoming + node.outgoing > 0);
+  const unlinked = remaining.filter((node) => node.incoming + node.outgoing === 0);
+
+  linkedRemaining.forEach((node, index) => {
+    const side = index % 2 === 0 ? 1 : -1;
+    node.x = hub.x + side * (560 + Math.floor(index / 2) * 280);
+    node.y = 120 + (Math.floor(index / 2) % 5) * 108;
+  });
+
+  unlinked.forEach((node, index) => {
+    node.x = 1040 + (index % 2) * 300;
+    node.y = 120 + Math.floor(index / 2) * 104;
   });
 };
 
@@ -174,7 +208,17 @@ const buildGraphData = (files: FileRecord[], relations: DependencyRelation[]) =>
   });
 
   const nodes = [...nodesById.values()];
-  placeLayeredNodes(nodes);
+  if (links.length > 0) {
+    placeConnectedNodes(nodes, links);
+  } else {
+    placeUnlinkedNodes(nodes);
+  }
+
+  nodes.forEach((node) => {
+    node.x = Math.max(80, node.x);
+    node.y = Math.max(80, node.y);
+    if (node.x < 80 + nodeWidth) node.x = Math.max(80, node.x);
+  });
 
   return { nodes, links };
 };
@@ -185,7 +229,6 @@ const SystemDiscovery = () => {
   const [selectedNode, setSelectedNode] = useState<DependencyNode | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const detailSectionRef = useRef<HTMLDivElement | null>(null);
 
   const runId = localStorage.getItem('active_run_id');
 
@@ -236,18 +279,17 @@ const SystemDiscovery = () => {
 
   useEffect(() => {
     setSelectedNode((current) => {
-      if (current && nodes.some((node) => node.id === current.id)) {
-        return nodes.find((node) => node.id === current.id) || current;
-      }
-      return nodes.find((node) => node.outgoing > 0) || nodes[0] || null;
+      if (!current) return null;
+      return nodes.find((node) => node.id === current.id) || null;
     });
   }, [nodes]);
 
   const handleNodeSelect = (node: DependencyNode) => {
     setSelectedNode(node);
-    window.setTimeout(() => {
-      detailSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 80);
+  };
+
+  const handleOverviewSelect = () => {
+    setSelectedNode(null);
   };
 
   return (
@@ -259,7 +301,7 @@ const SystemDiscovery = () => {
             <h1 className="text-3xl font-bold text-white">System Discovery</h1>
           </div>
           <p className="text-slate-400">
-            Layered dependency view for the active run, showing focused impact paths instead of the full mesh.
+            Dependency view for the active run, showing programs, copybooks, data stores, and unresolved external targets.
           </p>
         </div>
         
@@ -296,11 +338,11 @@ const SystemDiscovery = () => {
             ) : error ? (
               <div className="flex h-full items-center justify-center text-sm text-red-300">{error}</div>
             ) : (
-              <DependencyGraph nodes={nodes} links={links} selectedNodeId={selectedNode?.id} onNodeSelect={handleNodeSelect} />
+              <DependencyGraph nodes={nodes} links={links} selectedNodeId={selectedNode?.id} onNodeSelect={handleNodeSelect} onOverviewSelect={handleOverviewSelect} />
             )}
           </div>
 
-          <div ref={detailSectionRef} className="flex items-center justify-between px-2 scroll-mt-6">
+          <div className="flex items-center justify-between px-2 scroll-mt-6">
             <div className="flex items-center gap-2 text-white font-bold text-sm">
               <FileText size={16} className="text-emerald-400" />
               Node Details

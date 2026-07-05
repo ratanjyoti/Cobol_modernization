@@ -1,86 +1,103 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { 
-  LayoutDashboard, Share2, FileText, GitBranch, 
-  AlertTriangle, FileCheck, Info, ChevronRight,
-  Database, Download, X 
-} from 'lucide-react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ProjectAPI } from '../services/api';
+import {
+  AlertTriangle, Cpu, Database, FileCheck, FileText, GitBranch,
+  Info, Layers, Loader2, Share2, X, Zap
+} from 'lucide-react';
 
-// --- MOCK API DATA (Simulating Backend Response) ---
-const MOCK_DATA = {
-  stats: {
-    totalPrograms: 120,
-    totalLines: 450000,
-    dependencies: 3400,
-    businessRules: 890,
-    avgComplexity: 12.4,
-  },
-  dependencies: {
-    nodes: [
-      { id: 'P1', label: 'PAYROLL01', type: 'PROGRAM', risk: 'High' },
-      { id: 'P2', label: 'TAXCALC', type: 'PROGRAM', risk: 'Medium' },
-      { id: 'P3', label: 'CUST-DB', type: 'FILE', risk: 'Low' },
-      { id: 'P4', label: 'REPORTGEN', type: 'PROGRAM', risk: 'Low' },
-    ],
-    edges: [
-      { from: 'P1', to: 'P2', type: 'CALLS' },
-      { from: 'P2', to: 'P3', type: 'READS' },
-      { from: 'P1', to: 'P4', type: 'CALLS' },
-    ]
-  },
-  rules: [
-    { id: 'R1', title: 'Overdraft Limit', cobol: 'IF BAL < 0 PERFORM PENALTY', english: 'If account balance is negative, apply penalty fee.', status: 'Verified' },
-    { id: 'R2', title: 'Tax Calc', cobol: 'COMPUTE TAX = SAL * 0.2', english: 'Calculate tax at 20% for salaries above 50k.', status: 'Review' },
-    { id: 'R3', title: 'Customer Validation', cobol: 'IF CUST-ID NOT FOUND STOP', english: 'Verify customer existence before processing.', status: 'Verified' },
-  ],
-  domains: [
-    { name: 'Account Management', programs: ['ACCT01', 'ACCT02'], rules: 45, color: 'bg-blue-500' },
-    { name: 'Payment Processing', programs: ['PAY01', 'PAY05'], rules: 120, color: 'bg-emerald-500' },
-    { name: 'Loan Management', programs: ['LOAN01', 'LOAN08'], rules: 80, color: 'bg-purple-500' },
-  ],
-  complexity: [
-    { name: 'PAYROLL01', score: 18, level: 'HIGH', factors: ['EXEC SQL', 'CICS'] },
-    { name: 'TAXCALC', score: 12, level: 'MEDIUM', factors: ['Nested PERFORM'] },
-    { name: 'REPORTGEN', score: 4, level: 'LOW', factors: ['Simple I/O'] },
-  ]
+const tierStyle: Record<string, string> = {
+  High: 'bg-red-500/10 text-red-300 border-red-500/30',
+  Medium: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
+  Low: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
+};
+
+const modeStyle: Record<string, string> = {
+  Thorough: 'text-red-300',
+  Balanced: 'text-amber-300',
+  Turbo: 'text-emerald-300',
 };
 
 const ReverseEngineering = () => {
-  const [activeTab, setActiveTab] = useState('overview');
-  const [selectedNode, setSelectedNode] = useState<(typeof MOCK_DATA.dependencies.nodes)[number] | null>(null);
+  const runId = localStorage.getItem('active_run_id');
+  const [activeTab, setActiveTab] = useState('complexity');
+  const [complexityData, setComplexityData] = useState<any>(null);
+  const [selectedFile, setSelectedFile] = useState<any>(null);
+  const [graphData, setGraphData] = useState<any>({ nodes: [], edges: [] });
+  const [dddData, setDddData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+
+    const loadTabData = async () => {
+      if (!runId) {
+        setError('No active project selected. Start or open a project first.');
+        return;
+      }
+
+      setLoading(true);
+      setError('');
+      try {
+        if (activeTab === 'complexity') {
+          const res = await ProjectAPI.getComplexity(runId);
+          if (!active) return;
+          setComplexityData(res);
+          setSelectedFile((current: any) => current ? res.files?.find((file: any) => file.id === current.id) || null : res.files?.[0] || null);
+        }
+        if (activeTab === 'dependencies') {
+          const res = await ProjectAPI.getGraph(runId);
+          if (!active) return;
+          setGraphData(res || { nodes: [], edges: [] });
+        }
+        if (activeTab === 'ddd') {
+          const res = await ProjectAPI.getDDD(runId);
+          if (!active) return;
+          setDddData(res || []);
+        }
+      } catch (e: any) {
+        if (active) setError(e.response?.data?.detail || 'Unable to load analysis data for this run.');
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    loadTabData();
+    return () => { active = false; };
+  }, [activeTab, runId]);
 
   const tabs = [
-    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-    { id: 'dependencies', label: 'Dependencies', icon: Share2 },
-    { id: 'logic', label: 'Business Logic', icon: FileText },
-    { id: 'ddd', label: 'DDD Discovery', icon: GitBranch },
     { id: 'complexity', label: 'Complexity', icon: AlertTriangle },
+    { id: 'dependencies', label: 'Dependencies', icon: Share2 },
+    { id: 'ddd', label: 'DDD Discovery', icon: GitBranch },
     { id: 'reports', label: 'Reports', icon: FileCheck },
   ];
 
+  const dependencySummary = useMemo(() => {
+    const nodes = graphData?.nodes || [];
+    const edges = graphData?.edges || [];
+    const unresolved = nodes.filter((node: any) => node.resolved === false).length;
+    return { nodes: nodes.length, edges: edges.length, unresolved };
+  }, [graphData]);
+
   return (
     <div className="space-y-6 h-full">
-      {/* Header */}
-      <div className="flex justify-between items-end">
+      <div className="flex justify-between items-end gap-4">
         <div className="space-y-1">
           <h1 className="text-3xl font-extrabold text-white tracking-tight">Reverse Engineering Explorer</h1>
-          <p className="text-slate-400">Transforming raw COBOL into structured architectural intelligence.</p>
+          <p className="text-slate-400">Complexity scoring, dependency discovery, and domain grouping for the active run.</p>
         </div>
-        <div className="flex gap-3">
-          <button className="btn-secondary flex items-center gap-2 text-sm"><Database size={16}/> Sync Graph</button>
-          <button className="btn-primary flex items-center gap-2 text-sm"><Download size={16}/> Export Model</button>
-        </div>
+        <div className="text-xs font-mono text-slate-500">Run: <span className="text-slate-300">{runId || 'none'}</span></div>
       </div>
 
-      {/* Tab Navigation */}
-      <div className="flex gap-2 p-1 bg-slate-900 rounded-xl border border-slate-800 w-fit">
-        {tabs.map(tab => (
-          <button 
+      <div className="flex flex-wrap gap-2 p-1 bg-slate-950 rounded-xl border border-slate-800 w-fit">
+        {tabs.map((tab) => (
+          <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-              activeTab === tab.id ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+              activeTab === tab.id ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800'
             }`}
           >
             <tab.icon size={14} /> {tab.label}
@@ -88,183 +105,121 @@ const ReverseEngineering = () => {
         ))}
       </div>
 
-      {/* Content Area */}
-      <div className="grid grid-cols-12 gap-6 h-[calc(100vh-300px)]">
-        <div className="col-span-9 glass-card p-6 overflow-y-auto relative">
-          
+      <div className="grid grid-cols-12 gap-6 h-[calc(100vh-260px)] min-h-[560px]">
+        <div className="col-span-12 xl:col-span-9 glass-card p-6 overflow-y-auto relative">
+          {loading && <div className="absolute inset-0 bg-slate-900/70 flex items-center justify-center z-10"><Loader2 className="animate-spin text-indigo-500" /></div>}
+          {error && <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</div>}
+
           <AnimatePresence mode="wait">
-            {activeTab === 'overview' && (
-              <motion.div 
-                key="overview"
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
-                className="grid grid-cols-3 gap-4"
-              >
-                {Object.entries(MOCK_DATA.stats).map(([key, val]) => (
-                  <div key={key} className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-                    <p className="text-xs font-bold text-slate-500 uppercase">{key.replace(/([A-Z])/g, ' $1')}</p>
-                    <p className="text-2xl font-black text-white">{val}</p>
+            {activeTab === 'complexity' && (
+              <motion.div key="complexity" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                    <p className="text-xs uppercase font-bold text-slate-500">Overall Effort</p>
+                    <p className="mt-1 text-xl font-bold text-white">{complexityData?.overall_effort || 'Balanced'}</p>
                   </div>
-                ))}
+                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                    <p className="text-xs uppercase font-bold text-slate-500">Average Score</p>
+                    <p className="mt-1 text-xl font-bold text-white">{complexityData?.average_score ?? 0}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                    <p className="text-xs uppercase font-bold text-slate-500">Files Scored</p>
+                    <p className="mt-1 text-xl font-bold text-white">{complexityData?.files?.length || 0}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4 text-sm text-slate-300">
+                  <span className="font-bold text-indigo-300">How scoring works: </span>{complexityData?.method || 'Upload files to calculate complexity.'}
+                </div>
+
+                <div className="space-y-3">
+                  {(complexityData?.files || []).map((file: any) => (
+                    <button
+                      key={file.id || file.name}
+                      onClick={() => setSelectedFile(file)}
+                      className={`w-full grid grid-cols-12 items-center gap-3 p-4 rounded-xl border transition-all text-left ${
+                        selectedFile?.id === file.id ? 'border-indigo-500 bg-indigo-500/10' : 'border-slate-800 bg-slate-900 hover:border-slate-600'
+                      }`}
+                    >
+                      <div className="col-span-5 min-w-0">
+                        <p className="truncate text-sm font-bold text-white">{file.name}</p>
+                        <p className="truncate text-[11px] font-mono text-slate-500">{file.filepath}</p>
+                      </div>
+                      <div className="col-span-2 text-xs text-slate-400"><Layers size={13} className="inline mr-1" />{file.chunks} chunk{file.chunks === 1 ? '' : 's'}</div>
+                      <div className="col-span-2 text-xs font-mono text-slate-300">Score {file.score}</div>
+                      <div className={`col-span-1 text-center rounded border px-2 py-1 text-[10px] font-bold ${tierStyle[file.tier] || tierStyle.Low}`}>{file.tier}</div>
+                      <div className={`col-span-2 text-right text-xs font-bold ${modeStyle[file.mode] || 'text-indigo-300'}`}>{file.mode} mode</div>
+                    </button>
+                  ))}
+                  {(!complexityData?.files || complexityData.files.length === 0) && (
+                    <div className="rounded-xl border border-slate-800 bg-slate-900 p-8 text-center text-slate-500">No complexity scores yet. Upload source files for this run.</div>
+                  )}
+                </div>
               </motion.div>
             )}
 
             {activeTab === 'dependencies' && (
-              <motion.div 
-                key="dependencies"
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
-                className="h-full flex items-center justify-center bg-slate-950 rounded-xl border border-slate-800 relative overflow-hidden"
-              >
-                <div className="absolute inset-0 opacity-20" style={{backgroundImage: 'radial-gradient(#4f46e5 1px, transparent 1px)', backgroundSize: '30px 30px'}} />
-                <div className="relative flex gap-12 items-center">
-                  {MOCK_DATA.dependencies.nodes.map(node => (
-                    <div 
-                      key={node.id} 
-                      onClick={() => setSelectedNode(node)}
-                      className="w-32 h-32 rounded-full bg-slate-900 border-2 border-indigo-500 flex flex-col items-center justify-center cursor-pointer hover:scale-110 transition-all shadow-lg shadow-indigo-500/20"
-                    >
-                      <span className="text-[10px] text-slate-500 font-bold">{node.type}</span>
-                      <span className="text-xs font-bold text-white">{node.label}</span>
-                    </div>
-                  ))}
+              <motion.div key="dependencies" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-4"><p className="text-xs uppercase font-bold text-slate-500">Nodes</p><p className="mt-1 text-xl font-bold text-white">{dependencySummary.nodes}</p></div>
+                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-4"><p className="text-xs uppercase font-bold text-slate-500">Relations</p><p className="mt-1 text-xl font-bold text-white">{dependencySummary.edges}</p></div>
+                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-4"><p className="text-xs uppercase font-bold text-slate-500">Unresolved</p><p className="mt-1 text-xl font-bold text-white">{dependencySummary.unresolved}</p></div>
                 </div>
-                <div className="absolute bottom-4 left-4 text-[10px] text-slate-500 font-mono">Graph View: Interactive Node Map</div>
-              </motion.div>
-            )}
-
-            {activeTab === 'logic' && (
-              <motion.div 
-                key="logic"
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
-                className="space-y-6"
-              >
-                <div className="flex justify-between items-center">
-                  <h3 className="text-white font-bold">Extracted Logic Preview</h3>
-                  <Link 
-                    to="/business-logic" 
-                    className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-indigo-500 transition-all flex items-center gap-1"
-                  >
-                    Manage All Rules <ChevronRight size={14} />
-                  </Link>
-                </div>
-                <div className="grid grid-cols-1 gap-4">
-                  {MOCK_DATA.rules.slice(0, 2).map(rule => (
-                    <div key={rule.id} className="p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-indigo-500 transition-all group">
-                      <div className="flex justify-between mb-3">
-                        <span className="text-sm font-bold text-white">{rule.title}</span>
-                        <span className={`status-pill ${rule.status === 'Verified' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}`}>{rule.status}</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 font-mono text-xs text-indigo-300 truncate">{rule.cobol}</div>
-                        <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700 text-xs text-slate-300 italic truncate">{rule.english}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/20 text-center">
-                  <p className="text-xs text-slate-500">
-                    Showing 2 of {MOCK_DATA.rules.length} extracted rules. 
-                    <Link to="/business-logic" className="text-indigo-400 ml-1 hover:underline">View full library $\rightarrow$</Link>
-                  </p>
+                <div className="rounded-xl border border-slate-800 overflow-hidden">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-800 text-slate-400 text-xs uppercase"><tr><th className="p-3">Source</th><th className="p-3">Relation</th><th className="p-3">Target</th></tr></thead>
+                    <tbody className="divide-y divide-slate-800">
+                      {(graphData?.edges || []).map((edge: any, index: number) => <tr key={`${edge.from}-${edge.to}-${index}`} className="text-slate-300"><td className="p-3 font-mono text-xs">{edge.from}</td><td className="p-3 text-indigo-300 text-xs font-bold">{edge.type}</td><td className="p-3 font-mono text-xs">{edge.to}</td></tr>)}
+                    </tbody>
+                  </table>
+                  {(graphData?.edges || []).length === 0 && <div className="p-8 text-center text-slate-500">No dependency relations discovered yet.</div>}
                 </div>
               </motion.div>
             )}
 
             {activeTab === 'ddd' && (
-              <motion.div 
-                key="ddd"
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
-                className="grid grid-cols-2 gap-6"
-              >
-                {MOCK_DATA.domains.map(domain => (
-                  <div key={domain.name} className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-3 h-3 rounded-full ${domain.color}`} />
-                      <h4 className="font-bold text-white">{domain.name}</h4>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {domain.programs.map(p => <span key={p} className="text-[10px] bg-slate-800 text-slate-400 px-2 py-1 rounded border border-slate-700">{p}</span>)}
-                    </div>
-                    <div className="text-xs text-slate-500">Extracted {domain.rules} business rules</div>
+              <motion.div key="ddd" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {dddData.map((domain: any) => (
+                  <div key={domain.name} className="rounded-xl border border-slate-800 bg-slate-900 p-5 space-y-4">
+                    <div className="flex items-center gap-3"><div className={`w-3 h-3 rounded-full ${domain.color}`} /><h4 className="font-bold text-white">{domain.name}</h4></div>
+                    <div className="flex flex-wrap gap-2">{domain.programs.map((program: string) => <span key={program} className="text-[10px] bg-slate-800 text-slate-300 px-2 py-1 rounded border border-slate-700">{program}</span>)}</div>
+                    <div className="text-xs text-slate-500">{domain.rules} discovered relation{domain.rules === 1 ? '' : 's'} mapped into this boundary.</div>
                   </div>
                 ))}
-              </motion.div>
-            )}
-
-            {activeTab === 'complexity' && (
-              <motion.div 
-                key="complexity"
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
-                className="space-y-4"
-              >
-                {MOCK_DATA.complexity.map(item => (
-                  <div key={item.name} className="flex items-center gap-4 p-4 rounded-xl bg-slate-900 border border-slate-800">
-                    <div className={`w-3 h-3 rounded-full ${item.level === 'HIGH' ? 'bg-red-500' : item.level === 'MEDIUM' ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-                    <span className="flex-1 text-sm font-bold text-white">{item.name}</span>
-                    <span className="text-xs font-mono text-slate-500">Score: {item.score}</span>
-                    <div className="flex gap-2">
-                      {item.factors.map(f => <span key={f} className="text-[10px] bg-slate-800 px-2 py-1 rounded text-slate-400">{f}</span>)}
-                    </div>
-                  </div>
-                ))}
+                {dddData.length === 0 && <div className="lg:col-span-2 rounded-xl border border-slate-800 bg-slate-900 p-8 text-center text-slate-500">No DDD boundaries discovered yet.</div>}
               </motion.div>
             )}
 
             {activeTab === 'reports' && (
-              <motion.div 
-                key="reports"
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
-                className="space-y-6"
-              >
-                <div className="p-6 bg-indigo-600/10 border border-indigo-500/30 rounded-2xl">
-                  <h3 className="text-lg font-bold text-white mb-2">Migration Readiness: 68%</h3>
-                  <p className="text-sm text-slate-400">The system is largely ready for Java conversion. Highest risk detected in PAYMENT-ENGINE due to heavy CICS dependencies.</p>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                   <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl">
-                      <p className="text-xs font-bold text-slate-500 mb-2">Bottlenecks</p>
-                      <p className="text-sm text-white">CUST-DB access is a single point of failure for 12 programs.</p>
-                   </div>
-                   <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl">
-                      <p className="text-xs font-bold text-slate-500 mb-2">Effort Estimate</p>
-                      <p className="text-sm text-white">Estimated 450 developer-hours for manual rule validation.</p>
-                   </div>
-                </div>
+              <motion.div key="reports" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="rounded-xl border border-slate-800 bg-slate-900 p-8 text-slate-400">
+                Analysis reports will use the complexity, dependency, and DDD data shown in the other tabs.
               </motion.div>
             )}
           </AnimatePresence>
         </div>
 
-        {/* RIGHT: Node Detail View */}
-        <div className="col-span-3 glass-card p-6 border-indigo-500/30 bg-indigo-500/5">
-          {selectedNode ? (
+        <div className="col-span-12 xl:col-span-3 glass-card p-6 border-indigo-500/30 bg-indigo-500/5 overflow-y-auto">
+          {selectedFile && activeTab === 'complexity' ? (
             <div className="space-y-6">
-              <div className="flex justify-between items-center">
-                <h3 className="text-xl font-bold text-white">{selectedNode.label}</h3>
-                <button onClick={() => setSelectedNode(null)} className="text-slate-500 hover:text-white transition-colors">
-                  <X size={18}/>
-                </button>
+              <div className="flex justify-between items-start gap-3">
+                <div className="min-w-0"><h3 className="text-lg font-bold text-white truncate">{selectedFile.name}</h3><p className="text-[11px] font-mono text-slate-500 truncate">{selectedFile.filepath}</p></div>
+                <button onClick={() => setSelectedFile(null)} className="text-slate-500 hover:text-white transition-colors"><X size={18} /></button>
               </div>
-              <div className="space-y-4">
-                <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
-                  <p className="text-xs font-bold text-slate-500 uppercase mb-1">Analysis</p>
-                  <p className="text-sm text-slate-300 italic">"This program manages the core payroll logic and calculates monthly tax based on state codes."</p>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-xs font-bold text-slate-500 uppercase">Dependencies</p>
-                  <div className="flex flex-wrap gap-2">
-                    {MOCK_DATA.dependencies.edges
-                      .filter(e => e.from === selectedNode.id || e.to === selectedNode.id)
-                      .map((e, i) => (
-                        <span key={i} className="text-[10px] bg-slate-800 px-2 py-1 rounded border border-slate-700 text-slate-300">{e.type}</span>
-                      ))}
-                  </div>
-                </div>
+              <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-indigo-400 text-xs font-bold uppercase"><Zap size={14} /> Calculation</div>
+                {(selectedFile.calculation || []).map((item: any) => <div key={item.label} className="flex justify-between gap-3 text-sm"><span className="text-slate-500">{item.label}</span><span className="text-white font-mono">{item.points}</span></div>)}
+                <div className="h-px bg-slate-800" />
+                <div className="flex justify-between text-sm font-bold"><span className="text-slate-300">Final Score</span><span className="text-indigo-300">{selectedFile.score}</span></div>
+              </div>
+              <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-2">
+                <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold uppercase"><Cpu size={14} /> Execution Mode</div>
+                <p className="text-sm text-slate-300">This file will use <span className="text-white font-bold">{selectedFile.mode}</span> processing with <span className="text-white font-bold">{selectedFile.chunks}</span> stored chunk{selectedFile.chunks === 1 ? '' : 's'}.</p>
               </div>
             </div>
           ) : (
-            <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-50">
+            <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-60">
               <Info size={40} className="text-slate-600" />
-              <p className="text-sm text-slate-500">Select a node from the graph to view detailed intelligence</p>
+              <p className="text-sm text-slate-500">Select a scored file to see how its complexity and processing mode were calculated.</p>
             </div>
           )}
         </div>

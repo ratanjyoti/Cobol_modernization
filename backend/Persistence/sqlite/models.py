@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enum, Text  # <--- ADD Enum HERE
+﻿from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enum, Text  # <--- ADD Enum HERE
 from sqlalchemy.ext.declarative import declarative_base
 import enum  # This is the python module for the class definition
 import datetime
@@ -54,6 +54,24 @@ class ProjectComplexity(Base):
     tier = Column(String) # Low, Medium, High
     reasoning_effort = Column(String) # Turbo, Fast, Balanced, Thorough
 
+
+class FileComplexity(Base):
+    __tablename__ = "file_complexity"
+    id = Column(Integer, primary_key=True)
+    run_id = Column(String, ForeignKey("projects.run_id"), nullable=False)
+    file_id = Column(Integer, ForeignKey("project_files.id"), nullable=True)
+    filename = Column(String, nullable=False)
+    filepath = Column(String, nullable=False)
+    score = Column(Integer)
+    tier = Column(String)
+    effort = Column(String)
+    logic_count = Column(Integer, default=0)
+    table_count = Column(Integer, default=0)
+    table_bonus = Column(Integer, default=0)
+    if_count = Column(Integer, default=0)
+    perform_until_count = Column(Integer, default=0)
+    perform_varying_count = Column(Integer, default=0)
+    evaluate_count = Column(Integer, default=0)
 class FileChunk(Base):
     __tablename__ = "file_chunks"
     id = Column(Integer, primary_key=True)
@@ -73,3 +91,4 @@ class FileRelation(Base):
     source_file = Column(String, nullable=False) # e.g., 'ACCOUNT.cbl'
     target_item = Column(String, nullable=False) # e.g., 'CUST-PROC' or 'CUST_TABLE'
     relation_type = Column(String, nullable=False) # 'CALLS', 'INCLUDES', 'READS_WRITES'
+
