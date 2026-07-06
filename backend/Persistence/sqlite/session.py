@@ -1,11 +1,10 @@
-from pathlib import Path
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
+from paths import SQLITE_DB_PATH
 from Persistence.sqlite.models import Base
 
-DB_PATH = Path("data/sqlite/modernizer.db")
-DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-SQLALCHEMY_DATABASE_URL = f"sqlite:///{DB_PATH.as_posix()}"
+SQLITE_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{SQLITE_DB_PATH.as_posix()}"
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,

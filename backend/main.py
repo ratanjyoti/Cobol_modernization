@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
@@ -16,20 +18,33 @@ app = FastAPI(
     version="1.0.0"
 )
 
+DEFAULT_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173",
+    "https://cobol-modernization-green.vercel.app",
+    "https://cobol-modernization-git-main-rjrk9793s-projects.vercel.app",
+    "https://cobol-modernization.onrender.com",
+]
+
+
+def get_allowed_origins():
+    configured_origins = [
+        origin.strip()
+        for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+        if origin.strip()
+    ]
+    return sorted(set(DEFAULT_ALLOWED_ORIGINS + configured_origins))
+
+
 # ==============================================================================
 # 1. CORS CONFIGURATION
 # ==============================================================================
-# This allows your React frontend (usually on port 3000 or 5173) to talk to this API
+# This allows the React frontend to talk to this API from local and deployed hosts.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:5173",
-        "https://cobol-modernization-git-main-rjrk9793s-projects.vercel.app",
-        "https://cobol-modernization.onrender.com",
-    ],
+    allow_origins=get_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -14,12 +14,13 @@ from Chunking.core.complexity_scorer import ComplexityScorer
 from Chunking.core.sizing_router import SizingRouter
 from Chunking.chunking_orchestrator import ChunkingOrchestrator
 from Chunking.dependency_scanner.dependency_manager import DependencyManager 
+from paths import UPLOADS_DIR
 from source.websockets.socket_manager import manager
 
 class DiscoveryProcess:
-    def __init__(self, db_session, upload_dir="data/uploads"):
+    def __init__(self, db_session, upload_dir=None):
         self.db = db_session
-        self.upload_dir = Path(upload_dir)
+        self.upload_dir = Path(upload_dir) if upload_dir else UPLOADS_DIR
         self.detector = LanguageDetector()
         
         # Initialize the "Intelligence" tools

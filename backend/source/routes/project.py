@@ -9,6 +9,7 @@ from Processes.onboarding_process import OnboardingProcess
 from Persistence.sqlite.models import FileRelation
 from Persistence.sqlite.project_repo import ProjectRepository
 from Persistence.sqlite.session import get_db
+from paths import UPLOADS_DIR
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -124,7 +125,7 @@ async def create_project(config: dict, db: Session = Depends(get_db)):
 async def delete_all_runs(db: Session = Depends(get_db)):
     repo = ProjectRepository(db)
     result = repo.delete_all_projects()
-    clear_uploads_sync(Path("data/uploads"))
+    clear_uploads_sync(UPLOADS_DIR)
     return {"status": "Success", **result}
 
 
@@ -135,7 +136,7 @@ async def delete_run(run_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Project not found")
 
     result = repo.delete_project(run_id)
-    remove_tree_sync(Path("data/uploads") / run_id)
+    remove_tree_sync(UPLOADS_DIR / run_id)
     return {"status": "Success", **result}
 
 
@@ -146,7 +147,7 @@ async def clear_project_files(run_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Project not found")
 
     deleted_count = repo.delete_files_by_run_id(run_id)
-    remove_tree_sync(Path("data/uploads") / run_id)
+    remove_tree_sync(UPLOADS_DIR / run_id)
     return {"status": "Success", "files_deleted": deleted_count}
 
 

@@ -2,8 +2,9 @@ import os
 import zipfile
 import shutil
 from git import Repo # pip install gitpython
+from paths import STORAGE_DIR
 
-STORAGE_PATH = "storage/projects"
+STORAGE_PATH = str(STORAGE_DIR)
 
 class IngestionService:
     @staticmethod

@@ -26,6 +26,7 @@ from Processes.discovery_process import DiscoveryProcess
 from Processes.graphing_process import GraphingProcess
 from source.websockets.socket_manager import manager
 from Chunking.chunking_orchestrator import ChunkingOrchestrator
+from paths import UPLOADS_DIR
 
 
 router = APIRouter(prefix="/discovery", tags=["Discovery"])
@@ -178,7 +179,7 @@ async def upload_zip(
     if not zip_file.filename or not zip_file.filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="Please upload a .zip file")
 
-    upload_dir = Path("data/uploads")
+    upload_dir = UPLOADS_DIR
     upload_dir.mkdir(parents=True, exist_ok=True)
     temp_zip_path = upload_dir / f"temp_{run_id}.zip"
 
@@ -239,7 +240,7 @@ def run_chunking_task(run_id: str):
         
         for f in confirmed_files:
             # Construct path to the file
-            full_path = Path(f"data/uploads/{run_id}") / f.filename
+            full_path = UPLOADS_DIR / run_id / f.filename
             if full_path.exists():
                 with open(full_path, 'r', errors='ignore') as file_handle:
                     content = file_handle.read()
@@ -373,7 +374,7 @@ async def upload_source(
     discovery = DiscoveryProcess(db)
 
     if zip_file:
-        upload_dir = Path("data/uploads")
+        upload_dir = UPLOADS_DIR
         upload_dir.mkdir(parents=True, exist_ok=True)
         temp_path = upload_dir / path_safe(zip_file.filename)
 
