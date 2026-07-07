@@ -12,6 +12,7 @@ export type AnalysisWarmCache = {
 
 const cacheByRun = new Map<string, AnalysisWarmCache>();
 const warmupsByRun = new Map<string, Promise<AnalysisWarmCache>>();
+const discoveryWarmupsByRun = new Map<string, Promise<AnalysisWarmCache>>();
 
 const mergeCache = (runId: string, partial: Partial<AnalysisWarmCache>) => {
   const current = cacheByRun.get(runId) || { updatedAt: 0 };
@@ -29,6 +30,28 @@ export const clearAnalysisWarmCache = (runId?: string | null) => {
   if (!runId) return;
   cacheByRun.delete(runId);
   warmupsByRun.delete(runId);
+  discoveryWarmupsByRun.delete(runId);
+};
+
+export const warmDiscoveryData = (runId?: string | null, force = false) => {
+  if (!runId) {
+    return Promise.resolve({ updatedAt: Date.now() } as AnalysisWarmCache);
+  }
+
+  const existingWarmup = discoveryWarmupsByRun.get(runId);
+  if (existingWarmup && !force) return existingWarmup;
+
+  const warmup = ProjectAPI.getDiscoveryData(runId).then((data) => {
+    return mergeCache(runId, {
+      files: data.files || [],
+      relations: data.relations || [],
+    });
+  }).finally(() => {
+    discoveryWarmupsByRun.delete(runId);
+  });
+
+  discoveryWarmupsByRun.set(runId, warmup);
+  return warmup;
 };
 
 export const warmAnalysisTabs = (runId?: string | null, force = false) => {
@@ -43,17 +66,18 @@ export const warmAnalysisTabs = (runId?: string | null, force = false) => {
     ProjectAPI.getComplexity(runId),
     ProjectAPI.getGraph(runId),
     ProjectAPI.getDDD(runId),
-    ProjectAPI.listFiles(runId),
-    ProjectAPI.listRelations(runId),
+    ProjectAPI.getDiscoveryData(runId),
   ]).then((results) => {
-    const [complexity, graph, ddd, files, relations] = results;
+    const [complexity, graph, ddd, discovery] = results;
     const partial: Partial<AnalysisWarmCache> = {};
 
     if (complexity.status === 'fulfilled') partial.complexity = complexity.value;
     if (graph.status === 'fulfilled') partial.graph = graph.value;
     if (ddd.status === 'fulfilled') partial.ddd = ddd.value || [];
-    if (files.status === 'fulfilled') partial.files = files.value.files || [];
-    if (relations.status === 'fulfilled') partial.relations = relations.value.relations || [];
+    if (discovery.status === 'fulfilled') {
+      partial.files = discovery.value.files || [];
+      partial.relations = discovery.value.relations || [];
+    }
 
     return mergeCache(runId, partial);
   }).finally(() => {

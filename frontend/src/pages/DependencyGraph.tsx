@@ -243,48 +243,55 @@ const layoutNetworkMap = (nodes: DependencyNode[], links: DependencyLink[]) => {
 };
 
 const layoutImpact = (nodes: DependencyNode[], links: DependencyLink[], focusIds: Set<string>) => {
-  const incomingIds = new Set<string>();
-  const outgoingIds = new Set<string>();
-
-  links.forEach((link) => {
-    if (focusIds.has(link.to) && !focusIds.has(link.from)) incomingIds.add(link.from);
-    if (focusIds.has(link.from) && !focusIds.has(link.to)) outgoingIds.add(link.to);
-  });
-
-  const focusNodes = nodes.filter((node) => focusIds.has(node.id));
-  const incomingNodes = nodes.filter((node) => incomingIds.has(node.id));
-  const outgoingNodes = nodes.filter((node) => outgoingIds.has(node.id));
   const centerX = 720;
-  const centerY = Math.max(430, Math.max(incomingNodes.length, outgoingNodes.length) * 42 + 270);
+  const centerY = Math.max(430, Math.ceil(Math.max(nodes.length - focusIds.size, 1) / 10) * 90 + 330);
+  const focusNodes = nodes.filter((node) => focusIds.has(node.id));
+  const primaryFocus = focusNodes[0] || nodes[0];
 
-  focusNodes.forEach((node, index) => {
-    const offset = (index - (focusNodes.length - 1) / 2) * 104;
-    placeNodeByCenter(node, centerX + offset, centerY, true);
+  if (!primaryFocus) return nodes;
+
+  placeNodeByCenter(primaryFocus, centerX, centerY, true);
+
+  const directIds = new Set<string>();
+  links.forEach((link) => {
+    if (link.from === primaryFocus.id) directIds.add(link.to);
+    if (link.to === primaryFocus.id) directIds.add(link.from);
   });
 
-  const placeArc = (arcNodes: DependencyNode[], startAngle: number, arc: number, radiusX: number, radiusY: number) => {
-    arcNodes.forEach((node, index) => {
-      const ring = Math.floor(index / 10);
-      const position = index % 10;
-      const itemsInRing = Math.min(10, arcNodes.length - ring * 10);
-      const angle = evenlySpacedAngle(position, itemsInRing, startAngle, arc);
-      placeNodeByCenter(
-        node,
-        centerX + Math.cos(angle) * (radiusX + ring * 210),
-        centerY + Math.sin(angle) * (radiusY + ring * 140)
-      );
-    });
-  };
+  const degree = new Map(nodes.map((node) => [node.id, node.incoming + node.outgoing]));
+  const directNodes = nodes
+    .filter((node) => directIds.has(node.id) && node.id !== primaryFocus.id)
+    .sort((a, b) => (degree.get(b.id) || 0) - (degree.get(a.id) || 0) || a.label.localeCompare(b.label));
 
-  placeArc(incomingNodes, Math.PI * 0.62, Math.PI * 0.76, 380, 280);
-  placeArc(outgoingNodes, -Math.PI * 0.38, Math.PI * 0.76, 380, 280);
+  directNodes.forEach((node, index) => {
+    const ring = Math.floor(index / 10);
+    const position = index % 10;
+    const itemsInRing = Math.min(10, directNodes.length - ring * 10);
+    const radiusX = 360 + ring * 210;
+    const radiusY = 265 + ring * 150;
+    const angle = evenlySpacedAngle(position, itemsInRing, -Math.PI / 2 + ring * 0.22);
+    placeNodeByCenter(node, centerX + Math.cos(angle) * radiusX, centerY + Math.sin(angle) * radiusY);
+  });
 
-  const placed = new Set([...focusNodes.map((node) => node.id), ...incomingNodes.map((node) => node.id), ...outgoingNodes.map((node) => node.id)]);
-  const remaining = nodes.filter((node) => !placed.has(node.id));
+  const placed = new Set<string>([primaryFocus.id, ...directNodes.map((node) => node.id)]);
+  const remaining = nodes
+    .filter((node) => !placed.has(node.id))
+    .sort((a, b) => (degree.get(b.id) || 0) - (degree.get(a.id) || 0) || a.label.localeCompare(b.label));
 
   remaining.forEach((node, index) => {
-    const angle = evenlySpacedAngle(index, remaining.length, -Math.PI / 2);
-    placeNodeByCenter(node, centerX + Math.cos(angle) * 560, centerY + Math.sin(angle) * 390);
+    const ring = Math.floor(index / 12);
+    const position = index % 12;
+    const itemsInRing = Math.min(12, remaining.length - ring * 12);
+    const radiusX = 590 + ring * 230;
+    const radiusY = 410 + ring * 160;
+    const angle = evenlySpacedAngle(position, itemsInRing, -Math.PI / 2 + ring * 0.2);
+    placeNodeByCenter(node, centerX + Math.cos(angle) * radiusX, centerY + Math.sin(angle) * radiusY);
+  });
+
+  focusNodes.slice(1).forEach((node, index) => {
+    if (node.id === primaryFocus.id) return;
+    const angle = evenlySpacedAngle(index, Math.max(1, focusNodes.length - 1), -Math.PI / 2);
+    placeNodeByCenter(node, centerX + Math.cos(angle) * 160, centerY + Math.sin(angle) * 120, true);
   });
 
   return nodes;

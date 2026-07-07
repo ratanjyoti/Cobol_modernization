@@ -7,7 +7,7 @@ import DependencyGraph, {
 } from './DependencyGraph';
 import DDDDiscovery from './DDDDiscovery';
 import { Database, FileCode, FileQuestion, FileText, GitBranch, Loader2, Search, Share2 } from 'lucide-react';
-import { getAnalysisWarmCache, warmAnalysisTabs } from '../services/analysisPrefetch';
+import { getAnalysisWarmCache, warmDiscoveryData } from '../services/analysisPrefetch';
 import type { DependencyRelation, FileRecord } from '../services/api';
 
 const normalizeName = (value: string) => value.trim().toLowerCase().replace(/\\/g, '/');
@@ -218,7 +218,7 @@ const SystemDiscovery = () => {
       setLoading(!hadWarmData);
 
       try {
-        const warmData = await warmAnalysisTabs(runId, true);
+        const warmData = await warmDiscoveryData(runId, true);
 
         if (!active) return;
         setFiles(warmData.files || []);

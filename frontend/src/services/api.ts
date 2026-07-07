@@ -122,6 +122,11 @@ export const ProjectAPI = {
     return response.data;
   },
 
+  getDiscoveryData: async (runId: string): Promise<{ files: FileRecord[]; relations: DependencyRelation[] }> => {
+    const response = await api.get(`/projects/${runId}/discovery-data`);
+    return response.data;
+  },
+
   clearAllFiles: async (runId: string) => {
     const response = await api.delete(`/projects/${runId}/files`);
     return response.data;
