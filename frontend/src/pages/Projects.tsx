@@ -139,7 +139,7 @@ const Projects = () => {
           <p className="text-slate-400">Manage migration runs, backend status, and run history.</p>
         </div>
         <button
-          onClick={() => navigate('/dashboard')}
+          onClick={() => navigate('/dashboard?new=true')}
           className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-indigo-500/20"
         >
           <Plus size={20} /> Create New Run

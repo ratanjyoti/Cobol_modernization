@@ -1,12 +1,13 @@
 # Implementation for project.py
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from pathlib import Path
 import os
 import shutil
 import stat
 from Processes.onboarding_process import OnboardingProcess
-from Persistence.sqlite.models import FileRelation
+from Persistence.sqlite.models import FileRelation, ProjectFile
 from Persistence.sqlite.project_repo import ProjectRepository
 from Persistence.sqlite.session import get_db
 from paths import UPLOADS_DIR
@@ -88,6 +89,34 @@ def serialize_project(project, files=None):
     }
 
 
+
+def get_project_status_from_counts(files_count: int, file_status_counts: dict):
+    if files_count == 0:
+        return "CONFIGURING"
+    if file_status_counts.get("REJECTED", 0) > 0:
+        return "FAILED"
+    if file_status_counts.get("CONFIRMED", 0) == files_count:
+        return "ANALYZING"
+    return "INGESTING"
+
+
+def serialize_project_summary(project, files_count: int, file_status_counts: dict, language_counts: dict):
+    return {
+        "run_id": project.run_id,
+        "name": project.project_name,
+        "status": get_project_status_from_counts(files_count, file_status_counts),
+        "created_at": project.created_at.isoformat() if project.created_at else None,
+        "files_count": files_count,
+        "target": project.llm_model,
+        "llm_provider": project.llm_provider,
+        "llm_model": project.llm_model,
+        "interaction_lang": project.interaction_lang,
+        "speed_profile": project.speed_profile,
+        "reasoning_effort": project.reasoning_effort,
+        "parallel_workers": project.parallel_workers,
+        "file_status_counts": file_status_counts,
+        "language_counts": language_counts,
+    }
 def serialize_file(project_file):
     return {
         "id": str(project_file.id),
@@ -110,8 +139,48 @@ def serialize_relation(relation):
 @router.get("")
 async def list_projects(db: Session = Depends(get_db)):
     repo = ProjectRepository(db)
-    return [serialize_project(project, repo.get_files_by_run_id(project.run_id)) for project in repo.list_projects()]
+    projects = repo.list_projects()
+    run_ids = [project.run_id for project in projects]
+    file_status_counts = {run_id: {} for run_id in run_ids}
+    language_counts = {run_id: {} for run_id in run_ids}
+    files_count = {run_id: 0 for run_id in run_ids}
 
+    if run_ids:
+        status_rows = db.query(
+            ProjectFile.run_id,
+            ProjectFile.status,
+            func.count(ProjectFile.id),
+        ).filter(ProjectFile.run_id.in_(run_ids)).group_by(
+            ProjectFile.run_id,
+            ProjectFile.status,
+        ).all()
+
+        for run_id, status, count in status_rows:
+            status_key = status.value if status else "PENDING_CONFIRMATION"
+            file_status_counts[run_id][status_key] = count
+            files_count[run_id] += count
+
+        language_rows = db.query(
+            ProjectFile.run_id,
+            ProjectFile.detected_lang,
+            func.count(ProjectFile.id),
+        ).filter(ProjectFile.run_id.in_(run_ids)).group_by(
+            ProjectFile.run_id,
+            ProjectFile.detected_lang,
+        ).all()
+
+        for run_id, language, count in language_rows:
+            language_counts[run_id][language or "unknown"] = count
+
+    return [
+        serialize_project_summary(
+            project,
+            files_count[project.run_id],
+            file_status_counts[project.run_id],
+            language_counts[project.run_id],
+        )
+        for project in projects
+    ]
 
 @router.post("")
 @router.post("/create")

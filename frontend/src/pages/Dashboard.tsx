@@ -77,6 +77,7 @@ const Dashboard = () => {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
   const [isDeletingRuns, setIsDeletingRuns] = useState(false);
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [hasTriggeredNewProject, setHasTriggeredNewProject] = useState(false);
   const [sourceMetaLang, setSourceMetaLang] = useState('en');
   const [aiMode, setAiMode] = useState<'api' | 'local'>('api');
@@ -190,17 +191,20 @@ const Dashboard = () => {
   };
 
   const handleStartNewProject = async () => {
+    if (isCreatingProject) return;
+
+    const runName = getNextRunName();
+    const config = {
+      project_name: runName,
+      provider: aiMode,
+      model: aiConfig.model,
+      lang: sourceMetaLang,
+      speed_profile: 'Balanced' as const,
+      workers: 4
+    };
+
+    setIsCreatingProject(true);
     try {
-      const projectHistory = await fetchProjectHistory();
-      const runName = getNextRunName(projectHistory);
-      const config = {
-        project_name: runName,
-        provider: aiMode,
-        model: aiConfig.model,
-        lang: sourceMetaLang,
-        speed_profile: 'Balanced' as const,
-        workers: 4
-      };
       const response = await ProjectAPI.create(config);
       const newRunId = response.run_id;
 
@@ -208,11 +212,26 @@ const Dashboard = () => {
 
       localStorage.setItem('active_run_id', newRunId);
       setRunId(newRunId);
-      await fetchProjectHistory();
+      setProjects((current) => [{
+        run_id: newRunId,
+        name: response.name || runName,
+        status: 'CONFIGURING',
+        files_count: 0,
+        llm_provider: aiMode,
+        llm_model: aiConfig.model,
+        interaction_lang: sourceMetaLang,
+        speed_profile: 'Balanced',
+        parallel_workers: 4,
+        file_status_counts: {},
+        language_counts: {},
+      }, ...current]);
       toast.success(`Project created: ${runName}`);
       navigate('/source-files');
+      void fetchProjectHistory();
     } catch (e: any) {
       toast.error(e.response?.data?.detail || e.message || "Error creating project");
+    } finally {
+      setIsCreatingProject(false);
     }
   };
 
@@ -286,8 +305,8 @@ const Dashboard = () => {
             <button onClick={() => navigate('/projects')} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-2">
               Continue Current Project <ChevronRight size={18} />
             </button>
-            <button onClick={handleStartNewProject} className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition-all border border-slate-700 flex items-center justify-center gap-2">
-              <PlusCircle size={18} /> Start New Project
+            <button onClick={handleStartNewProject} disabled={isCreatingProject} className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition-all border border-slate-700 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
+              {isCreatingProject ? <Loader2 className="animate-spin" size={18} /> : <PlusCircle size={18} />} Start New Project
             </button>
           </div>
         </div>
