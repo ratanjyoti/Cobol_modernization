@@ -1,4 +1,4 @@
-﻿from typing import List, Optional
+from typing import List, Optional
 import asyncio
 import os
 import shutil
@@ -407,26 +407,35 @@ async def confirm_language(data: dict, db: Session = Depends(get_db)):
     run_id = data.get("run_id")
     filename = data.get("filename")
     lang = data.get("lang")
+    file_id = data.get("file_id")
+    filepath = data.get("filepath")
 
     if not all([run_id, filename, lang]):
         raise HTTPException(status_code=400, detail="Missing run_id, filename, or lang")
 
+    query = db.query(ProjectFile).filter(ProjectFile.run_id == run_id)
+    file_record = None
+
+    if file_id:
+        try:
+            file_record = query.filter(ProjectFile.id == int(file_id)).first()
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Invalid file_id")
+
+    if not file_record and filepath:
+        file_record = query.filter(ProjectFile.filepath == filepath).first()
+
+    if not file_record:
+        file_record = query.filter(ProjectFile.filename == filename).first()
+
+    if not file_record:
+        raise HTTPException(status_code=404, detail="File is not ready for confirmation yet. Please try again.")
+
     try:
-        file_record = db.query(ProjectFile).filter(
-            ProjectFile.run_id == run_id,
-            ProjectFile.filename == filename,
-        ).first()
-
-        if not file_record:
-            raise HTTPException(status_code=404, detail="File not found in database")
-
         file_record.detected_lang = lang
         file_record.status = FileStatus.CONFIRMED
         db.commit()
-        return {"status": "Success", "message": f"Language updated to {lang} for {filename}"}
+        return {"status": "Success", "message": f"Language updated to {lang} for {file_record.filename}"}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-
-
-

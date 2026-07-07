@@ -89,7 +89,9 @@ const Dashboard = () => {
   );
 
   useEffect(() => {
-    fetchProjectHistory();
+    if (searchParams.get('new') !== 'true') {
+      fetchProjectHistory();
+    }
     const savedLang = localStorage.getItem('modernizer_source_lang');
     const savedAiConfig = localStorage.getItem('ai_config');
     if (savedLang) setSourceMetaLang(savedLang);
@@ -227,7 +229,6 @@ const Dashboard = () => {
       }, ...current]);
       toast.success(`Project created: ${runName}`);
       navigate('/source-files');
-      void fetchProjectHistory();
     } catch (e: any) {
       toast.error(e.response?.data?.detail || e.message || "Error creating project");
     } finally {

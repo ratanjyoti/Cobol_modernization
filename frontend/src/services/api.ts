@@ -172,7 +172,7 @@ export const ProjectAPI = {
     return response.data;
   },
 
-  confirmLanguage: async (data: { run_id: string; filename: string; lang: string }) => {
+  confirmLanguage: async (data: { run_id: string; filename: string; lang: string; file_id?: string; filepath?: string }) => {
     const response = await api.post('/discovery/confirm-language', data);
     return response.data;
   },

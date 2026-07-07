@@ -38,6 +38,8 @@ const getFileType = (filename: string) => {
 type DetectionAlert = {
   file: string;
   lang: string;
+  id?: string;
+  filepath?: string;
 };
 
 const SUPPORTED_SOURCE_EXTENSIONS = [
@@ -159,6 +161,7 @@ const SourceFiles = () => {
   const [pipelineActive, setPipelineActive] = useState(() => localStorage.getItem(STORAGE_KEYS.pipelineStatus) === 'active');
   const [detectionAlert, setDetectionAlert] = useState<DetectionAlert | null>(null);
   const [pendingDetections, setPendingDetections] = useState<DetectionAlert[]>([]);
+  const uploadBusyRef = useRef(false);
   
   const runId = localStorage.getItem('active_run_id');
 
@@ -180,10 +183,16 @@ const SourceFiles = () => {
     if (sourceLang !== 'auto') return;
 
     const detections = mappedFiles
-      .map((file) => ({ file: file.filename || file.name, lang: file.lang || file.detected_lang || 'UNKNOWN', isValid: file.is_valid ?? file.isValid }))
+      .map((file) => ({
+        file: file.filename || file.name,
+        lang: file.lang || file.detected_lang || 'UNKNOWN',
+        id: file.id,
+        filepath: file.filepath || file.rel_path,
+        isValid: file.is_valid ?? file.isValid,
+      }))
       .filter((item) => {
         if (!item.file || !item.lang || item.lang === 'UNKNOWN' || item.isValid === false) return false;
-        const key = `${item.file}:${item.lang}`;
+        const key = `${item.id || item.file}:${item.filepath || ''}:${item.lang}`;
         if (queuedDetectionKeys.current.has(key)) return false;
         queuedDetectionKeys.current.add(key);
         return true;
@@ -237,6 +246,10 @@ const SourceFiles = () => {
     }
   };
 
+  useEffect(() => {
+    uploadBusyRef.current = isUploading || isReadingRepo;
+  }, [isUploading, isReadingRepo]);
+
   const showNextDetection = () => {
     setPendingDetections((prev) => {
       const [nextDetection, ...remaining] = prev;
@@ -250,7 +263,7 @@ const SourceFiles = () => {
     const socket = new WebSocket(`${WS_BASE_URL}/discovery/ws/${runId}`);
     socket.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      if (data.event === 'LANGUAGE_DETECTED') {
+      if (data.event === 'LANGUAGE_DETECTED' && !uploadBusyRef.current) {
         enqueueLanguageDetections([{ filename: data.file, lang: data.suggested_lang, is_valid: data.is_valid }]);
       }
     };
@@ -272,6 +285,8 @@ const SourceFiles = () => {
         run_id: runId,
         filename: detectionAlert.file,
         lang: finalLang,
+        file_id: detectionAlert.id,
+        filepath: detectionAlert.filepath,
       });
       toast.success(`Updated ${detectionAlert.file} to ${finalLang}`);
       setFiles(prev => prev.map(file => file.name === detectionAlert.file ? { ...file, status: 'Analyzed', detectedLang: finalLang } : file));
@@ -279,8 +294,8 @@ const SourceFiles = () => {
       setIsCorrecting(false);
       setSelectedManualLang('');
       showNextDetection();
-    } catch (e) {
-      toast.error("Failed to save language preference");
+    } catch (e: any) {
+      toast.error(e.response?.data?.detail || "Failed to save language preference");
     } finally {
       setIsConfirmingLanguage(false);
     }
