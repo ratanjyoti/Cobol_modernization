@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ProjectAPI, WS_BASE_URL } from '../services/api';
+import { clearAnalysisWarmCache, warmAnalysisTabs } from '../services/analysisPrefetch';
 
 import {
   Upload, FileText, CheckCircle2, Clock,
@@ -227,6 +228,7 @@ const SourceFiles = () => {
       setPendingDetections([]);
       queuedDetectionKeys.current.clear();
       localStorage.removeItem(STORAGE_KEYS.files);
+      clearAnalysisWarmCache(runId);
       toast.success("All uploaded files cleared");
     } catch (error: any) {
       toast.error(error.response?.data?.detail || "Failed to clear uploaded files");
@@ -271,6 +273,7 @@ const SourceFiles = () => {
       });
       toast.success(`Updated ${detectionAlert.file} to ${finalLang}`);
       setFiles(prev => prev.map(file => file.name === detectionAlert.file ? { ...file, status: 'Analyzed', detectedLang: finalLang } : file));
+      refreshAnalysisTabs();
       setIsCorrecting(false);
       setSelectedManualLang('');
       showNextDetection();
@@ -295,6 +298,13 @@ const SourceFiles = () => {
       const mapped = mapBackendFiles(response.files);
       setFiles(mapped);
     } catch (e) { console.error("Failed to fetch files", e); }
+  };
+
+  const refreshAnalysisTabs = (force = true) => {
+    if (!runId) return;
+    warmAnalysisTabs(runId, force).catch((error) => {
+      console.error("Failed to warm analysis tabs", error);
+    });
   };
 
   const removeFile = async (id: string) => {
@@ -325,6 +335,7 @@ const SourceFiles = () => {
             const backendFiles = mapBackendFiles(zipData.mapped_files);
             setFiles(prev => [...prev, ...backendFiles]);
             enqueueLanguageDetections(zipData.mapped_files);
+            refreshAnalysisTabs();
             toast.success(`Extracted ${backendFiles.length} files`);
           }
         } else if (isSupportedSourceFile(fileName)) {
@@ -336,6 +347,7 @@ const SourceFiles = () => {
           const backendFiles = mapBackendFiles(uploadedRecords);
           setFiles(prev => [...prev, ...backendFiles]);
           enqueueLanguageDetections(uploadedRecords);
+          refreshAnalysisTabs();
           toast.success(`Uploaded ${file.name}`);
         } else {
           toast.error(`Unsupported file type: ${file.name}`);
@@ -378,6 +390,7 @@ const SourceFiles = () => {
       
       setFiles(prev => [...prev, ...backendFiles]);
       enqueueLanguageDetections(response.mapped_files || []);
+      refreshAnalysisTabs();
       toast.success(`Local repository ingested: ${backendFiles.length} files`);
     } catch (error: any) {
       console.error(error);
@@ -409,6 +422,7 @@ const SourceFiles = () => {
 
       setFiles(prev => [...prev, ...backendFiles]);
       enqueueLanguageDetections(response.mapped_files || []);
+      refreshAnalysisTabs();
       toast.success(`Successfully ingested ${backendFiles.length} files from GitHub`);
     } catch (error: any) {
       const errorMsg = error.response?.data?.detail || "GitHub ingestion failed";

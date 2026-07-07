@@ -1,6 +1,6 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ProjectAPI } from '../services/api';
+import { getAnalysisWarmCache, warmAnalysisTabs } from '../services/analysisPrefetch';
 import {
   AlertTriangle, Cpu, Database, FileCheck, FileText, GitBranch,
   Info, Layers, Loader2, Share2, X, Zap
@@ -31,31 +31,39 @@ const ReverseEngineering = () => {
   useEffect(() => {
     let active = true;
 
-    const loadTabData = async () => {
+    const applyWarmCache = () => {
+      const cached = getAnalysisWarmCache(runId);
+      if (!cached) return false;
+
+      if (cached.complexity) {
+        setComplexityData(cached.complexity);
+        setSelectedFile((current: any) => current
+          ? cached.complexity?.files?.find((file: any) => file.id === current.id) || null
+          : cached.complexity?.files?.[0] || null);
+      }
+      if (cached.graph) setGraphData(cached.graph || { nodes: [], edges: [] });
+      if (cached.ddd) setDddData(cached.ddd || []);
+      return Boolean(cached.complexity || cached.graph || cached.ddd);
+    };
+
+    const loadAnalysisData = async () => {
       if (!runId) {
         setError('No active project selected. Start or open a project first.');
         return;
       }
 
-      setLoading(true);
+      const hadWarmData = applyWarmCache();
+      setLoading(!hadWarmData);
       setError('');
       try {
-        if (activeTab === 'complexity') {
-          const res = await ProjectAPI.getComplexity(runId);
-          if (!active) return;
-          setComplexityData(res);
-          setSelectedFile((current: any) => current ? res.files?.find((file: any) => file.id === current.id) || null : res.files?.[0] || null);
-        }
-        if (activeTab === 'dependencies') {
-          const res = await ProjectAPI.getGraph(runId);
-          if (!active) return;
-          setGraphData(res || { nodes: [], edges: [] });
-        }
-        if (activeTab === 'ddd') {
-          const res = await ProjectAPI.getDDD(runId);
-          if (!active) return;
-          setDddData(res || []);
-        }
+        const res = await warmAnalysisTabs(runId, true);
+        if (!active) return;
+        setComplexityData(res.complexity || null);
+        setSelectedFile((current: any) => current
+          ? res.complexity?.files?.find((file: any) => file.id === current.id) || null
+          : res.complexity?.files?.[0] || null);
+        setGraphData(res.graph || { nodes: [], edges: [] });
+        setDddData(res.ddd || []);
       } catch (e: any) {
         if (active) setError(e.response?.data?.detail || 'Unable to load analysis data for this run.');
       } finally {
@@ -63,9 +71,9 @@ const ReverseEngineering = () => {
       }
     };
 
-    loadTabData();
+    loadAnalysisData();
     return () => { active = false; };
-  }, [activeTab, runId]);
+  }, [runId]);
 
   const tabs = [
     { id: 'complexity', label: 'Complexity', icon: AlertTriangle },

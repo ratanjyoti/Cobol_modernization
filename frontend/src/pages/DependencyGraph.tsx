@@ -71,11 +71,12 @@ type DependencyGraphProps = {
 
 type RelationFilter = 'ALL' | string;
 
-const NODE_SIZE = 88;
-const NODE_WIDTH = 220;
-const NODE_HEIGHT = 74;
-const SELECTED_NODE_WIDTH = 270;
-const SELECTED_NODE_HEIGHT = 92;
+const NODE_WIDTH = 172;
+const NODE_HEIGHT = 120;
+const SELECTED_NODE_WIDTH = 218;
+const SELECTED_NODE_HEIGHT = 142;
+const CIRCLE_SIZE = 66;
+const SELECTED_CIRCLE_SIZE = 86;
 const GROUP_WIDTH = 220;
 const GROUP_HEIGHT = 118;
 const LAYER_X: Record<string, number> = {
@@ -107,8 +108,21 @@ const truncateLabel = (value: string, maxLength = 26) => {
 
 const formatNodeSubtitle = (node: DependencyNode) => {
   const kind = node.isResolved ? node.type : 'unresolved';
-  if (!node.isResolved) return `${kind} - ${node.incoming} in / ${node.outgoing} out`;
   return `${kind} - ${node.incoming} in / ${node.outgoing} out`;
+};
+
+const getNodeVisualSize = (isSelected: boolean) => ({
+  width: isSelected ? SELECTED_NODE_WIDTH : NODE_WIDTH,
+  height: isSelected ? SELECTED_NODE_HEIGHT : NODE_HEIGHT,
+  circle: isSelected ? SELECTED_CIRCLE_SIZE : CIRCLE_SIZE,
+});
+
+const getNodeCenter = (node: DependencyNode, isSelected: boolean) => {
+  const size = getNodeVisualSize(isSelected);
+  return {
+    x: node.x + size.width / 2,
+    y: node.y + size.circle / 2 + 4,
+  };
 };
 
 const getNodeChrome = (type: DependencyNode['type']) => {
@@ -158,27 +172,71 @@ const getLayer = (node: DependencyNode) => {
   return 'file';
 };
 
-const layoutLayered = (nodes: DependencyNode[]) => {
-  const layerOrder = ['job', 'program', 'copybook', 'file', 'table', 'external'];
-  const grouped = new Map<string, DependencyNode[]>();
+const placeNodeByCenter = (node: DependencyNode, centerX: number, centerY: number, isSelected = false) => {
+  const size = getNodeVisualSize(isSelected);
+  node.x = Math.round(centerX - size.width / 2);
+  node.y = Math.round(centerY - size.circle / 2 - 4);
+};
 
-  nodes.forEach((node) => {
-    const layer = getLayer(node);
-    grouped.set(layer, [...(grouped.get(layer) || []), node]);
+const evenlySpacedAngle = (index: number, total: number, startAngle = -Math.PI / 2, arc = Math.PI * 2) => {
+  if (total <= 1) return startAngle + arc / 2;
+  return startAngle + (arc * index) / total;
+};
+
+const layoutNetworkMap = (nodes: DependencyNode[], links: DependencyLink[]) => {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const degree = new Map(nodes.map((node) => [node.id, node.incoming + node.outgoing]));
+  const centerX = 720;
+  const centerY = 430;
+
+  const hubs = [...nodes]
+    .filter((node) => (degree.get(node.id) || 0) > 0)
+    .sort((a, b) => (degree.get(b.id) || 0) - (degree.get(a.id) || 0) || a.label.localeCompare(b.label));
+
+  if (hubs.length === 0) {
+    nodes.forEach((node, index) => {
+      const angle = evenlySpacedAngle(index, nodes.length);
+      placeNodeByCenter(node, centerX + Math.cos(angle) * 280, centerY + Math.sin(angle) * 220);
+    });
+    return nodes;
+  }
+
+  const primary = hubs[0];
+  placeNodeByCenter(primary, centerX, centerY, true);
+
+  const neighborIds = new Set<string>();
+  links.forEach((link) => {
+    if (link.from === primary.id) neighborIds.add(link.to);
+    if (link.to === primary.id) neighborIds.add(link.from);
   });
 
-  layerOrder.forEach((layer) => {
-    const layerNodes = (grouped.get(layer) || []).sort((a, b) => {
-      const relationDelta = (b.incoming + b.outgoing) - (a.incoming + a.outgoing);
-      return relationDelta || a.label.localeCompare(b.label);
-    });
-    const x = LAYER_X[layer] || LAYER_X.file;
-    const startY = Math.max(140, 370 - (layerNodes.length * 58));
+  const primaryNeighbors = [...neighborIds]
+    .map((id) => byId.get(id))
+    .filter((node): node is DependencyNode => Boolean(node))
+    .sort((a, b) => (degree.get(b.id) || 0) - (degree.get(a.id) || 0) || a.label.localeCompare(b.label));
 
-    layerNodes.forEach((node, index) => {
-      node.x = x;
-      node.y = startY + index * 124;
-    });
+  const placed = new Set<string>([primary.id]);
+  const innerRadiusX = Math.max(260, Math.min(460, 230 + primaryNeighbors.length * 18));
+  const innerRadiusY = Math.max(190, Math.min(340, 170 + primaryNeighbors.length * 12));
+
+  primaryNeighbors.forEach((node, index) => {
+    const angle = evenlySpacedAngle(index, primaryNeighbors.length, -Math.PI * 0.9);
+    placeNodeByCenter(node, centerX + Math.cos(angle) * innerRadiusX, centerY + Math.sin(angle) * innerRadiusY);
+    placed.add(node.id);
+  });
+
+  const remaining = nodes
+    .filter((node) => !placed.has(node.id))
+    .sort((a, b) => (degree.get(b.id) || 0) - (degree.get(a.id) || 0) || a.label.localeCompare(b.label));
+
+  remaining.forEach((node, index) => {
+    const ring = Math.floor(index / 12);
+    const position = index % 12;
+    const itemsInRing = Math.min(12, remaining.length - ring * 12);
+    const radiusX = 470 + ring * 220;
+    const radiusY = 340 + ring * 155;
+    const angle = evenlySpacedAngle(position, itemsInRing, -Math.PI / 2 + ring * 0.28);
+    placeNodeByCenter(node, centerX + Math.cos(angle) * radiusX, centerY + Math.sin(angle) * radiusY);
   });
 
   return nodes;
@@ -196,32 +254,41 @@ const layoutImpact = (nodes: DependencyNode[], links: DependencyLink[], focusIds
   const focusNodes = nodes.filter((node) => focusIds.has(node.id));
   const incomingNodes = nodes.filter((node) => incomingIds.has(node.id));
   const outgoingNodes = nodes.filter((node) => outgoingIds.has(node.id));
-  const maxColumnSize = Math.max(incomingNodes.length, Math.ceil(outgoingNodes.length / 2), focusNodes.length);
-  const centerY = Math.max(330, maxColumnSize * 58 + 120);
-  const centerX = 590;
-  const spacing = 112;
+  const centerX = 720;
+  const centerY = Math.max(430, Math.max(incomingNodes.length, outgoingNodes.length) * 42 + 270);
 
   focusNodes.forEach((node, index) => {
-    node.x = centerX;
-    node.y = centerY + (index - (focusNodes.length - 1) / 2) * spacing;
+    const offset = (index - (focusNodes.length - 1) / 2) * 104;
+    placeNodeByCenter(node, centerX + offset, centerY, true);
   });
 
-  incomingNodes.forEach((node, index) => {
-    node.x = centerX - 410;
-    node.y = centerY + (index - (incomingNodes.length - 1) / 2) * spacing;
-  });
+  const placeArc = (arcNodes: DependencyNode[], startAngle: number, arc: number, radiusX: number, radiusY: number) => {
+    arcNodes.forEach((node, index) => {
+      const ring = Math.floor(index / 10);
+      const position = index % 10;
+      const itemsInRing = Math.min(10, arcNodes.length - ring * 10);
+      const angle = evenlySpacedAngle(position, itemsInRing, startAngle, arc);
+      placeNodeByCenter(
+        node,
+        centerX + Math.cos(angle) * (radiusX + ring * 210),
+        centerY + Math.sin(angle) * (radiusY + ring * 140)
+      );
+    });
+  };
 
-  outgoingNodes.forEach((node, index) => {
-    const column = outgoingNodes.length > 8 ? index % 2 : 0;
-    const row = outgoingNodes.length > 8 ? Math.floor(index / 2) : index;
-    const rowCount = outgoingNodes.length > 8 ? Math.ceil(outgoingNodes.length / 2) : outgoingNodes.length;
-    node.x = centerX + 410 + column * 270;
-    node.y = centerY + (row - (rowCount - 1) / 2) * spacing;
+  placeArc(incomingNodes, Math.PI * 0.62, Math.PI * 0.76, 380, 280);
+  placeArc(outgoingNodes, -Math.PI * 0.38, Math.PI * 0.76, 380, 280);
+
+  const placed = new Set([...focusNodes.map((node) => node.id), ...incomingNodes.map((node) => node.id), ...outgoingNodes.map((node) => node.id)]);
+  const remaining = nodes.filter((node) => !placed.has(node.id));
+
+  remaining.forEach((node, index) => {
+    const angle = evenlySpacedAngle(index, remaining.length, -Math.PI / 2);
+    placeNodeByCenter(node, centerX + Math.cos(angle) * 560, centerY + Math.sin(angle) * 390);
   });
 
   return nodes;
 };
-
 const buildOverviewNodes = (stats: DependencyGraphStats): DependencyNode[] => {
   const groups: Array<Pick<DependencyNode, 'id' | 'label' | 'type' | 'groupCount' | 'subtitle'> & { x: number; y: number }> = [
     { id: 'group:uploaded', label: 'Uploaded Files', type: 'group', groupCount: stats.totalFiles, subtitle: 'All files preserved in explorer', x: 160, y: 170 },
@@ -301,16 +368,8 @@ const DependencyGraph = ({
       return;
     }
 
-    setExpandedNodeIds((current) => {
-      const validIds = new Set(nodes.map((node) => node.id));
-      const next = new Set([...current].filter((id) => validIds.has(id)));
-
-      if (selectedNodeId && validIds.has(selectedNodeId)) {
-        next.add(selectedNodeId);
-      }
-
-      return next;
-    });
+    const validIds = new Set(nodes.map((node) => node.id));
+    setExpandedNodeIds(selectedNodeId && validIds.has(selectedNodeId) ? new Set([selectedNodeId]) : new Set());
   }, [mode, nodes, selectedNodeId]);
 
   const filteredLinks = useMemo(() => {
@@ -382,7 +441,7 @@ const DependencyGraph = ({
 
     const visibleNodes = nodes.filter((node) => visibleIds.has(node.id)).map(cloneNode);
     if (mode === 'impact') return layoutImpact(visibleNodes, visibleLinks, focusedNodeIds);
-    return layoutLayered(visibleNodes);
+    return layoutNetworkMap(visibleNodes, visibleLinks);
   }, [focusedNodeIds, mode, nodes, relationNodeIds, stats, visibleLinks]);
 
   const displayNodeById = useMemo(() => new Map(displayNodes.map((node) => [node.id, node])), [displayNodes]);
@@ -401,7 +460,8 @@ const DependencyGraph = ({
     if (mode === 'overview') return;
 
     if (mode === 'impact') {
-      setExpandedNodeIds((current) => new Set([...current, node.id]));
+      setExpandedNodeIds(new Set([node.id]));
+      setShowTwoHop(false);
     }
 
     onNodeSelect?.(node);
@@ -417,7 +477,7 @@ const DependencyGraph = ({
     <div className={isFullscreen ? 'fixed inset-4 z-[100] rounded-2xl bg-slate-950 shadow-2xl shadow-black/60' : 'h-full w-full'}>
       <TransformWrapper
         key={`${mode}-${displayNodes.length}-${visibleLinks.length}-${[...focusedNodeIds].join(',') || 'none'}-${activeRelation}`}
-        initialScale={mode === 'impact' ? 0.82 : 0.9}
+        initialScale={mode === 'impact' ? 0.78 : 0.86}
         minScale={0.1}
         maxScale={4}
         wheel={{ smoothStep: 0.002 }}
@@ -500,13 +560,13 @@ const DependencyGraph = ({
               <button type="button" aria-label="Zoom in" title="Zoom in" onClick={() => zoomIn()} className="bg-slate-800/80 backdrop-blur-md text-white p-2 rounded-lg hover:bg-slate-700 transition-colors border border-slate-700">
                 <ZoomIn size={20} />
               </button>
-              <button type="button" aria-label="Fit graph to view" title="Fit to view" onClick={() => centerView(mode === 'impact' ? 0.82 : 0.9, 250)} className="bg-slate-800/80 backdrop-blur-md text-white p-2 rounded-lg hover:bg-slate-700 transition-colors border border-slate-700">
+              <button type="button" aria-label="Fit graph to view" title="Fit to view" onClick={() => centerView(mode === 'impact' ? 0.78 : 0.86, 250)} className="bg-slate-800/80 backdrop-blur-md text-white p-2 rounded-lg hover:bg-slate-700 transition-colors border border-slate-700">
                 <Scan size={20} />
               </button>
               <button type="button" aria-label={isFullscreen ? 'Exit fullscreen' : 'Open fullscreen graph'} title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen graph'} onClick={() => setIsFullscreen((value) => !value)} className="bg-slate-800/80 backdrop-blur-md text-white p-2 rounded-lg hover:bg-slate-700 transition-colors border border-slate-700">
                 {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
               </button>
-              <button type="button" aria-label="Center graph" title="Center graph" onClick={() => centerView(mode === 'impact' ? 0.82 : 0.9, 250)} className="bg-slate-800/80 backdrop-blur-md text-white p-2 rounded-lg hover:bg-slate-700 transition-colors border border-slate-700">
+              <button type="button" aria-label="Center graph" title="Center graph" onClick={() => centerView(mode === 'impact' ? 0.78 : 0.86, 250)} className="bg-slate-800/80 backdrop-blur-md text-white p-2 rounded-lg hover:bg-slate-700 transition-colors border border-slate-700">
                 <Crosshair size={20} />
               </button>
               <button type="button" aria-label="Zoom out" title="Zoom out" onClick={() => zoomOut()} className="bg-slate-800/80 backdrop-blur-md text-white p-2 rounded-lg hover:bg-slate-700 transition-colors border border-slate-700">
@@ -564,19 +624,25 @@ const DependencyGraph = ({
                       if (!fromNode || !toNode) return null;
 
                       const color = getLinkColor(link.relationType);
-                      const fromSelected = focusedNodeIds.has(fromNode.id);
-                      const toSelected = focusedNodeIds.has(toNode.id);
-                      const fromWidth = fromSelected ? SELECTED_NODE_WIDTH : NODE_WIDTH;
-                      const fromHeight = fromSelected ? SELECTED_NODE_HEIGHT : NODE_HEIGHT;
-                      const toWidth = toSelected ? SELECTED_NODE_WIDTH : NODE_WIDTH;
-                      const toHeight = toSelected ? SELECTED_NODE_HEIGHT : NODE_HEIGHT;
-                      const x1 = fromNode.x + fromWidth;
-                      const y1 = fromNode.y + fromHeight / 2;
-                      const x2 = toNode.x;
-                      const y2 = toNode.y + toHeight / 2;
+                      const fromSelected = focusedNodeIds.has(fromNode.id) || fromNode.id === selectedNodeId;
+                      const toSelected = focusedNodeIds.has(toNode.id) || toNode.id === selectedNodeId;
+                      const fromCenter = getNodeCenter(fromNode, fromSelected);
+                      const toCenter = getNodeCenter(toNode, toSelected);
+                      const rawDx = toCenter.x - fromCenter.x;
+                      const rawDy = toCenter.y - fromCenter.y;
+                      const distance = Math.max(1, Math.hypot(rawDx, rawDy));
+                      const unitX = rawDx / distance;
+                      const unitY = rawDy / distance;
+                      const fromRadius = getNodeVisualSize(fromSelected).circle / 2 + 4;
+                      const toRadius = getNodeVisualSize(toSelected).circle / 2 + 9;
+                      const x1 = fromCenter.x + unitX * fromRadius;
+                      const y1 = fromCenter.y + unitY * fromRadius;
+                      const x2 = toCenter.x - unitX * toRadius;
+                      const y2 = toCenter.y - unitY * toRadius;
                       const deltaX = Math.max(120, Math.abs(x2 - x1) / 2);
+                      const curveLift = Math.min(120, Math.abs(y2 - y1) * 0.22 + 24);
                       const controlOffset = x2 >= x1 ? deltaX : -deltaX;
-                      const path = `M ${x1} ${y1} C ${x1 + controlOffset} ${y1}, ${x2 - controlOffset} ${y2}, ${x2} ${y2}`;
+                      const path = `M ${x1} ${y1} C ${x1 + controlOffset} ${y1 - curveLift}, ${x2 - controlOffset} ${y2 + curveLift}, ${x2} ${y2}`;
                       const markerId = `arrow-${link.relationType.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
 
                       return (
@@ -631,29 +697,41 @@ const DependencyGraph = ({
                       );
                     }
 
+                    const visualSize = getNodeVisualSize(isSelected);
+
                     return (
                       <button
                         type="button"
                         key={node.id}
                         onClick={() => handleNodeClick(node)}
-                        className={`absolute flex flex-col justify-center rounded-2xl border px-4 py-3 text-left shadow-lg transition-all hover:scale-[1.03] ${chrome.className} ${isSelected ? 'ring-2 ring-emerald-300 ring-offset-4 ring-offset-slate-950 brightness-125 shadow-emerald-950/50' : ''}`}
+                        className="absolute flex flex-col items-center text-center transition-all hover:scale-105"
                         style={{
                           left: node.x,
                           top: node.y,
-                          width: isSelected ? `${SELECTED_NODE_WIDTH}px` : `${NODE_WIDTH}px`,
-                          height: isSelected ? `${SELECTED_NODE_HEIGHT}px` : `${NODE_HEIGHT}px`,
+                          width: `${visualSize.width}px`,
+                          height: `${visualSize.height}px`,
                         }}
                         aria-pressed={isSelected}
                         title={`${node.file?.filepath || node.label} - ${node.incoming} incoming, ${node.outgoing} outgoing`}
                       >
-                        <span className="flex min-w-0 items-center gap-3">
-                          <span className={`shrink-0 rounded-full border border-white/10 bg-slate-950/50 ${isSelected ? 'p-3' : 'p-2'}`}>{chrome.icon}</span>
-                          <span className="min-w-0">
-                            <span className={`${isSelected ? 'text-base' : 'text-sm'} block truncate font-black leading-5`}>{truncateLabel(node.label, isSelected ? 28 : 24)}</span>
-                            <span className="mt-1 block truncate text-xs text-slate-400">
-                              {formatNodeSubtitle(node)}
-                            </span>
-                          </span>
+                        <span
+                          className={`relative flex items-center justify-center rounded-full border-2 shadow-2xl transition-all ${chrome.className} ${isSelected ? 'ring-4 ring-white/20 brightness-125' : ''}`}
+                          style={{
+                            width: `${visualSize.circle}px`,
+                            height: `${visualSize.circle}px`,
+                            boxShadow: isSelected
+                              ? '0 0 0 8px rgba(16,185,129,0.14), 0 0 34px rgba(34,211,238,0.55)'
+                              : '0 0 0 5px rgba(15,23,42,0.75), 0 0 24px rgba(59,130,246,0.35)',
+                          }}
+                        >
+                          <span className="absolute inset-2 rounded-full bg-white/10 blur-[1px]" />
+                          <span className="relative z-10">{chrome.icon}</span>
+                        </span>
+                        <span className={`${isSelected ? 'mt-3 text-sm' : 'mt-2 text-xs'} block w-full truncate font-black uppercase tracking-wide text-slate-100 drop-shadow`}>
+                          {truncateLabel(node.label, isSelected ? 28 : 24)}
+                        </span>
+                        <span className="mt-1 block w-full truncate text-[11px] font-semibold text-slate-400">
+                          {formatNodeSubtitle(node)}
                         </span>
                       </button>
                     );

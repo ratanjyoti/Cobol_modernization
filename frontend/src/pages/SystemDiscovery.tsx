@@ -7,7 +7,7 @@ import DependencyGraph, {
 } from './DependencyGraph';
 import DDDDiscovery from './DDDDiscovery';
 import { Database, FileCode, FileQuestion, FileText, GitBranch, Loader2, Search, Share2 } from 'lucide-react';
-import { ProjectAPI } from '../services/api';
+import { getAnalysisWarmCache, warmAnalysisTabs } from '../services/analysisPrefetch';
 import type { DependencyRelation, FileRecord } from '../services/api';
 
 const normalizeName = (value: string) => value.trim().toLowerCase().replace(/\\/g, '/');
@@ -201,7 +201,6 @@ const SystemDiscovery = () => {
     let active = true;
 
     const loadGraphData = async () => {
-      setLoading(true);
       setError('');
 
       if (!runId) {
@@ -212,21 +211,26 @@ const SystemDiscovery = () => {
         return;
       }
 
+      const cached = getAnalysisWarmCache(runId);
+      const hadWarmData = Boolean(cached?.files || cached?.relations);
+      if (cached?.files) setFiles(cached.files);
+      if (cached?.relations) setRelations(cached.relations);
+      setLoading(!hadWarmData);
+
       try {
-        const [fileData, relationData] = await Promise.all([
-          ProjectAPI.listFiles(runId),
-          ProjectAPI.listRelations(runId),
-        ]);
+        const warmData = await warmAnalysisTabs(runId, true);
 
         if (!active) return;
-        setFiles(fileData.files || []);
-        setRelations(relationData.relations || []);
+        setFiles(warmData.files || []);
+        setRelations(warmData.relations || []);
       } catch {
         if (!active) return;
         setError('Unable to load dependency graph for this run.');
-        setFiles([]);
-        setRelations([]);
-        setSelectedNode(null);
+        if (!hadWarmData) {
+          setFiles([]);
+          setRelations([]);
+          setSelectedNode(null);
+        }
       } finally {
         if (active) setLoading(false);
       }
