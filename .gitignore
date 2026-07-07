@@ -10,3 +10,4 @@ backend/data/sqlite/*.db-journal
 backend/data/sqlite/*.sqlite
 backend/data/sqlite/*.sqlite3
 backend/data/sqlite/*-journal
+backend/data/uploads/

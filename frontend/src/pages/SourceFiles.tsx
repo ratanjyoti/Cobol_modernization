@@ -147,7 +147,6 @@ const SourceFiles = () => {
   const [inputMethod, setInputMethod] = useState<'file' | 'local' | 'github'>('file');
   const [githubUrl, setGithubUrl] = useState('');
   const [githubToken, setGithubToken] = useState('');
-  const [localRepoPath, setLocalRepoPath] = useState('');
   const [files, setFiles] = useState<SourceFileRecord[]>([]);
   const [selectedScope, setSelectedScope] = useState(localStorage.getItem(STORAGE_KEYS.selectedScope) || '');
   const [sourceLang, setSourceLang] = useState(localStorage.getItem(STORAGE_KEYS.sourceLang) || 'auto');
@@ -390,32 +389,6 @@ const SourceFiles = () => {
     }
   };
 
-  const handleLocalRepoIngest = async () => {
-    if (!localRepoPath.trim() || !runId) {
-      toast.error("Paste a local Git repository path first");
-      return;
-    }
-
-    setIsReadingRepo(true);
-    try {
-      const formData = new FormData();
-      formData.append('run_id', runId);
-      formData.append('repo_path', localRepoPath.trim());
-
-      const response = await ProjectAPI.ingestLocalRepo(formData);
-      const backendFiles = mapBackendFiles(response.mapped_files || []);
-
-      setFiles(prev => [...prev, ...backendFiles]);
-      enqueueLanguageDetections(response.mapped_files || []);
-      toast.success(`Inventory created for ${backendFiles.length} files`);
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.detail || "Failed to read local repository";
-      toast.error(errorMsg);
-    } finally {
-      setIsReadingRepo(false);
-    }
-  };
-
   const handleGithubIngest = async () => {
     if (!githubUrl.trim() || !runId) {
       toast.error("Please enter a GitHub repository URL");
@@ -633,7 +606,7 @@ const SourceFiles = () => {
               </div>
             </div>
           ) : inputMethod === 'local' ? (
-            <div className="glass-card p-8 rounded-3xl border-slate-800 bg-slate-900/50 space-y-6">
+            <div className="glass-card p-8 rounded-3xl border-slate-800 bg-slate-900/50 flex flex-col md:flex-row gap-6 items-center">
               <input
                 type="file"
                 ref={localRepoInputRef}
@@ -642,35 +615,17 @@ const SourceFiles = () => {
                 style={{ display: 'none' }}
                 onChange={handleFolderUpload}
               />
-              <div className="space-y-2">
+              <div className="flex-1 space-y-2 w-full">
                 <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-widest">
                   <GitBranch size={16} /> Local Git Repository
                 </div>
                 <p className="text-sm text-slate-400">
-                  Paste a path when the backend is running on the same machine as the repo. Use folder select when the repo is on the browser user's machine.
+                  Select a repository folder from this device. Supported source files will be uploaded while build output and Git internals are skipped.
                 </p>
               </div>
-              <div className="flex flex-col md:flex-row gap-4 items-end">
-                <div className="flex-1 space-y-3 w-full">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Repository Path</label>
-                  <div className="relative">
-                    <GitBranch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-                    <input
-                      type="text"
-                      placeholder="E:\NEW_genai_projects\cobol_github\cobol_folder\cobol-VB-on-.net"
-                      className="w-full pl-10 pr-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                      value={localRepoPath}
-                      onChange={(e) => setLocalRepoPath(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <button onClick={handleLocalRepoIngest} disabled={isReadingRepo} className="w-full md:w-auto px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-                  {isReadingRepo ? <><Loader2 className="animate-spin" size={18}/> Reading...</> : <><Zap size={18}/> Read Path</>}
-                </button>
-                <button onClick={() => localRepoInputRef.current?.click()} disabled={isUploading} className="w-full md:w-auto px-8 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-                  {isUploading ? <><Loader2 className="animate-spin" size={18}/> Uploading...</> : <><FolderOpen size={18}/> Select Folder</>}
-                </button>
-              </div>
+              <button onClick={() => localRepoInputRef.current?.click()} disabled={isUploading} className="w-full md:w-auto px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                {isUploading ? <><Loader2 className="animate-spin" size={18}/> Uploading...</> : <><FolderOpen size={18}/> Select Folder</>}
+              </button>
             </div>
           ) : (
             <div className="glass-card p-8 rounded-3xl border-slate-800 bg-slate-900/50 flex flex-col md:flex-row gap-4 items-end">
