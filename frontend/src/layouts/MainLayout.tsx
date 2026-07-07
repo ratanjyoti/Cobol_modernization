@@ -63,8 +63,8 @@ const MainLayout = () => {
         openConfig={() => setShowConfig(true)}
       />
 
-      <main className="flex-1 overflow-y-auto">
-        <div className="p-8 max-w-7xl mx-auto">
+      <main className="min-w-0 flex-1 overflow-y-auto">
+        <div className="w-full min-w-0 p-4 lg:p-6 xl:p-8">
           <Outlet />
         </div>
       </main>

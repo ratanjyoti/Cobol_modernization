@@ -11,6 +11,7 @@ import {
   Maximize2,
   Minimize2,
   Network,
+  Scan,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
@@ -71,6 +72,10 @@ type DependencyGraphProps = {
 type RelationFilter = 'ALL' | string;
 
 const NODE_SIZE = 88;
+const NODE_WIDTH = 220;
+const NODE_HEIGHT = 74;
+const SELECTED_NODE_WIDTH = 270;
+const SELECTED_NODE_HEIGHT = 92;
 const GROUP_WIDTH = 220;
 const GROUP_HEIGHT = 118;
 const LAYER_X: Record<string, number> = {
@@ -94,6 +99,17 @@ const MODE_LABELS: Record<GraphMode, string> = {
 const REQUESTED_RELATION_ORDER = ['CALLS', 'INCLUDES', 'READS_WRITES', 'IMPORTS', 'REFERENCES', 'INHERITS'];
 
 const cloneNode = (node: DependencyNode): DependencyNode => ({ ...node });
+
+const truncateLabel = (value: string, maxLength = 26) => {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 1)}...`;
+};
+
+const formatNodeSubtitle = (node: DependencyNode) => {
+  const kind = node.isResolved ? node.type : 'unresolved';
+  if (!node.isResolved) return `${kind} - ${node.incoming} in / ${node.outgoing} out`;
+  return `${kind} - ${node.incoming} in / ${node.outgoing} out`;
+};
 
 const getNodeChrome = (type: DependencyNode['type']) => {
   switch (type) {
@@ -157,11 +173,11 @@ const layoutLayered = (nodes: DependencyNode[]) => {
       return relationDelta || a.label.localeCompare(b.label);
     });
     const x = LAYER_X[layer] || LAYER_X.file;
-    const startY = Math.max(120, 360 - (layerNodes.length * 58));
+    const startY = Math.max(140, 370 - (layerNodes.length * 58));
 
     layerNodes.forEach((node, index) => {
       node.x = x;
-      node.y = startY + index * 132;
+      node.y = startY + index * 124;
     });
   });
 
@@ -180,21 +196,27 @@ const layoutImpact = (nodes: DependencyNode[], links: DependencyLink[], focusIds
   const focusNodes = nodes.filter((node) => focusIds.has(node.id));
   const incomingNodes = nodes.filter((node) => incomingIds.has(node.id));
   const outgoingNodes = nodes.filter((node) => outgoingIds.has(node.id));
-  const centerY = Math.max(260, Math.max(incomingNodes.length, outgoingNodes.length, focusNodes.length) * 70);
+  const maxColumnSize = Math.max(incomingNodes.length, Math.ceil(outgoingNodes.length / 2), focusNodes.length);
+  const centerY = Math.max(330, maxColumnSize * 58 + 120);
+  const centerX = 590;
+  const spacing = 112;
 
   focusNodes.forEach((node, index) => {
-    node.x = 560;
-    node.y = centerY + (index - (focusNodes.length - 1) / 2) * 118;
+    node.x = centerX;
+    node.y = centerY + (index - (focusNodes.length - 1) / 2) * spacing;
   });
 
   incomingNodes.forEach((node, index) => {
-    node.x = 160;
-    node.y = centerY + (index - (incomingNodes.length - 1) / 2) * 128;
+    node.x = centerX - 410;
+    node.y = centerY + (index - (incomingNodes.length - 1) / 2) * spacing;
   });
 
   outgoingNodes.forEach((node, index) => {
-    node.x = 960;
-    node.y = centerY + (index - (outgoingNodes.length - 1) / 2) * 128;
+    const column = outgoingNodes.length > 8 ? index % 2 : 0;
+    const row = outgoingNodes.length > 8 ? Math.floor(index / 2) : index;
+    const rowCount = outgoingNodes.length > 8 ? Math.ceil(outgoingNodes.length / 2) : outgoingNodes.length;
+    node.x = centerX + 410 + column * 270;
+    node.y = centerY + (row - (rowCount - 1) / 2) * spacing;
   });
 
   return nodes;
@@ -202,13 +224,11 @@ const layoutImpact = (nodes: DependencyNode[], links: DependencyLink[], focusIds
 
 const buildOverviewNodes = (stats: DependencyGraphStats): DependencyNode[] => {
   const groups: Array<Pick<DependencyNode, 'id' | 'label' | 'type' | 'groupCount' | 'subtitle'> & { x: number; y: number }> = [
-    { id: 'group:uploaded', label: 'Uploaded Files', type: 'group', groupCount: stats.totalFiles, subtitle: 'All files preserved in explorer', x: 120, y: 160 },
-    { id: 'group:programs', label: 'Programs', type: 'program', groupCount: stats.programs, subtitle: 'COBOL and program files', x: 420, y: 120 },
-    { id: 'group:copybooks', label: 'Copybooks', type: 'copybook', groupCount: stats.copybooks, subtitle: 'Includes and shared records', x: 720, y: 120 },
-    { id: 'group:tables', label: 'Tables / Data Stores', type: 'table', groupCount: stats.tables, subtitle: 'Data access targets', x: 1020, y: 120 },
-    { id: 'group:jobs', label: 'Jobs', type: 'job', groupCount: stats.jobs, subtitle: 'JCL and orchestration', x: 420, y: 340 },
-    { id: 'group:external', label: 'External / Unresolved', type: 'external', groupCount: stats.unresolvedTargets, subtitle: 'Referenced but not uploaded', x: 720, y: 340 },
-    { id: 'group:isolated', label: 'Isolated Files', type: 'file', groupCount: stats.isolatedFiles, subtitle: 'Hidden from graph canvas', x: 1020, y: 340 },
+    { id: 'group:uploaded', label: 'Uploaded Files', type: 'group', groupCount: stats.totalFiles, subtitle: 'All files preserved in explorer', x: 160, y: 170 },
+    { id: 'group:connected', label: 'Connected Files', type: 'program', groupCount: stats.connectedFiles, subtitle: 'Files with detected relations', x: 430, y: 170 },
+    { id: 'group:isolated', label: 'Isolated Files', type: 'file', groupCount: stats.isolatedFiles, subtitle: 'Hidden from graph canvas', x: 700, y: 170 },
+    { id: 'group:external', label: 'Unresolved Targets', type: 'external', groupCount: stats.unresolvedTargets, subtitle: 'Referenced but not uploaded', x: 970, y: 170 },
+    { id: 'group:relations', label: 'Relations', type: 'copybook', groupCount: stats.relations, subtitle: 'Dependency edges detected', x: 565, y: 350 },
   ];
 
   return groups.map((group) => ({
@@ -219,13 +239,25 @@ const buildOverviewNodes = (stats: DependencyGraphStats): DependencyNode[] => {
   }));
 };
 
-const statusForMode = (mode: GraphMode, stats: DependencyGraphStats, nodeCount: number, linkCount: number) => {
+const statusForMode = (mode: GraphMode, stats: DependencyGraphStats, nodeCount: number, linkCount: number, selectedNode?: DependencyNode) => {
   if (mode === 'overview') {
-    return `${stats.totalFiles} files uploaded - ${stats.relations} dependencies detected - ${stats.isolatedFiles} isolated files hidden from map`;
+    return `Overview: ${stats.totalFiles} uploaded files, ${stats.connectedFiles} connected files, ${stats.unresolvedTargets} unresolved targets.`;
   }
 
   if (mode === 'isolated') {
     return `${stats.isolatedFiles} isolated files shown in the file explorer`;
+  }
+
+  if (mode === 'impact' && selectedNode) {
+    return `Impact View: ${selectedNode.label} - ${selectedNode.outgoing} outgoing dependencies - ${selectedNode.incoming} incoming dependencies`;
+  }
+
+  if (mode === 'connected') {
+    return `Showing connected dependency map: ${stats.connectedFiles} connected files, ${stats.unresolvedTargets} unresolved targets, ${stats.isolatedFiles} isolated files hidden from graph.`;
+  }
+
+  if (mode === 'unresolved') {
+    return `Showing unresolved references: ${stats.unresolvedTargets} unresolved targets with referencing files.`;
   }
 
   return `${nodeCount} nodes - ${linkCount} dependencies`;
@@ -244,6 +276,7 @@ const DependencyGraph = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeRelation, setActiveRelation] = useState<RelationFilter>('ALL');
   const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(new Set());
+  const [showTwoHop, setShowTwoHop] = useState(false);
 
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const availableRelations = useMemo(() => {
@@ -264,6 +297,7 @@ const DependencyGraph = ({
   useEffect(() => {
     if (mode !== 'impact') {
       setExpandedNodeIds(new Set());
+      setShowTwoHop(false);
       return;
     }
 
@@ -300,10 +334,20 @@ const DependencyGraph = ({
     return ids;
   }, [expandedNodeIds, mode, selectedNodeId]);
 
+  const selectedNode = selectedNodeId ? nodeById.get(selectedNodeId) : undefined;
+
   const visibleLinks = useMemo(() => {
     if (mode === 'overview' || mode === 'isolated') return [];
     if (mode === 'impact') {
-      return filteredLinks.filter((link) => focusedNodeIds.has(link.from) || focusedNodeIds.has(link.to));
+      const firstHopLinks = filteredLinks.filter((link) => focusedNodeIds.has(link.from) || focusedNodeIds.has(link.to));
+      if (!showTwoHop) return firstHopLinks;
+
+      const firstHopIds = new Set<string>(focusedNodeIds);
+      firstHopLinks.forEach((link) => {
+        firstHopIds.add(link.from);
+        firstHopIds.add(link.to);
+      });
+      return filteredLinks.filter((link) => firstHopIds.has(link.from) || firstHopIds.has(link.to));
     }
     if (mode === 'unresolved') {
       return filteredLinks.filter((link) => {
@@ -313,7 +357,7 @@ const DependencyGraph = ({
       });
     }
     return filteredLinks;
-  }, [filteredLinks, focusedNodeIds, mode, nodeById]);
+  }, [filteredLinks, focusedNodeIds, mode, nodeById, showTwoHop]);
 
   const displayNodes = useMemo(() => {
     if (mode === 'overview') return buildOverviewNodes(stats);
@@ -343,14 +387,14 @@ const DependencyGraph = ({
 
   const displayNodeById = useMemo(() => new Map(displayNodes.map((node) => [node.id, node])), [displayNodes]);
   const canvasSize = useMemo(() => {
-    const itemWidth = mode === 'overview' ? GROUP_WIDTH : NODE_SIZE;
-    const itemHeight = mode === 'overview' ? GROUP_HEIGHT : NODE_SIZE;
-    const maxX = Math.max(1360, ...displayNodes.map((node) => node.x + itemWidth + 180));
-    const maxY = Math.max(700, ...displayNodes.map((node) => node.y + itemHeight + 180));
+    const itemWidth = mode === 'overview' ? GROUP_WIDTH : NODE_WIDTH;
+    const itemHeight = mode === 'overview' ? GROUP_HEIGHT : NODE_HEIGHT;
+    const maxX = Math.max(1360, ...displayNodes.map((node) => node.x + itemWidth + 220));
+    const maxY = Math.max(720, ...displayNodes.map((node) => node.y + itemHeight + 180));
     return { width: maxX, height: maxY };
   }, [displayNodes, mode]);
 
-  const statusText = statusForMode(mode, stats, displayNodes.length, visibleLinks.length);
+  const statusText = statusForMode(mode, stats, displayNodes.length, visibleLinks.length, selectedNode);
 
   const handleNodeClick = (node: DependencyNode) => {
     if (node.type === 'group') return;
@@ -373,14 +417,14 @@ const DependencyGraph = ({
     <div className={isFullscreen ? 'fixed inset-4 z-[100] rounded-2xl bg-slate-950 shadow-2xl shadow-black/60' : 'h-full w-full'}>
       <TransformWrapper
         key={`${mode}-${displayNodes.length}-${visibleLinks.length}-${[...focusedNodeIds].join(',') || 'none'}-${activeRelation}`}
-        initialScale={1}
+        initialScale={mode === 'impact' ? 0.82 : 0.9}
         minScale={0.1}
         maxScale={4}
         wheel={{ smoothStep: 0.002 }}
         centerOnInit
       >
         {({ zoomIn, zoomOut, centerView }) => (
-          <div className="relative w-full h-full bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden min-h-[600px]">
+          <div className="relative w-full h-full bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden min-h-[620px]">
             <div className="absolute left-4 top-4 z-50 flex flex-wrap gap-2 pr-56">
               {(Object.keys(MODE_LABELS) as GraphMode[]).map((graphMode) => (
                 <button
@@ -424,6 +468,7 @@ const DependencyGraph = ({
                   </button>
                 ))}
                 {mode === 'impact' && (
+                  <>
                   <button
                     type="button"
                     onClick={handleOverviewClick}
@@ -432,6 +477,18 @@ const DependencyGraph = ({
                     <ArrowLeft size={14} />
                     Back to Overview
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowTwoHop((value) => !value)}
+                    className={`rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${
+                      showTwoHop
+                        ? 'border-sky-400 bg-sky-500/20 text-sky-200'
+                        : 'border-slate-700 bg-slate-800/80 text-slate-200 hover:bg-slate-700'
+                    }`}
+                  >
+                    {showTwoHop ? '1-hop only' : 'Expand 2-hop'}
+                  </button>
+                  </>
                 )}
                 <div className="rounded-lg border border-slate-800 bg-slate-900/80 px-3 py-2 text-xs font-semibold text-slate-400">
                   {statusText}
@@ -443,10 +500,13 @@ const DependencyGraph = ({
               <button type="button" aria-label="Zoom in" title="Zoom in" onClick={() => zoomIn()} className="bg-slate-800/80 backdrop-blur-md text-white p-2 rounded-lg hover:bg-slate-700 transition-colors border border-slate-700">
                 <ZoomIn size={20} />
               </button>
+              <button type="button" aria-label="Fit graph to view" title="Fit to view" onClick={() => centerView(mode === 'impact' ? 0.82 : 0.9, 250)} className="bg-slate-800/80 backdrop-blur-md text-white p-2 rounded-lg hover:bg-slate-700 transition-colors border border-slate-700">
+                <Scan size={20} />
+              </button>
               <button type="button" aria-label={isFullscreen ? 'Exit fullscreen' : 'Open fullscreen graph'} title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen graph'} onClick={() => setIsFullscreen((value) => !value)} className="bg-slate-800/80 backdrop-blur-md text-white p-2 rounded-lg hover:bg-slate-700 transition-colors border border-slate-700">
                 {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
               </button>
-              <button type="button" aria-label="Center graph" title="Center graph" onClick={() => centerView(1, 250)} className="bg-slate-800/80 backdrop-blur-md text-white p-2 rounded-lg hover:bg-slate-700 transition-colors border border-slate-700">
+              <button type="button" aria-label="Center graph" title="Center graph" onClick={() => centerView(mode === 'impact' ? 0.82 : 0.9, 250)} className="bg-slate-800/80 backdrop-blur-md text-white p-2 rounded-lg hover:bg-slate-700 transition-colors border border-slate-700">
                 <Crosshair size={20} />
               </button>
               <button type="button" aria-label="Zoom out" title="Zoom out" onClick={() => zoomOut()} className="bg-slate-800/80 backdrop-blur-md text-white p-2 rounded-lg hover:bg-slate-700 transition-colors border border-slate-700">
@@ -455,21 +515,21 @@ const DependencyGraph = ({
             </div>
 
             {nodes.length === 0 ? (
-              <div className="flex h-full min-h-[600px] items-center justify-center text-center text-slate-500">
+              <div className="flex h-full min-h-[620px] items-center justify-center text-center text-slate-500">
                 <div>
                   <p className="text-sm font-bold text-slate-300">No uploaded files found</p>
                   <p className="mt-1 text-xs">Upload source files for the active run to populate this graph.</p>
                 </div>
               </div>
             ) : mode === 'isolated' ? (
-              <div className="flex h-full min-h-[600px] items-center justify-center text-center text-slate-500">
+              <div className="flex h-full min-h-[620px] items-center justify-center text-center text-slate-500">
                 <div>
                   <p className="text-sm font-bold text-slate-300">Isolated files are shown in the explorer</p>
                   <p className="mt-1 text-xs">Use the left panel to search and inspect files with no detected dependencies.</p>
                 </div>
               </div>
             ) : displayNodes.length === 0 ? (
-              <div className="flex h-full min-h-[600px] items-center justify-center text-center text-slate-500">
+              <div className="flex h-full min-h-[620px] items-center justify-center text-center text-slate-500">
                 <div>
                   <p className="text-sm font-bold text-slate-300">No relations match this view</p>
                   <p className="mt-1 text-xs">Choose another mode, relation type, or select a file from the explorer.</p>
@@ -504,10 +564,16 @@ const DependencyGraph = ({
                       if (!fromNode || !toNode) return null;
 
                       const color = getLinkColor(link.relationType);
-                      const x1 = fromNode.x + NODE_SIZE / 2;
-                      const y1 = fromNode.y + NODE_SIZE / 2;
-                      const x2 = toNode.x + NODE_SIZE / 2;
-                      const y2 = toNode.y + NODE_SIZE / 2;
+                      const fromSelected = focusedNodeIds.has(fromNode.id);
+                      const toSelected = focusedNodeIds.has(toNode.id);
+                      const fromWidth = fromSelected ? SELECTED_NODE_WIDTH : NODE_WIDTH;
+                      const fromHeight = fromSelected ? SELECTED_NODE_HEIGHT : NODE_HEIGHT;
+                      const toWidth = toSelected ? SELECTED_NODE_WIDTH : NODE_WIDTH;
+                      const toHeight = toSelected ? SELECTED_NODE_HEIGHT : NODE_HEIGHT;
+                      const x1 = fromNode.x + fromWidth;
+                      const y1 = fromNode.y + fromHeight / 2;
+                      const x2 = toNode.x;
+                      const y2 = toNode.y + toHeight / 2;
                       const deltaX = Math.max(120, Math.abs(x2 - x1) / 2);
                       const controlOffset = x2 >= x1 ? deltaX : -deltaX;
                       const path = `M ${x1} ${y1} C ${x1 + controlOffset} ${y1}, ${x2 - controlOffset} ${y2}, ${x2} ${y2}`;
@@ -519,15 +585,18 @@ const DependencyGraph = ({
                             d={path}
                             fill="none"
                             stroke={color}
-                            strokeWidth={mode === 'impact' ? 3 : 2}
+                            strokeWidth={mode === 'impact' ? 3.5 : 2.5}
                             strokeOpacity={mode === 'impact' ? 0.95 : 0.72}
                             strokeDasharray={toNode.isResolved ? undefined : '7 7'}
                             markerEnd={`url(#${markerId})`}
                           />
                           {mode === 'impact' && (
-                            <text x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 10} fill={color} fontSize="12" fontWeight="700">
-                              {link.relationType}
-                            </text>
+                            <g transform={`translate(${(x1 + x2) / 2 - 44}, ${(y1 + y2) / 2 - 15})`}>
+                              <rect width="88" height="24" rx="8" fill="#020617" stroke={color} strokeOpacity="0.65" />
+                              <text x="44" y="16" fill={color} fontSize="11" fontWeight="800" textAnchor="middle">
+                                {link.relationType}
+                              </text>
+                            </g>
                           )}
                         </g>
                       );
@@ -567,14 +636,25 @@ const DependencyGraph = ({
                         type="button"
                         key={node.id}
                         onClick={() => handleNodeClick(node)}
-                        className={`absolute flex h-[88px] w-[88px] flex-col items-center justify-center rounded-full border p-2 text-center shadow-lg transition-all hover:scale-110 ${chrome.className} ${isSelected ? 'ring-2 ring-emerald-300 ring-offset-4 ring-offset-slate-950 scale-110 brightness-125' : ''}`}
-                        style={{ left: node.x, top: node.y }}
+                        className={`absolute flex flex-col justify-center rounded-2xl border px-4 py-3 text-left shadow-lg transition-all hover:scale-[1.03] ${chrome.className} ${isSelected ? 'ring-2 ring-emerald-300 ring-offset-4 ring-offset-slate-950 brightness-125 shadow-emerald-950/50' : ''}`}
+                        style={{
+                          left: node.x,
+                          top: node.y,
+                          width: isSelected ? `${SELECTED_NODE_WIDTH}px` : `${NODE_WIDTH}px`,
+                          height: isSelected ? `${SELECTED_NODE_HEIGHT}px` : `${NODE_HEIGHT}px`,
+                        }}
                         aria-pressed={isSelected}
-                        title={`${node.label} - ${node.incoming} incoming, ${node.outgoing} outgoing`}
+                        title={`${node.file?.filepath || node.label} - ${node.incoming} incoming, ${node.outgoing} outgoing`}
                       >
-                        {chrome.icon}
-                        <span className="mt-1 w-full truncate text-[11px] font-bold leading-4">{node.label}</span>
-                        <span className="font-mono text-[10px] text-slate-400">{node.incoming}/{node.outgoing}</span>
+                        <span className="flex min-w-0 items-center gap-3">
+                          <span className={`shrink-0 rounded-full border border-white/10 bg-slate-950/50 ${isSelected ? 'p-3' : 'p-2'}`}>{chrome.icon}</span>
+                          <span className="min-w-0">
+                            <span className={`${isSelected ? 'text-base' : 'text-sm'} block truncate font-black leading-5`}>{truncateLabel(node.label, isSelected ? 28 : 24)}</span>
+                            <span className="mt-1 block truncate text-xs text-slate-400">
+                              {formatNodeSubtitle(node)}
+                            </span>
+                          </span>
+                        </span>
                       </button>
                     );
                   })}

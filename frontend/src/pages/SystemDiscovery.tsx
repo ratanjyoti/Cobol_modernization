@@ -258,6 +258,13 @@ const SystemDiscovery = () => {
     jobs: nodes.filter((node) => node.isResolved && node.type === 'job').length,
   }), [connectedNodes.length, files.length, isolatedNodes.length, links.length, nodes, unresolvedNodes.length]);
 
+  const explorerCounts: Record<ExplorerFilter, number> = useMemo(() => ({
+    all: nodes.length,
+    connected: connectedNodes.length,
+    isolated: isolatedNodes.length,
+    unresolved: unresolvedNodes.length,
+  }), [connectedNodes.length, isolatedNodes.length, nodes.length, unresolvedNodes.length]);
+
   const explorerNodes = useMemo(() => {
     const lowerSearch = searchTerm.trim().toLowerCase();
 
@@ -290,7 +297,10 @@ const SystemDiscovery = () => {
     if (mode === 'overview') setSelectedNode(null);
     if (mode === 'isolated') setExplorerFilter('isolated');
     if (mode === 'unresolved') setExplorerFilter('unresolved');
-    if (mode === 'connected') setExplorerFilter('connected');
+    if (mode === 'connected') {
+      setExplorerFilter('connected');
+      setSelectedNode((current) => current ?? connectedNodes[0] ?? null);
+    }
   };
 
   const handleNodeSelect = (node: DependencyNode) => {
@@ -312,8 +322,8 @@ const SystemDiscovery = () => {
   ];
 
   return (
-    <div className="space-y-6 h-full flex flex-col">
-      <div className="flex justify-between items-center">
+    <div className="flex h-full min-h-0 flex-col gap-4">
+      <div className="flex shrink-0 justify-between items-center">
         <div className="space-y-1">
           <div className="flex items-center gap-3">
             <Share2 className="text-indigo-500" size={28} />
@@ -336,7 +346,7 @@ const SystemDiscovery = () => {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid shrink-0 gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {summaryCards.map((card) => (
           <div key={card.label} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
             <p className="text-xs font-bold uppercase tracking-widest text-slate-500">{card.label}</p>
@@ -345,9 +355,9 @@ const SystemDiscovery = () => {
         ))}
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto pr-1">
-        <div className="grid min-h-[calc(100vh-250px)] grid-cols-1 gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-          <aside className="min-h-[520px] rounded-2xl border border-slate-800 bg-slate-900/60 p-4 shadow-inner">
+      <div className="min-h-0 flex-1">
+        <div className="grid min-h-0 grid-cols-1 gap-4 xl:h-[calc(100vh-245px)] xl:min-h-[720px] xl:grid-cols-[300px_minmax(0,1fr)]">
+          <aside className="min-h-[420px] rounded-2xl border border-slate-800 bg-slate-900/60 p-4 shadow-inner xl:h-full">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-sm font-bold text-white">
                 <FileText size={16} className="text-indigo-400" />
@@ -378,12 +388,12 @@ const SystemDiscovery = () => {
                       : 'border-slate-700 bg-slate-950 text-slate-400 hover:bg-slate-800'
                   }`}
                 >
-                  {filter}
+                  {filter} <span className="ml-1 font-mono text-slate-500">{explorerCounts[filter]}</span>
                 </button>
               ))}
             </div>
 
-            <div className="max-h-[640px] space-y-2 overflow-y-auto pr-1">
+            <div className="h-[calc(100%-154px)] min-h-[260px] space-y-2 overflow-y-auto pr-1">
               {explorerNodes.map((node) => {
                 const isSelected = node.id === selectedNode?.id;
                 return (
@@ -417,7 +427,7 @@ const SystemDiscovery = () => {
             </div>
           </aside>
 
-          <main className="min-w-0 space-y-6">
+          <main className="min-w-0 space-y-3 xl:h-full xl:overflow-y-auto">
             <div className="flex items-center justify-between px-2">
               <div className="flex items-center gap-2 text-white font-bold text-sm">
                 <Share2 size={16} className="text-indigo-400" />
@@ -429,7 +439,7 @@ const SystemDiscovery = () => {
               </div>
             </div>
 
-            <div className="h-[62vh] min-h-[560px] overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/50 shadow-inner">
+            <div className="h-[72vh] min-h-[640px] max-h-[780px] overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/50 shadow-inner xl:h-[calc(100%-44px)]">
               {loading ? (
                 <div className="flex h-full items-center justify-center gap-2 text-slate-400">
                   <Loader2 size={18} className="animate-spin" /> Loading graph files...
@@ -451,7 +461,7 @@ const SystemDiscovery = () => {
             </div>
 
             {graphMode === 'isolated' && (
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4 shadow-inner">
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4 shadow-inner xl:hidden">
                 <div className="mb-3 flex items-center justify-between">
                   <div className="text-sm font-bold text-white">Isolated Files</div>
                   <div className="font-mono text-xs text-slate-500">{isolatedNodes.length} files</div>
@@ -488,21 +498,20 @@ const SystemDiscovery = () => {
                 </div>
               </div>
             )}
-
-            <div className="flex items-center justify-between px-2 scroll-mt-6">
-              <div className="flex items-center gap-2 text-white font-bold text-sm">
-                <FileText size={16} className="text-emerald-400" />
-                Node Details
+            <section className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4 shadow-inner">
+              <div className="mb-3 flex items-center justify-between px-1">
+                <div className="flex items-center gap-2 text-white font-bold text-sm">
+                  <FileText size={16} className="text-emerald-400" />
+                  Node Details
+                </div>
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-500">
+                  <GitBranch size={14} className="text-emerald-500" />
+                  Dependency Data
+                </div>
               </div>
-              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-500">
-                <GitBranch size={14} className="text-emerald-500" />
-                Dependency Data
-              </div>
-            </div>
 
-            <div className="min-h-[320px] rounded-2xl border border-slate-800 bg-slate-900/50 p-4 shadow-inner">
               <DDDDiscovery selectedNode={selectedNode} files={files} links={links} nodes={nodes} />
-            </div>
+            </section>
           </main>
         </div>
       </div>

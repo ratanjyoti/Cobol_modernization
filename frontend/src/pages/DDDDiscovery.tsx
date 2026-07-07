@@ -1,4 +1,5 @@
-import { AlertTriangle, Database, FileCode, GitBranch } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { AlertTriangle, ChevronDown, Database, FileCode, GitBranch, Search } from 'lucide-react';
 import type { DependencyLink, DependencyNode } from './DependencyGraph';
 import type { FileRecord } from '../services/api';
 
@@ -57,6 +58,8 @@ const RelationRows = ({
 );
 
 const DDDDiscovery = ({ selectedNode, files, links, nodes }: DDDDiscoveryProps) => {
+  const [showAllFiles, setShowAllFiles] = useState(false);
+  const [fileSearch, setFileSearch] = useState('');
   const selectedFile = selectedNode?.file ?? files[0] ?? null;
   const incomingLinks = selectedNode ? links.filter((link) => link.to === selectedNode.id) : [];
   const outgoingLinks = selectedNode ? links.filter((link) => link.from === selectedNode.id) : [];
@@ -68,6 +71,13 @@ const DDDDiscovery = ({ selectedNode, files, links, nodes }: DDDDiscoveryProps) 
         return (link.from === selectedNode.id || link.to === selectedNode.id) && (from?.isResolved === false || to?.isResolved === false);
       })
     : [];
+  const filteredNodes = useMemo(() => {
+    const query = fileSearch.trim().toLowerCase();
+    return nodes
+      .filter((node) => !query || node.label.toLowerCase().includes(query) || (node.file?.filepath || '').toLowerCase().includes(query))
+      .sort((a, b) => (b.incoming + b.outgoing) - (a.incoming + a.outgoing) || a.label.localeCompare(b.label))
+      .slice(0, 50);
+  }, [fileSearch, nodes]);
 
   if (!selectedNode && !selectedFile) {
     return (
@@ -85,7 +95,7 @@ const DDDDiscovery = ({ selectedNode, files, links, nodes }: DDDDiscoveryProps) 
   const isIsolated = selectedNode ? selectedNode.incoming + selectedNode.outgoing === 0 && selectedNode.isResolved : false;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-4">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="space-y-3 min-w-0">
@@ -112,7 +122,7 @@ const DDDDiscovery = ({ selectedNode, files, links, nodes }: DDDDiscoveryProps) 
             )}
           </div>
 
-          <div className="grid w-full gap-3 text-xs sm:grid-cols-2 xl:w-[480px]">
+          <div className="grid w-full gap-2 text-xs sm:grid-cols-2 xl:w-full">
             <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
               <p className="mb-1 font-bold uppercase tracking-widest text-slate-500">Type</p>
               <p className="font-mono text-blue-400">{formatType(displayType)}</p>
@@ -141,42 +151,71 @@ const DDDDiscovery = ({ selectedNode, files, links, nodes }: DDDDiscoveryProps) 
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-3">
         <RelationRows title="Incoming dependencies" rows={incomingLinks} nodes={nodes} emptyText="No incoming dependencies found" />
         <RelationRows title="Outgoing dependencies" rows={outgoingLinks} nodes={nodes} emptyText="No outgoing dependencies found" />
         <RelationRows title="Impacted files" rows={impactedLinks} nodes={nodes} emptyText={isIsolated ? 'This file is isolated' : 'No impacted files found'} />
         <RelationRows title="Missing / unresolved targets" rows={missingLinks} nodes={nodes} emptyText="No missing or unresolved targets found" />
       </div>
 
-      <div className="border border-slate-700 rounded-xl overflow-hidden">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-800 text-slate-400 uppercase text-xs">
-            <tr className="border-b border-slate-700">
-              <th className="p-4">Graph Node</th>
-              <th className="p-4">Kind</th>
-              <th className="p-4">Links</th>
-              <th className="p-4">Resolved</th>
-            </tr>
-          </thead>
-          <tbody className="text-slate-300 divide-y divide-slate-700">
-            {nodes.map((node) => {
-              const isSelected = node.id === selectedNode?.id;
+      <div className="rounded-xl border border-slate-800 bg-slate-950">
+        <button
+          type="button"
+          onClick={() => setShowAllFiles((value) => !value)}
+          className="flex w-full items-center justify-between gap-3 p-4 text-left text-sm font-bold text-white"
+        >
+          <span>Show all uploaded files</span>
+          <span className="flex items-center gap-2 font-mono text-xs text-slate-500">
+            {nodes.length} nodes
+            <ChevronDown size={16} className={`transition-transform ${showAllFiles ? 'rotate-180' : ''}`} />
+          </span>
+        </button>
 
-              return (
-                <tr key={node.id} className={`${isSelected ? 'bg-emerald-500/10' : 'hover:bg-slate-800/30'} transition-colors`}>
-                  <td className={`p-4 font-mono text-xs ${isSelected ? 'text-emerald-300' : 'text-slate-300'}`}>{node.label}</td>
-                  <td className="p-4 text-xs text-blue-300">{formatType(node.type)}</td>
-                  <td className="p-4 font-mono text-xs text-slate-500">{node.incoming} in / {node.outgoing} out</td>
-                  <td className="p-4">
-                    <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold ${node.isResolved ? 'bg-emerald-500/10 text-emerald-300' : 'bg-orange-500/10 text-orange-300'}`}>
-                      {node.isResolved ? 'yes' : 'no'}
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        {showAllFiles && (
+          <div className="border-t border-slate-800 p-3">
+            <label className="relative mb-3 block">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                value={fileSearch}
+                onChange={(event) => setFileSearch(event.target.value)}
+                placeholder="Search uploaded files"
+                className="w-full rounded-lg border border-slate-700 bg-slate-900 py-2 pl-9 pr-3 text-sm text-slate-200 outline-none placeholder:text-slate-600 focus:border-emerald-400"
+              />
+            </label>
+
+            <div className="max-h-[360px] overflow-auto rounded-lg border border-slate-800">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-800 text-slate-400 uppercase text-xs">
+                  <tr className="border-b border-slate-700">
+                    <th className="p-3">Graph Node</th>
+                    <th className="p-3">Kind</th>
+                    <th className="p-3">Links</th>
+                    <th className="p-3">Resolved</th>
+                  </tr>
+                </thead>
+                <tbody className="text-slate-300 divide-y divide-slate-700">
+                  {filteredNodes.map((node) => {
+                    const isSelected = node.id === selectedNode?.id;
+
+                    return (
+                      <tr key={node.id} className={`${isSelected ? 'bg-emerald-500/10' : 'hover:bg-slate-800/30'} transition-colors`}>
+                        <td className={`p-3 font-mono text-xs ${isSelected ? 'text-emerald-300' : 'text-slate-300'}`} title={node.file?.filepath || node.label}>{node.label}</td>
+                        <td className="p-3 text-xs text-blue-300">{formatType(node.type)}</td>
+                        <td className="p-3 font-mono text-xs text-slate-500">{node.incoming} in / {node.outgoing} out</td>
+                        <td className="p-3">
+                          <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold ${node.isResolved ? 'bg-emerald-500/10 text-emerald-300' : 'bg-orange-500/10 text-orange-300'}`}>
+                            {node.isResolved ? 'yes' : 'no'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">Showing up to 50 rows. Use search to narrow large uploads.</p>
+          </div>
+        )}
       </div>
     </div>
   );
