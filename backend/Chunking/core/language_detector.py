@@ -24,6 +24,10 @@ class LanguageDetector:
             'TELON': ['.tln', '.tel', '.tlb', '.tlc'],
             'PLI': ['.pli', '.pl1'],
             'FORTRAN': ['.f', '.for', '.f90'],
+            'VB.NET': ['.vb', '.bas', '.frm', '.cls', '.vbproj'],
+            'C#': ['.cs', '.csproj'],
+            'SOLUTION': ['.sln'],
+            'XML': ['.xml', '.config'],
             'TEXT': ['.txt'],
             'SQL': ['.sql']
         }
@@ -35,6 +39,10 @@ class LanguageDetector:
             "TELON": "telon",
             "PL/I": "pli",
             "Fortran": "fortran",
+            "VB.NET": "vbnet",
+            "C#": "csharp",
+            "SOLUTION": "solution",
+            "XML": "xml",
             "SQL": "sql",
         }
         return language_ids.get(language_name, language_name.lower())

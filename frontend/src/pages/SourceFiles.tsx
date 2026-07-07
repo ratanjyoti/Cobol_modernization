@@ -27,6 +27,10 @@ const getFileType = (filename: string) => {
   if (ext.endsWith('.cpy')) return { label: 'Copybook', color: 'text-purple-400 bg-purple-500/10 border-purple-500/30' };
   if (ext.endsWith('.jcl')) return { label: 'JCL Script', color: 'text-amber-400 bg-amber-500/10 border-amber-500/30' };
   if (ext.endsWith('.cbl') || ext.endsWith('.cob')) return { label: 'Program', color: 'text-blue-400 bg-blue-500/10 border-blue-500/30' };
+  if (ext.endsWith('.vb') || ext.endsWith('.bas') || ext.endsWith('.frm') || ext.endsWith('.cls')) return { label: 'VB.NET', color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30' };
+  if (ext.endsWith('.cs')) return { label: 'C#', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' };
+  if (ext.endsWith('.sln') || ext.endsWith('.csproj') || ext.endsWith('.vbproj')) return { label: '.NET Project', color: 'text-pink-400 bg-pink-500/10 border-pink-500/30' };
+  if (ext.endsWith('.xml') || ext.endsWith('.config')) return { label: 'Config', color: 'text-slate-300 bg-slate-500/10 border-slate-500/30' };
   return { label: 'Other', color: 'text-slate-400 bg-slate-500/10 border-slate-500/30' };
 };
 
@@ -62,6 +66,8 @@ const SOURCE_LANGUAGES = [
   { id: 'pli', name: 'PL/I' },
   { id: 'fortran', name: 'Fortran' },
   { id: 'sql', name: 'SQL' },
+  { id: 'vbnet', name: 'VB.NET' },
+  { id: 'csharp', name: 'C#' },
 ];
 
 const TARGET_LANGUAGES = [
@@ -81,6 +87,10 @@ const LANGUAGE_LABELS: Record<string, string> = {
   pli: 'PL/I',
   fortran: 'Fortran',
   sql: 'SQL',
+  vbnet: 'VB.NET',
+  csharp: 'C#',
+  solution: 'Visual Studio Solution',
+  xml: 'XML',
   text: 'Text',
   unknown: 'Unknown',
 };
@@ -93,12 +103,12 @@ const SourceFiles = () => {
   // Input Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const localRepoInputRef = useRef<HTMLInputElement>(null);
   const queuedDetectionKeys = useRef<Set<string>>(new Set());
 
   const [inputMethod, setInputMethod] = useState<'file' | 'local' | 'github'>('file');
   const [githubUrl, setGithubUrl] = useState('');
   const [githubToken, setGithubToken] = useState('');
-  const [localRepoPath, setLocalRepoPath] = useState('');
   const [files, setFiles] = useState<SourceFileRecord[]>([]);
   const [selectedScope, setSelectedScope] = useState(localStorage.getItem(STORAGE_KEYS.selectedScope) || '');
   const [sourceLang, setSourceLang] = useState(localStorage.getItem(STORAGE_KEYS.sourceLang) || 'auto');
@@ -282,6 +292,9 @@ const SourceFiles = () => {
         } else if (
           fileName.endsWith('.cbl') || fileName.endsWith('.cob') || fileName.endsWith('.cpy') || 
           fileName.endsWith('.jcl') || fileName.endsWith('.sql') || fileName.endsWith('.tln') || fileName.endsWith('.tel') || 
+          fileName.endsWith('.vb') || fileName.endsWith('.bas') || fileName.endsWith('.frm') || fileName.endsWith('.cls') ||
+          fileName.endsWith('.cs') || fileName.endsWith('.sln') || fileName.endsWith('.csproj') || fileName.endsWith('.vbproj') ||
+          fileName.endsWith('.xml') || fileName.endsWith('.config') ||
           fileName.endsWith('.txt')
         ) {
           const fileFormData = new FormData();
@@ -333,32 +346,6 @@ const SourceFiles = () => {
     } finally {
       setIsUploading(false);
       if (folderInputRef.current) folderInputRef.current.value = '';
-    }
-  };
-
-  const handleLocalRepoIngest = async () => {
-    if (!localRepoPath.trim() || !runId) {
-      toast.error("Paste a local Git repository path first");
-      return;
-    }
-
-    setIsReadingRepo(true);
-    try {
-      const formData = new FormData();
-      formData.append('run_id', runId);
-      formData.append('repo_path', localRepoPath.trim());
-
-      const response = await ProjectAPI.ingestLocalRepo(formData);
-      const backendFiles = mapBackendFiles(response.mapped_files || []);
-
-      setFiles(prev => [...prev, ...backendFiles]);
-      enqueueLanguageDetections(response.mapped_files || []);
-      toast.success(`Inventory created for ${backendFiles.length} files`);
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.detail || "Failed to read local repository";
-      toast.error(errorMsg);
-    } finally {
-      setIsReadingRepo(false);
     }
   };
 
@@ -542,7 +529,7 @@ const SourceFiles = () => {
                   multiple 
                   style={{ display: 'none' }} 
                   onChange={handleFileUpload} 
-                  accept=".cbl,.cob,.cpy,.jcl,.sql,.tln,.tel,.txt,.zip" 
+                  accept=".cbl,.cob,.cpy,.jcl,.sql,.tln,.tel,.vb,.bas,.frm,.cls,.cs,.sln,.csproj,.vbproj,.xml,.config,.txt,.zip" 
                 />
                 <div className="flex flex-col items-center gap-4 pointer-events-none"> 
                   <div className={`p-4 rounded-full transition-colors ${isUploading ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400 group-hover:text-indigo-400'}`}>
@@ -550,7 +537,7 @@ const SourceFiles = () => {
                   </div>
                   <div className="space-y-1">
                     <p className="text-lg font-medium text-slate-300">Upload Files or ZIP</p>
-                    <p className="text-sm text-slate-500">Supports .cbl, .cob, .zip, etc.</p>
+                    <p className="text-sm text-slate-500">Supports COBOL, JCL, SQL, VB.NET, C#, and ZIP</p>
                   </div>
                 </div>
               </div>
@@ -562,7 +549,7 @@ const SourceFiles = () => {
                 <input 
                   type="file" 
                   ref={folderInputRef}
-                  webkitdirectory="true"
+                  {...({ webkitdirectory: "true" } as any)}
                   multiple 
                   style={{ display: 'none' }} 
                   onChange={handleFolderUpload} 
@@ -579,22 +566,25 @@ const SourceFiles = () => {
               </div>
             </div>
           ) : inputMethod === 'local' ? (
-            <div className="glass-card p-8 rounded-3xl border-slate-800 bg-slate-900/50 flex flex-col md:flex-row gap-4 items-end">
-              <div className="flex-1 space-y-3 w-full">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Local Git Repository Path</label>
-                <div className="relative">
-                  <GitBranch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-                  <input
-                    type="text"
-                    placeholder="C:\Projects\Banking"
-                    className="w-full pl-10 pr-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                    value={localRepoPath}
-                    onChange={(e) => setLocalRepoPath(e.target.value)}
-                  />
+            <div className="glass-card p-8 rounded-3xl border-slate-800 bg-slate-900/50 flex flex-col md:flex-row gap-6 items-center">
+              <input
+                type="file"
+                ref={localRepoInputRef}
+                {...({ webkitdirectory: "true" } as any)}
+                multiple
+                style={{ display: 'none' }}
+                onChange={handleFolderUpload}
+              />
+              <div className="flex-1 space-y-2 w-full">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-widest">
+                  <GitBranch size={16} /> Local Git Repository
                 </div>
+                <p className="text-sm text-slate-400">
+                  Select the repository folder from this device. The browser will request access and upload the supported source files.
+                </p>
               </div>
-              <button onClick={handleLocalRepoIngest} disabled={isReadingRepo} className="w-full md:w-auto px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-                {isReadingRepo ? <><Loader2 className="animate-spin" size={18}/> Reading...</> : <><Zap size={18}/> Create Inventory</>}
+              <button onClick={() => localRepoInputRef.current?.click()} disabled={isUploading} className="w-full md:w-auto px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                {isUploading ? <><Loader2 className="animate-spin" size={18}/> Uploading...</> : <><FolderOpen size={18}/> Select Repository</>}
               </button>
             </div>
           ) : (

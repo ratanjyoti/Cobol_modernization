@@ -31,6 +31,9 @@ class DiscoveryProcess:
             ".cbl", ".cob", ".cpy",
             ".jcl", ".sql",
             ".tln", ".tel",
+            ".vb", ".bas", ".frm", ".cls",
+            ".cs", ".sln", ".csproj", ".vbproj",
+            ".xml", ".config",
             ".txt",
         }
 
@@ -46,6 +49,23 @@ class DiscoveryProcess:
         if ".git" in file_path.parts: return False
         if file_path.name.startswith('.'): return False
         return file_path.suffix.lower() in self.allowed_extensions
+
+    def _safe_relative_upload_path(self, rel_path: str) -> Path | None:
+        normalized = rel_path.replace("\\", "/").strip("/")
+        parts = [part for part in normalized.split("/") if part]
+
+        if not parts:
+            return None
+        if any(part in {".", ".."} for part in parts):
+            return None
+        if any(":" in part for part in parts):
+            return None
+
+        safe_path = Path(*parts)
+        if safe_path.is_absolute():
+            return None
+
+        return safe_path
 
     def _save_project_file(self, run_id: str, filename: str, filepath: str, detected_lang: str, size: int = 0):
         project_file = ProjectFile(
@@ -210,13 +230,17 @@ class DiscoveryProcess:
         mapped_files = []
 
         for file_obj, rel_path in zip(files, paths):
-            rel_path_obj = Path(rel_path)
+            rel_path_obj = self._safe_relative_upload_path(rel_path)
+            if rel_path_obj is None:
+                continue
             if ".git" in rel_path_obj.parts:
                 continue
             if rel_path_obj.suffix.lower() not in self.allowed_extensions:
                 continue
 
             destination = project_folder / rel_path_obj
+            if project_folder.resolve() not in destination.resolve().parents:
+                continue
             destination.parent.mkdir(parents=True, exist_ok=True)
 
             with open(destination, "wb") as buffer:
