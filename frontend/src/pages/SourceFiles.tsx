@@ -258,13 +258,15 @@ const SourceFiles = () => {
   }, [runId, sourceLang]);
 
   const [isCorrecting, setIsCorrecting] = useState(false);
+  const [isConfirmingLanguage, setIsConfirmingLanguage] = useState(false);
   const [selectedManualLang, setSelectedManualLang] = useState('');
 
   const confirmLanguage = async (confirmed: boolean, manualLang?: string) => {
-    if (!runId || !detectionAlert) return;
+    if (!runId || !detectionAlert || isConfirmingLanguage) return;
 
     const finalLang = confirmed ? detectionAlert.lang : (manualLang || 'UNKNOWN');
 
+    setIsConfirmingLanguage(true);
     try {
       await ProjectAPI.confirmLanguage({
         run_id: runId,
@@ -279,6 +281,8 @@ const SourceFiles = () => {
       showNextDetection();
     } catch (e) {
       toast.error("Failed to save language preference");
+    } finally {
+      setIsConfirmingLanguage(false);
     }
   };
 
@@ -817,10 +821,17 @@ const SourceFiles = () => {
               className="glass-card p-8 rounded-3xl border-indigo-500/50 bg-slate-900 border-2 max-w-md w-full shadow-2xl text-center space-y-6"
             >
               <div className="flex justify-center">
-                <div className="p-4 bg-indigo-500/20 rounded-full text-indigo-400"><Languages size={40} /></div>
+                <div className="p-4 bg-indigo-500/20 rounded-full text-indigo-400">
+                  {isConfirmingLanguage ? <Loader2 className="animate-spin" size={40} /> : <Languages size={40} />}
+                </div>
               </div>
 
-              {!isCorrecting ? (
+              {isConfirmingLanguage ? (
+                <div className="space-y-3">
+                  <h3 className="text-xl font-bold text-white">Saving Language</h3>
+                  <p className="text-sm text-slate-400">Preparing the next file confirmation...</p>
+                </div>
+              ) : !isCorrecting ? (
                 <div className="space-y-5">
                   <div className="space-y-2">
                     <h3 className="text-xl font-bold text-white">Language Detected</h3>
@@ -834,8 +845,8 @@ const SourceFiles = () => {
                     <p className="text-sm text-slate-500 italic">Please confirm before continuing.</p>
                   </div>
                   <div className="flex gap-4">
-                    <button onClick={() => setIsCorrecting(true)} className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2"><XCircle size={18} /> No</button>
-                    <button onClick={() => confirmLanguage(true)} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2"><CheckCircle2 size={18} /> Yes</button>
+                    <button disabled={isConfirmingLanguage} onClick={() => setIsCorrecting(true)} className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"><XCircle size={18} /> No</button>
+                    <button disabled={isConfirmingLanguage} onClick={() => confirmLanguage(true)} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"><CheckCircle2 size={18} /> Yes</button>
                   </div>
                 </div>
               ) : (
@@ -847,6 +858,7 @@ const SourceFiles = () => {
                   <select
                     value={selectedManualLang}
                     onChange={(e) => setSelectedManualLang(e.target.value)}
+                    disabled={isConfirmingLanguage}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500"
                   >
                     <option value="" disabled>Select language</option>
@@ -855,8 +867,8 @@ const SourceFiles = () => {
                     ))}
                   </select>
                   <div className="flex gap-3">
-                    <button onClick={() => setIsCorrecting(false)} className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition-all">Back</button>
-                    <button disabled={!selectedManualLang} onClick={() => confirmLanguage(false, selectedManualLang)} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2"><CheckCircle2 size={18} /> Confirm</button>
+                    <button disabled={isConfirmingLanguage} onClick={() => setIsCorrecting(false)} className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed">Back</button>
+                    <button disabled={!selectedManualLang || isConfirmingLanguage} onClick={() => confirmLanguage(false, selectedManualLang)} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2"><CheckCircle2 size={18} /> Confirm</button>
                   </div>
                 </div>
               )}
