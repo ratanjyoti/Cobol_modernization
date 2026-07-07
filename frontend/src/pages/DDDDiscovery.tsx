@@ -1,4 +1,4 @@
-import { Database, FileCode, GitBranch } from 'lucide-react';
+import { AlertTriangle, Database, FileCode, GitBranch } from 'lucide-react';
 import type { DependencyLink, DependencyNode } from './DependencyGraph';
 import type { FileRecord } from '../services/api';
 
@@ -12,10 +12,61 @@ type DDDDiscoveryProps = {
 const formatStatus = (value?: string) => (value || 'PENDING').replaceAll('_', ' ');
 const formatType = (value?: string) => (value || 'file').replaceAll('_', ' ');
 
+const getComplexityScore = (file?: FileRecord) => {
+  const maybeFile = file as (FileRecord & { complexity_score?: number; complexity?: number; score?: number }) | undefined;
+  return maybeFile?.complexity_score ?? maybeFile?.complexity ?? maybeFile?.score;
+};
+
+const RelationRows = ({
+  title,
+  rows,
+  nodes,
+  emptyText,
+}: {
+  title: string;
+  rows: DependencyLink[];
+  nodes: DependencyNode[];
+  emptyText: string;
+}) => (
+  <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+    <div className="mb-3 flex items-center gap-2 text-sm font-bold text-white">
+      <GitBranch size={16} className="text-emerald-400" />
+      {title}
+    </div>
+    {rows.length > 0 ? (
+      <div className="space-y-2">
+        {rows.map((link) => {
+          const from = nodes.find((node) => node.id === link.from);
+          const to = nodes.find((node) => node.id === link.to);
+
+          return (
+            <div key={link.id} className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
+                <span className="truncate font-mono text-slate-300">{from?.label || link.from}</span>
+                <span className="shrink-0 rounded bg-slate-800 px-2 py-1 font-bold uppercase text-slate-400">{link.relationType}</span>
+                <span className={`truncate font-mono ${to?.isResolved === false ? 'text-orange-300' : 'text-slate-300'}`}>{to?.label || link.to}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    ) : (
+      <p className="text-sm text-slate-500">{emptyText}</p>
+    )}
+  </div>
+);
+
 const DDDDiscovery = ({ selectedNode, files, links, nodes }: DDDDiscoveryProps) => {
   const selectedFile = selectedNode?.file ?? files[0] ?? null;
-  const selectedLinks = selectedNode
-    ? links.filter((link) => link.from === selectedNode.id || link.to === selectedNode.id)
+  const incomingLinks = selectedNode ? links.filter((link) => link.to === selectedNode.id) : [];
+  const outgoingLinks = selectedNode ? links.filter((link) => link.from === selectedNode.id) : [];
+  const impactedLinks = outgoingLinks.filter((link) => nodes.find((node) => node.id === link.to)?.isResolved !== false);
+  const missingLinks = selectedNode
+    ? links.filter((link) => {
+        const from = nodes.find((node) => node.id === link.from);
+        const to = nodes.find((node) => node.id === link.to);
+        return (link.from === selectedNode.id || link.to === selectedNode.id) && (from?.isResolved === false || to?.isResolved === false);
+      })
     : [];
 
   if (!selectedNode && !selectedFile) {
@@ -30,11 +81,13 @@ const DDDDiscovery = ({ selectedNode, files, links, nodes }: DDDDiscoveryProps) 
   const displayName = selectedNode?.label || selectedFile?.filename || 'Unknown node';
   const displayPath = selectedFile?.filepath || (selectedNode?.isResolved ? displayName : 'Not found as an uploaded file');
   const displayType = selectedNode?.type || 'file';
+  const complexityScore = getComplexityScore(selectedFile || undefined);
+  const isIsolated = selectedNode ? selectedNode.incoming + selectedNode.outgoing === 0 && selectedNode.isResolved : false;
 
   return (
     <div className="space-y-6">
       <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-4">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="space-y-3 min-w-0">
             <div className="flex items-center gap-3">
               {displayType === 'table' ? (
@@ -47,19 +100,26 @@ const DDDDiscovery = ({ selectedNode, files, links, nodes }: DDDDiscoveryProps) 
                 <p className="truncate text-xs font-mono text-slate-500">{displayPath}</p>
               </div>
             </div>
-            <p className="text-sm leading-6 text-slate-300">
-              This node is part of the discovered dependency graph. Dashed links mean the dependency was referenced in code but no matching uploaded file was found.
-            </p>
+            {selectedNode?.isResolved === false ? (
+              <p className="inline-flex items-center gap-2 rounded-lg border border-orange-500/40 bg-orange-500/10 px-3 py-2 text-sm text-orange-200">
+                <AlertTriangle size={16} />
+                This dependency was referenced in code but was not found among uploaded files.
+              </p>
+            ) : isIsolated ? (
+              <p className="rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-400">This file is isolated.</p>
+            ) : (
+              <p className="text-sm leading-6 text-slate-300">This file is part of the discovered dependency map. Incoming and outgoing relations are split below for impact analysis.</p>
+            )}
           </div>
 
-          <div className="grid min-w-[320px] grid-cols-2 gap-3 text-xs">
+          <div className="grid w-full gap-3 text-xs sm:grid-cols-2 xl:w-[480px]">
             <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
               <p className="mb-1 font-bold uppercase tracking-widest text-slate-500">Type</p>
               <p className="font-mono text-blue-400">{formatType(displayType)}</p>
             </div>
             <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
-              <p className="mb-1 font-bold uppercase tracking-widest text-slate-500">Status</p>
-              <p className="text-slate-300">{selectedNode?.isResolved === false ? 'UNRESOLVED TARGET' : formatStatus(selectedFile?.status)}</p>
+              <p className="mb-1 font-bold uppercase tracking-widest text-slate-500">Resolved</p>
+              <p className={selectedNode?.isResolved === false ? 'text-orange-300' : 'text-emerald-300'}>{selectedNode?.isResolved === false ? 'no' : 'yes'}</p>
             </div>
             <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
               <p className="mb-1 font-bold uppercase tracking-widest text-slate-500">Incoming</p>
@@ -69,35 +129,23 @@ const DDDDiscovery = ({ selectedNode, files, links, nodes }: DDDDiscoveryProps) 
               <p className="mb-1 font-bold uppercase tracking-widest text-slate-500">Outgoing</p>
               <p className="font-mono text-amber-400">{selectedNode?.outgoing ?? 0}</p>
             </div>
+            <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
+              <p className="mb-1 font-bold uppercase tracking-widest text-slate-500">Status</p>
+              <p className="text-slate-300">{selectedNode?.isResolved === false ? 'UNRESOLVED' : formatStatus(selectedFile?.status)}</p>
+            </div>
+            <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
+              <p className="mb-1 font-bold uppercase tracking-widest text-slate-500">Complexity</p>
+              <p className="font-mono text-indigo-300">{complexityScore ?? 'n/a'}</p>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-4">
-        <div className="mb-3 flex items-center gap-2 text-sm font-bold text-white">
-          <GitBranch size={16} className="text-emerald-400" />
-          Dependencies For Selected Node
-        </div>
-        {selectedLinks.length > 0 ? (
-          <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
-            {selectedLinks.map((link) => {
-              const from = nodes.find((node) => node.id === link.from);
-              const to = nodes.find((node) => node.id === link.to);
-
-              return (
-                <div key={link.id} className="rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="truncate font-mono text-slate-300">{from?.label || link.from}</span>
-                    <span className="shrink-0 rounded bg-slate-800 px-2 py-1 font-bold uppercase text-slate-400">{link.relationType}</span>
-                    <span className="truncate font-mono text-slate-300">{to?.label || link.to}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="text-sm text-slate-500">No dependency relation was found for this selection.</p>
-        )}
+      <div className="grid gap-4 xl:grid-cols-2">
+        <RelationRows title="Incoming dependencies" rows={incomingLinks} nodes={nodes} emptyText="No incoming dependencies found" />
+        <RelationRows title="Outgoing dependencies" rows={outgoingLinks} nodes={nodes} emptyText="No outgoing dependencies found" />
+        <RelationRows title="Impacted files" rows={impactedLinks} nodes={nodes} emptyText={isIsolated ? 'This file is isolated' : 'No impacted files found'} />
+        <RelationRows title="Missing / unresolved targets" rows={missingLinks} nodes={nodes} emptyText="No missing or unresolved targets found" />
       </div>
 
       <div className="border border-slate-700 rounded-xl overflow-hidden">
@@ -120,7 +168,7 @@ const DDDDiscovery = ({ selectedNode, files, links, nodes }: DDDDiscoveryProps) 
                   <td className="p-4 text-xs text-blue-300">{formatType(node.type)}</td>
                   <td className="p-4 font-mono text-xs text-slate-500">{node.incoming} in / {node.outgoing} out</td>
                   <td className="p-4">
-                    <span className="bg-slate-700 text-slate-300 px-2 py-1 rounded text-[10px] uppercase font-bold">
+                    <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold ${node.isResolved ? 'bg-emerald-500/10 text-emerald-300' : 'bg-orange-500/10 text-orange-300'}`}>
                       {node.isResolved ? 'yes' : 'no'}
                     </span>
                   </td>

@@ -1,13 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
-import DependencyGraph, { type DependencyLink, type DependencyNode } from './DependencyGraph';
+import DependencyGraph, {
+  type DependencyGraphStats,
+  type DependencyLink,
+  type DependencyNode,
+  type GraphMode
+} from './DependencyGraph';
 import DDDDiscovery from './DDDDiscovery';
-import { FileText, GitBranch, Loader2, Share2 } from 'lucide-react';
+import { Database, FileCode, FileQuestion, FileText, GitBranch, Loader2, Search, Share2 } from 'lucide-react';
 import { ProjectAPI } from '../services/api';
 import type { DependencyRelation, FileRecord } from '../services/api';
 
 const normalizeName = (value: string) => value.trim().toLowerCase().replace(/\\/g, '/');
 const withoutExtension = (value: string) => value.replace(/\.[^.\/]+$/, '');
-const nodeWidth = 240;
+
+type ExplorerFilter = 'all' | 'connected' | 'isolated' | 'unresolved';
 
 const isProgramFile = (file: FileRecord) => {
   const lang = (file.detected_lang || '').toLowerCase();
@@ -34,6 +40,10 @@ const getTargetType = (relationType: string): DependencyNode['type'] => {
       return 'copybook';
     case 'READS_WRITES':
       return 'table';
+    case 'IMPORTS':
+    case 'REFERENCES':
+    case 'INHERITS':
+      return 'external';
     default:
       return 'external';
   }
@@ -51,6 +61,8 @@ const formatType = (type: DependencyNode['type']) => {
       return 'program';
     case 'external':
       return 'external target';
+    case 'group':
+      return 'group';
     default:
       return 'file';
   }
@@ -77,65 +89,8 @@ const findFileForRelationName = (files: FileRecord[], relationName: string) => {
   });
 };
 
-const placeUnlinkedNodes = (nodes: DependencyNode[]) => {
-  const groups: DependencyNode['type'][] = ['job', 'program', 'copybook', 'table', 'file', 'external'];
-  let index = 0;
-
-  groups.forEach((type) => {
-    nodes
-      .filter((node) => node.type === type)
-      .forEach((node) => {
-        node.x = 120 + (index % 3) * 300;
-        node.y = 120 + Math.floor(index / 3) * 110;
-        index += 1;
-      });
-  });
-};
-
-const placeConnectedNodes = (nodes: DependencyNode[], links: DependencyLink[]) => {
-  const byId = new Map(nodes.map((node) => [node.id, node]));
-  const hub = [...nodes].sort((a, b) => (b.incoming + b.outgoing) - (a.incoming + a.outgoing))[0];
-
-  if (!hub) return;
-
-  hub.x = 520;
-  hub.y = 310;
-
-  const neighborIds = new Set<string>();
-  links.forEach((link) => {
-    if (link.from === hub.id) neighborIds.add(link.to);
-    if (link.to === hub.id) neighborIds.add(link.from);
-  });
-
-  const neighbors = [...neighborIds]
-    .map((id) => byId.get(id))
-    .filter((node): node is DependencyNode => Boolean(node))
-    .sort((a, b) => b.outgoing + b.incoming - (a.outgoing + a.incoming));
-
-  const radiusX = Math.max(340, Math.min(620, neighbors.length * 62));
-  const radiusY = Math.max(190, Math.min(360, neighbors.length * 36));
-
-  neighbors.forEach((node, index) => {
-    const angle = (Math.PI * 2 * index) / Math.max(neighbors.length, 1) - Math.PI / 2;
-    node.x = Math.round(hub.x + Math.cos(angle) * radiusX);
-    node.y = Math.round(hub.y + Math.sin(angle) * radiusY);
-  });
-
-  const placed = new Set([hub.id, ...neighbors.map((node) => node.id)]);
-  const remaining = nodes.filter((node) => !placed.has(node.id));
-  const linkedRemaining = remaining.filter((node) => node.incoming + node.outgoing > 0);
-  const unlinked = remaining.filter((node) => node.incoming + node.outgoing === 0);
-
-  linkedRemaining.forEach((node, index) => {
-    const side = index % 2 === 0 ? 1 : -1;
-    node.x = hub.x + side * (560 + Math.floor(index / 2) * 280);
-    node.y = 120 + (Math.floor(index / 2) % 5) * 108;
-  });
-
-  unlinked.forEach((node, index) => {
-    node.x = 1040 + (index % 2) * 300;
-    node.y = 120 + Math.floor(index / 2) * 104;
-  });
+const unresolvedNodeId = (role: 'source' | 'target', relationType: string, name: string) => {
+  return `${role}:${relationType}:${normalizeName(name)}`;
 };
 
 const buildGraphData = (files: FileRecord[], relations: DependencyRelation[]) => {
@@ -160,12 +115,26 @@ const buildGraphData = (files: FileRecord[], relations: DependencyRelation[]) =>
   });
 
   relations.forEach((relation) => {
-    const source = findFileForRelationName(files, relation.source_file);
-    if (!source) return;
-
+    const resolvedSource = findFileForRelationName(files, relation.source_file);
     const resolvedTarget = findFileForRelationName(files, relation.target_item);
+    const sourceType = resolvedSource ? getFileType(resolvedSource) : 'external';
     const targetType = resolvedTarget ? getFileType(resolvedTarget) : getTargetType(relation.relation_type);
-    const targetId = resolvedTarget?.id || `target:${relation.relation_type}:${normalizeName(relation.target_item)}`;
+    const sourceId = resolvedSource?.id || unresolvedNodeId('source', relation.relation_type, relation.source_file);
+    const targetId = resolvedTarget?.id || unresolvedNodeId('target', relation.relation_type, relation.target_item);
+
+    if (!nodesById.has(sourceId)) {
+      nodesById.set(sourceId, {
+        id: sourceId,
+        label: relation.source_file,
+        type: sourceType,
+        x: 0,
+        y: 0,
+        subtitle: `${formatType(sourceType)} - unresolved source`,
+        incoming: 0,
+        outgoing: 0,
+        isResolved: Boolean(resolvedSource),
+      });
+    }
 
     if (!nodesById.has(targetId)) {
       nodesById.set(targetId, {
@@ -174,20 +143,20 @@ const buildGraphData = (files: FileRecord[], relations: DependencyRelation[]) =>
         type: targetType,
         x: 0,
         y: 0,
-        subtitle: `${formatType(targetType)} - unresolved`,
+        subtitle: `${formatType(targetType)} - unresolved target`,
         incoming: 0,
         outgoing: 0,
         isResolved: Boolean(resolvedTarget),
       });
     }
 
-    const key = `${source.id}->${targetId}:${relation.relation_type}`;
+    const key = `${sourceId}->${targetId}:${relation.relation_type}`;
     if (seenLinks.has(key)) return;
     seenLinks.add(key);
 
     links.push({
       id: key,
-      from: source.id,
+      from: sourceId,
       to: targetId,
       relationType: relation.relation_type,
     });
@@ -207,26 +176,22 @@ const buildGraphData = (files: FileRecord[], relations: DependencyRelation[]) =>
       : `${formatType(node.type)} - unresolved`;
   });
 
-  const nodes = [...nodesById.values()];
-  if (links.length > 0) {
-    placeConnectedNodes(nodes, links);
-  } else {
-    placeUnlinkedNodes(nodes);
-  }
+  return { nodes: [...nodesById.values()], links };
+};
 
-  nodes.forEach((node) => {
-    node.x = Math.max(80, node.x);
-    node.y = Math.max(80, node.y);
-    if (node.x < 80 + nodeWidth) node.x = Math.max(80, node.x);
-  });
-
-  return { nodes, links };
+const getNodeIcon = (node: DependencyNode) => {
+  if (!node.isResolved) return <FileQuestion size={14} className="text-orange-300" />;
+  if (node.type === 'table') return <Database size={14} className="text-rose-300" />;
+  return <FileCode size={14} className="text-emerald-300" />;
 };
 
 const SystemDiscovery = () => {
   const [files, setFiles] = useState<FileRecord[]>([]);
   const [relations, setRelations] = useState<DependencyRelation[]>([]);
   const [selectedNode, setSelectedNode] = useState<DependencyNode | null>(null);
+  const [graphMode, setGraphMode] = useState<GraphMode>('overview');
+  const [explorerFilter, setExplorerFilter] = useState<ExplorerFilter>('all');
+  const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -277,6 +242,42 @@ const SystemDiscovery = () => {
   const graphData = useMemo(() => buildGraphData(files, relations), [files, relations]);
   const { nodes, links } = graphData;
 
+  const connectedNodes = useMemo(() => nodes.filter((node) => node.incoming + node.outgoing > 0 && node.isResolved), [nodes]);
+  const isolatedNodes = useMemo(() => nodes.filter((node) => node.incoming + node.outgoing === 0 && node.isResolved), [nodes]);
+  const unresolvedNodes = useMemo(() => nodes.filter((node) => !node.isResolved), [nodes]);
+
+  const graphStats: DependencyGraphStats = useMemo(() => ({
+    totalFiles: files.length,
+    connectedFiles: connectedNodes.length,
+    isolatedFiles: isolatedNodes.length,
+    unresolvedTargets: unresolvedNodes.length,
+    relations: links.length,
+    programs: nodes.filter((node) => node.isResolved && node.type === 'program').length,
+    copybooks: nodes.filter((node) => node.isResolved && node.type === 'copybook').length,
+    tables: nodes.filter((node) => node.isResolved && node.type === 'table').length,
+    jobs: nodes.filter((node) => node.isResolved && node.type === 'job').length,
+  }), [connectedNodes.length, files.length, isolatedNodes.length, links.length, nodes, unresolvedNodes.length]);
+
+  const explorerNodes = useMemo(() => {
+    const lowerSearch = searchTerm.trim().toLowerCase();
+
+    return nodes
+      .filter((node) => {
+        if (explorerFilter === 'connected') return node.isResolved && node.incoming + node.outgoing > 0;
+        if (explorerFilter === 'isolated') return node.isResolved && node.incoming + node.outgoing === 0;
+        if (explorerFilter === 'unresolved') return !node.isResolved;
+        return true;
+      })
+      .filter((node) => {
+        if (!lowerSearch) return true;
+        return node.label.toLowerCase().includes(lowerSearch) || (node.file?.filepath || '').toLowerCase().includes(lowerSearch);
+      })
+      .sort((a, b) => {
+        const relationDelta = (b.incoming + b.outgoing) - (a.incoming + a.outgoing);
+        return relationDelta || a.label.localeCompare(b.label);
+      });
+  }, [explorerFilter, nodes, searchTerm]);
+
   useEffect(() => {
     setSelectedNode((current) => {
       if (!current) return null;
@@ -284,13 +285,31 @@ const SystemDiscovery = () => {
     });
   }, [nodes]);
 
+  const handleModeChange = (mode: GraphMode) => {
+    setGraphMode(mode);
+    if (mode === 'overview') setSelectedNode(null);
+    if (mode === 'isolated') setExplorerFilter('isolated');
+    if (mode === 'unresolved') setExplorerFilter('unresolved');
+    if (mode === 'connected') setExplorerFilter('connected');
+  };
+
   const handleNodeSelect = (node: DependencyNode) => {
     setSelectedNode(node);
+    setGraphMode('impact');
   };
 
   const handleOverviewSelect = () => {
     setSelectedNode(null);
+    setGraphMode('overview');
   };
+
+  const summaryCards = [
+    { label: 'Files', value: graphStats.totalFiles, color: 'text-indigo-300' },
+    { label: 'Connected', value: graphStats.connectedFiles, color: 'text-emerald-300' },
+    { label: 'Isolated', value: graphStats.isolatedFiles, color: 'text-slate-300' },
+    { label: 'Unresolved', value: graphStats.unresolvedTargets, color: 'text-orange-300' },
+    { label: 'Relations', value: graphStats.relations, color: 'text-sky-300' },
+  ];
 
   return (
     <div className="space-y-6 h-full flex flex-col">
@@ -301,11 +320,11 @@ const SystemDiscovery = () => {
             <h1 className="text-3xl font-bold text-white">System Discovery</h1>
           </div>
           <p className="text-slate-400">
-            Dependency view for the active run, showing programs, copybooks, data stores, and unresolved external targets.
+            Dependency view for the active run, focused on meaningful connections while preserving every uploaded file in the explorer.
           </p>
         </div>
-        
-        <div className="flex items-center gap-4 text-xs font-bold uppercase tracking-widest">
+
+        <div className="hidden items-center gap-4 text-xs font-bold uppercase tracking-widest lg:flex">
           <div className="flex items-center gap-2 text-slate-500">
             <div className="w-2 h-2 rounded-full bg-indigo-500" />
             <span>{files.length} Files</span>
@@ -317,45 +336,174 @@ const SystemDiscovery = () => {
         </div>
       </div>
 
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        {summaryCards.map((card) => (
+          <div key={card.label} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-500">{card.label}</p>
+            <p className={`mt-2 font-mono text-2xl font-black ${card.color}`}>{card.value}</p>
+          </div>
+        ))}
+      </div>
+
       <div className="flex-1 min-h-0 overflow-y-auto pr-1">
-        <div className="flex min-h-[calc(100vh-220px)] flex-col gap-6">
-          <div className="flex items-center justify-between px-2">
-            <div className="flex items-center gap-2 text-white font-bold text-sm">
-              <Share2 size={16} className="text-indigo-400" />
-              Dependency Graph
-            </div>
-            <div className="text-xs font-semibold text-slate-500">
-              Active run: <span className="font-mono text-slate-300">{runId || 'none'}</span>
-              {selectedNode && <span className="ml-3">Selected: <span className="font-mono text-emerald-400">{selectedNode.label}</span></span>}
-            </div>
-          </div>
-
-          <div className="h-[62vh] min-h-[560px] overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/50 shadow-inner">
-            {loading ? (
-              <div className="flex h-full items-center justify-center gap-2 text-slate-400">
-                <Loader2 size={18} className="animate-spin" /> Loading graph files...
+        <div className="grid min-h-[calc(100vh-250px)] grid-cols-1 gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+          <aside className="min-h-[520px] rounded-2xl border border-slate-800 bg-slate-900/60 p-4 shadow-inner">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-sm font-bold text-white">
+                <FileText size={16} className="text-indigo-400" />
+                File Explorer
               </div>
-            ) : error ? (
-              <div className="flex h-full items-center justify-center text-sm text-red-300">{error}</div>
-            ) : (
-              <DependencyGraph nodes={nodes} links={links} selectedNodeId={selectedNode?.id} onNodeSelect={handleNodeSelect} onOverviewSelect={handleOverviewSelect} />
+              <span className="font-mono text-xs text-slate-500">{explorerNodes.length}</span>
+            </div>
+
+            <label className="relative block">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Search files"
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 py-2 pl-9 pr-3 text-sm text-slate-200 outline-none transition-colors placeholder:text-slate-600 focus:border-indigo-400"
+              />
+            </label>
+
+            <div className="my-4 grid grid-cols-2 gap-2">
+              {(['all', 'connected', 'isolated', 'unresolved'] as ExplorerFilter[]).map((filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  onClick={() => setExplorerFilter(filter)}
+                  className={`rounded-lg border px-3 py-2 text-xs font-bold capitalize transition-colors ${
+                    explorerFilter === filter
+                      ? 'border-indigo-400 bg-indigo-500/20 text-indigo-200'
+                      : 'border-slate-700 bg-slate-950 text-slate-400 hover:bg-slate-800'
+                  }`}
+                >
+                  {filter}
+                </button>
+              ))}
+            </div>
+
+            <div className="max-h-[640px] space-y-2 overflow-y-auto pr-1">
+              {explorerNodes.map((node) => {
+                const isSelected = node.id === selectedNode?.id;
+                return (
+                  <button
+                    key={node.id}
+                    type="button"
+                    onClick={() => handleNodeSelect(node)}
+                    className={`w-full rounded-lg border p-3 text-left transition-colors ${
+                      isSelected
+                        ? 'border-emerald-400 bg-emerald-500/10'
+                        : 'border-slate-800 bg-slate-950 hover:border-slate-600 hover:bg-slate-800/60'
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className="mt-0.5 shrink-0">{getNodeIcon(node)}</span>
+                      <span className="min-w-0">
+                        <span className={`block truncate text-xs font-bold ${isSelected ? 'text-emerald-200' : 'text-slate-200'}`}>{node.label}</span>
+                        <span className="mt-1 block truncate text-[11px] text-slate-500">{formatType(node.type)} - {node.file?.detected_lang || (node.isResolved ? 'uploaded' : 'unresolved')}</span>
+                        <span className="mt-2 block font-mono text-[11px] text-slate-500">{node.incoming} in / {node.outgoing} out</span>
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+
+              {explorerNodes.length === 0 && (
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-6 text-center text-sm text-slate-500">
+                  No files match this filter.
+                </div>
+              )}
+            </div>
+          </aside>
+
+          <main className="min-w-0 space-y-6">
+            <div className="flex items-center justify-between px-2">
+              <div className="flex items-center gap-2 text-white font-bold text-sm">
+                <Share2 size={16} className="text-indigo-400" />
+                Dependency Graph
+              </div>
+              <div className="text-xs font-semibold text-slate-500">
+                Active run: <span className="font-mono text-slate-300">{runId || 'none'}</span>
+                {selectedNode && <span className="ml-3">Selected: <span className="font-mono text-emerald-400">{selectedNode.label}</span></span>}
+              </div>
+            </div>
+
+            <div className="h-[62vh] min-h-[560px] overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/50 shadow-inner">
+              {loading ? (
+                <div className="flex h-full items-center justify-center gap-2 text-slate-400">
+                  <Loader2 size={18} className="animate-spin" /> Loading graph files...
+                </div>
+              ) : error ? (
+                <div className="flex h-full items-center justify-center text-sm text-red-300">{error}</div>
+              ) : (
+                <DependencyGraph
+                  nodes={nodes}
+                  links={links}
+                  mode={graphMode}
+                  stats={graphStats}
+                  selectedNodeId={selectedNode?.id}
+                  onModeChange={handleModeChange}
+                  onNodeSelect={handleNodeSelect}
+                  onOverviewSelect={handleOverviewSelect}
+                />
+              )}
+            </div>
+
+            {graphMode === 'isolated' && (
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4 shadow-inner">
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="text-sm font-bold text-white">Isolated Files</div>
+                  <div className="font-mono text-xs text-slate-500">{isolatedNodes.length} files</div>
+                </div>
+                <div className="max-h-[360px] overflow-auto rounded-xl border border-slate-800">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-800 text-slate-400 uppercase text-xs">
+                      <tr>
+                        <th className="p-3">File</th>
+                        <th className="p-3">Type</th>
+                        <th className="p-3">Language / Status</th>
+                        <th className="p-3">Links</th>
+                        <th className="p-3">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800 text-slate-300">
+                      {isolatedNodes
+                        .filter((node) => !searchTerm || node.label.toLowerCase().includes(searchTerm.toLowerCase()))
+                        .map((node) => (
+                          <tr key={node.id} className="hover:bg-slate-800/40">
+                            <td className="p-3 font-mono text-xs">{node.label}</td>
+                            <td className="p-3 text-xs text-blue-300">{formatType(node.type)}</td>
+                            <td className="p-3 text-xs text-slate-400">{node.file?.detected_lang || 'unknown'} / {node.file?.status || 'uploaded'}</td>
+                            <td className="p-3 font-mono text-xs text-slate-500">{node.incoming} in / {node.outgoing} out</td>
+                            <td className="p-3">
+                              <button type="button" onClick={() => handleNodeSelect(node)} className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-bold text-slate-200 hover:bg-slate-800">
+                                Inspect
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             )}
-          </div>
 
-          <div className="flex items-center justify-between px-2 scroll-mt-6">
-            <div className="flex items-center gap-2 text-white font-bold text-sm">
-              <FileText size={16} className="text-emerald-400" />
-              Node Details
+            <div className="flex items-center justify-between px-2 scroll-mt-6">
+              <div className="flex items-center gap-2 text-white font-bold text-sm">
+                <FileText size={16} className="text-emerald-400" />
+                Node Details
+              </div>
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-500">
+                <GitBranch size={14} className="text-emerald-500" />
+                Dependency Data
+              </div>
             </div>
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-500">
-              <GitBranch size={14} className="text-emerald-500" />
-              Dependency Data
-            </div>
-          </div>
 
-          <div className="min-h-[320px] rounded-2xl border border-slate-800 bg-slate-900/50 p-4 shadow-inner">
-            <DDDDiscovery selectedNode={selectedNode} files={files} links={links} nodes={nodes} />
-          </div>
+            <div className="min-h-[320px] rounded-2xl border border-slate-800 bg-slate-900/50 p-4 shadow-inner">
+              <DDDDiscovery selectedNode={selectedNode} files={files} links={links} nodes={nodes} />
+            </div>
+          </main>
         </div>
       </div>
     </div>
