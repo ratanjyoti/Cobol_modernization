@@ -103,6 +103,18 @@ async def get_complexity(run_id: str, db: Session = Depends(get_db)):
 # 2. THE DEPENDENCIES TAB DATA
 @router.get("/graph/{run_id}")
 async def get_graph_data(run_id: str, db: Session = Depends(get_db)):
+    graph_service = None
+    try:
+        graph_service = GraphService()
+        graph_data = graph_service.get_graph(run_id)
+        if graph_data["nodes"] or graph_data["edges"]:
+            return graph_data
+    except Exception as exc:
+        print(f"Neo4j graph read skipped for {run_id}: {exc}")
+    finally:
+        if graph_service is not None:
+            graph_service.close()
+
     files = db.query(ProjectFile).filter(ProjectFile.run_id == run_id).all()
     relations = db.query(FileRelation).filter(FileRelation.run_id == run_id).all()
 

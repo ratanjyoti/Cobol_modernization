@@ -7,6 +7,7 @@ import os
 import shutil
 import stat
 from Processes.onboarding_process import OnboardingProcess
+from Persistence.neo4j.graph_service import GraphService
 from Persistence.sqlite.models import FileRelation, ProjectFile
 from Persistence.sqlite.project_repo import ProjectRepository
 from Persistence.sqlite.session import get_db
@@ -136,6 +137,33 @@ def serialize_relation(relation):
         "relation_type": relation.relation_type,
     }
 
+
+def get_neo4j_discovery_data(run_id: str):
+    graph_service = None
+    try:
+        graph_service = GraphService()
+        data = graph_service.get_discovery_data(run_id)
+        if data["files"] or data["relations"]:
+            return data
+    except Exception as exc:
+        print(f"Neo4j discovery-data read skipped for {run_id}: {exc}")
+    finally:
+        if graph_service is not None:
+            graph_service.close()
+    return None
+
+
+def clear_neo4j_run(run_id: str):
+    graph_service = None
+    try:
+        graph_service = GraphService()
+        graph_service.clear_run(run_id)
+    except Exception as exc:
+        print(f"Neo4j clear skipped for {run_id}: {exc}")
+    finally:
+        if graph_service is not None:
+            graph_service.close()
+
 @router.get("")
 async def list_projects(db: Session = Depends(get_db)):
     repo = ProjectRepository(db)
@@ -205,6 +233,7 @@ async def delete_run(run_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Project not found")
 
     result = repo.delete_project(run_id)
+    clear_neo4j_run(run_id)
     remove_tree_sync(UPLOADS_DIR / run_id)
     return {"status": "Success", **result}
 
@@ -216,6 +245,7 @@ async def clear_project_files(run_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Project not found")
 
     deleted_count = repo.delete_files_by_run_id(run_id)
+    clear_neo4j_run(run_id)
     remove_tree_sync(UPLOADS_DIR / run_id)
     return {"status": "Success", "files_deleted": deleted_count}
 
@@ -243,6 +273,10 @@ async def list_project_relations(run_id: str, db: Session = Depends(get_db)):
     repo = ProjectRepository(db)
     if not repo.get_by_run_id(run_id):
         raise HTTPException(status_code=404, detail="Project not found")
+    neo4j_data = get_neo4j_discovery_data(run_id)
+    if neo4j_data is not None:
+        return {"relations": neo4j_data["relations"]}
+
     relations = db.query(FileRelation).filter(FileRelation.run_id == run_id).all()
     return {"relations": [serialize_relation(relation) for relation in relations]}
 
@@ -252,6 +286,10 @@ async def get_project_discovery_data(run_id: str, db: Session = Depends(get_db))
     repo = ProjectRepository(db)
     if not repo.get_by_run_id(run_id):
         raise HTTPException(status_code=404, detail="Project not found")
+
+    neo4j_data = get_neo4j_discovery_data(run_id)
+    if neo4j_data is not None:
+        return neo4j_data
 
     files = repo.get_files_by_run_id(run_id)
     relations = db.query(FileRelation).filter(FileRelation.run_id == run_id).all()
@@ -268,6 +306,7 @@ async def update_project_config(run_id: str, updates: dict, db: Session = Depend
     if not success:
         raise HTTPException(status_code=404, detail="Project not found")
     return {"status": "Configuration updated"}
+
 
 
 

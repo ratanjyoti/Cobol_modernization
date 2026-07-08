@@ -1,4 +1,4 @@
-﻿import os
+import os
 import zipfile
 import asyncio
 import shutil
@@ -14,6 +14,7 @@ from Chunking.core.complexity_scorer import ComplexityScorer
 from Chunking.core.sizing_router import SizingRouter
 from Chunking.chunking_orchestrator import ChunkingOrchestrator
 from Chunking.dependency_scanner.dependency_manager import DependencyManager 
+from Processes.graphing_process import GraphingProcess
 from paths import UPLOADS_DIR
 from source.websockets.socket_manager import manager
 
@@ -184,6 +185,13 @@ class DiscoveryProcess:
             "chunks": chunk_count or 1
         }
 
+
+    def _sync_neo4j_graph(self, run_id: str):
+        try:
+            GraphingProcess(self.db).build_full_graph(run_id)
+        except Exception as e:
+            print(f"Neo4j graph sync skipped for {run_id}: {e}")
+
     async def _notify_detection(self, run_id: str, filename: str, lang: str, is_valid: bool):
         await manager.send_notification(run_id, {
             "event": "LANGUAGE_DETECTED",
@@ -255,6 +263,7 @@ class DiscoveryProcess:
             await self._notify_detection(run_id, filename, lang, is_valid)
 
         self.db.commit()
+        self._sync_neo4j_graph(run_id)
         return mapped_files
 
     async def process_folder(self, run_id: str, folder_path: str) -> List[Dict[str, Any]]:
@@ -279,6 +288,7 @@ class DiscoveryProcess:
             await self._notify_detection(run_id, filename, lang, is_valid)
 
         self.db.commit()
+        self._sync_neo4j_graph(run_id)
         return mapped_files
 
     async def process_zip_upload(self, run_id: str, zip_file_path: str) -> List[Dict[str, Any]]:
@@ -307,6 +317,7 @@ class DiscoveryProcess:
             await self._notify_detection(run_id, filename, lang, is_valid)
 
         self.db.commit()
+        self._sync_neo4j_graph(run_id)
         return mapped_files
 
     async def process_individual_files(self, run_id: str, files) -> List[Dict[str, Any]]:
@@ -332,10 +343,13 @@ class DiscoveryProcess:
             await self._notify_detection(run_id, filename, detected_lang, is_valid)
 
         self.db.commit()
+        self._sync_neo4j_graph(run_id)
         return mapped_files
 
     async def process_upload(self, run_id: str, zip_path: str):
         return await self.process_zip_upload(run_id, zip_path)
+
+
 
 
 
