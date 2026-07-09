@@ -1,4 +1,4 @@
-# Implementation for project.py
+﻿# Implementation for project.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -6,8 +6,10 @@ from pathlib import Path
 import os
 import shutil
 import stat
+from Processes.graphing_process import GraphingProcess
 from Processes.onboarding_process import OnboardingProcess
 from Persistence.neo4j.graph_service import GraphService
+from Chunking.dependency_scanner.resolution_service import ResolutionService
 from Persistence.sqlite.models import FileRelation, ProjectFile
 from Persistence.sqlite.project_repo import ProjectRepository
 from Persistence.sqlite.session import get_db
@@ -137,6 +139,22 @@ def serialize_relation(relation):
         "relation_type": relation.relation_type,
     }
 
+
+def refresh_dependency_map(run_id: str, db: Session):
+    try:
+        ResolutionService(db).resolve_run_relations(run_id)
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        print(f"Dependency resolution skipped for {run_id}: {exc}")
+        return False
+
+    try:
+        GraphingProcess(db).build_full_graph(run_id)
+        return True
+    except Exception as exc:
+        print(f"Neo4j graph refresh skipped for {run_id}: {exc}")
+        return False
 
 def get_neo4j_discovery_data(run_id: str):
     graph_service = None
@@ -273,7 +291,8 @@ async def list_project_relations(run_id: str, db: Session = Depends(get_db)):
     repo = ProjectRepository(db)
     if not repo.get_by_run_id(run_id):
         raise HTTPException(status_code=404, detail="Project not found")
-    neo4j_data = get_neo4j_discovery_data(run_id)
+    graph_refreshed = refresh_dependency_map(run_id, db)
+    neo4j_data = get_neo4j_discovery_data(run_id) if graph_refreshed else None
     if neo4j_data is not None:
         return {"relations": neo4j_data["relations"]}
 
@@ -287,7 +306,8 @@ async def get_project_discovery_data(run_id: str, db: Session = Depends(get_db))
     if not repo.get_by_run_id(run_id):
         raise HTTPException(status_code=404, detail="Project not found")
 
-    neo4j_data = get_neo4j_discovery_data(run_id)
+    graph_refreshed = refresh_dependency_map(run_id, db)
+    neo4j_data = get_neo4j_discovery_data(run_id) if graph_refreshed else None
     if neo4j_data is not None:
         return neo4j_data
 
@@ -306,6 +326,11 @@ async def update_project_config(run_id: str, updates: dict, db: Session = Depend
     if not success:
         raise HTTPException(status_code=404, detail="Project not found")
     return {"status": "Configuration updated"}
+
+
+
+
+
 
 
 

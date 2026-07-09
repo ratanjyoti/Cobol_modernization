@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import DependencyGraph, {
   type DependencyGraphStats,
   type DependencyLink,
@@ -32,23 +32,6 @@ const getFileType = (file: FileRecord): DependencyNode['type'] => {
   if (isProgramFile(file)) return 'program';
   if (name.endsWith('.sql')) return 'table';
   return 'file';
-};
-
-const getTargetType = (relationType: string): DependencyNode['type'] => {
-  switch (relationType) {
-    case 'CALLS':
-      return 'external';
-    case 'INCLUDES':
-      return 'copybook';
-    case 'READS_WRITES':
-      return 'table';
-    case 'IMPORTS':
-    case 'REFERENCES':
-    case 'INHERITS':
-      return 'external';
-    default:
-      return 'external';
-  }
 };
 
 const formatType = (type: DependencyNode['type']) => {
@@ -91,9 +74,6 @@ const findFileForRelationName = (files: FileRecord[], relationName: string) => {
   });
 };
 
-const unresolvedNodeId = (role: 'source' | 'target', relationType: string, name: string) => {
-  return `${role}:${relationType}:${normalizeName(name)}`;
-};
 
 const buildGraphData = (files: FileRecord[], relations: DependencyRelation[]) => {
   const nodesById = new Map<string, DependencyNode>();
@@ -119,39 +99,11 @@ const buildGraphData = (files: FileRecord[], relations: DependencyRelation[]) =>
   relations.forEach((relation) => {
     const resolvedSource = findFileForRelationName(files, relation.source_file);
     const resolvedTarget = findFileForRelationName(files, relation.target_item);
-    const sourceType = resolvedSource ? getFileType(resolvedSource) : 'external';
-    const targetType = resolvedTarget ? getFileType(resolvedTarget) : getTargetType(relation.relation_type);
-    const sourceId = resolvedSource?.id || unresolvedNodeId('source', relation.relation_type, relation.source_file);
-    const targetId = resolvedTarget?.id || unresolvedNodeId('target', relation.relation_type, relation.target_item);
 
-    if (!nodesById.has(sourceId)) {
-      nodesById.set(sourceId, {
-        id: sourceId,
-        label: relation.source_file,
-        type: sourceType,
-        x: 0,
-        y: 0,
-        subtitle: `${formatType(sourceType)} - unresolved source`,
-        incoming: 0,
-        outgoing: 0,
-        isResolved: Boolean(resolvedSource),
-      });
-    }
+    if (!resolvedSource || !resolvedTarget) return;
 
-    if (!nodesById.has(targetId)) {
-      nodesById.set(targetId, {
-        id: targetId,
-        label: relation.target_item,
-        type: targetType,
-        x: 0,
-        y: 0,
-        subtitle: `${formatType(targetType)} - unresolved target`,
-        incoming: 0,
-        outgoing: 0,
-        isResolved: Boolean(resolvedTarget),
-      });
-    }
-
+    const sourceId = resolvedSource.id;
+    const targetId = resolvedTarget.id;
     const key = `${sourceId}->${targetId}:${relation.relation_type}`;
     if (seenLinks.has(key)) return;
     seenLinks.add(key);
@@ -510,4 +462,10 @@ const SystemDiscovery = () => {
 };
 
 export default SystemDiscovery;
+
+
+
+
+
+
 

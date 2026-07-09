@@ -1,26 +1,39 @@
-import re
+﻿import re
 from Chunking.dependency_scanner.interfaces.i_scanner import IDependencyScanner
 
 
 class CobolScanner(IDependencyScanner):
     def scan(self, content: str):
         relations = []
+        source = self._strip_comments(content)
 
-        # Find CALLs, including CALL 'PGM', CALL "PGM", and CALL PGM.
-        calls = re.findall(r"\bCALL\s+(?:['\"])?([A-Z0-9_-]+)(?:['\"])?", content, re.IGNORECASE)
+        calls = re.findall(r"\bCALL\s+(?:['\"])?([A-Z0-9#@$_-]+)(?:['\"])?", source, re.IGNORECASE)
         for target in calls:
-            relations.append({"target": target.upper(), "type": "CALLS"})
+            relations.append({"target": target, "type": "CALLS"})
 
-        # Find COPY statements, including quoted and unquoted copybook names.
-        copies = re.findall(r"\bCOPY\s+(?:['\"])?([A-Z0-9_-]+)(?:['\"])?", content, re.IGNORECASE)
+        copies = re.findall(r"\bCOPY\s+(?:['\"])?([A-Z0-9#@$_-]+)(?:['\"])?", source, re.IGNORECASE)
         for target in copies:
-            relations.append({"target": target.upper(), "type": "INCLUDES"})
+            if target.upper() not in {"REPLACING", "SUPPRESS"}:
+                relations.append({"target": target, "type": "INCLUDES"})
 
-        # Find SQL tables after FROM, JOIN, UPDATE, or INTO.
-        tables = re.findall(r"\b(?:FROM|JOIN|UPDATE|INTO)\s+([A-Z0-9_.$-]+)", content, re.IGNORECASE)
-        for target in tables:
-            clean_target = target.strip().rstrip(",.;")
-            if clean_target:
-                relations.append({"target": clean_target.upper(), "type": "READS_WRITES"})
+        read_tables = re.findall(r"\b(?:FROM|JOIN)\s+([A-Z0-9_.$#@-]+)", source, re.IGNORECASE)
+        for target in read_tables:
+            relations.append({"target": target.rstrip(",.;"), "type": "READS"})
 
-        return relations
+        write_tables = re.findall(r"\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+([A-Z0-9_.$#@-]+)", source, re.IGNORECASE)
+        for target in write_tables:
+            relations.append({"target": target.rstrip(",.;"), "type": "WRITES"})
+
+        return [relation for relation in relations if relation["target"]]
+
+    @staticmethod
+    def _strip_comments(content: str) -> str:
+        lines = []
+        for line in content.splitlines():
+            if len(line) > 6 and line[6] in {"*", "/"}:
+                continue
+            stripped = line.lstrip()
+            if stripped.startswith(("*", "*>")):
+                continue
+            lines.append(line)
+        return "\n".join(lines)

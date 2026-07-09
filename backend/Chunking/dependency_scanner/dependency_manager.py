@@ -1,13 +1,14 @@
-from typing import Dict, List, Type
+﻿from typing import Dict, List, Type
 
 from Chunking.dependency_scanner.interfaces.cobol_scanner import CobolScanner
 from Chunking.dependency_scanner.interfaces.i_scanner import IDependencyScanner
 from Chunking.dependency_scanner.interfaces.jcl_scanner import JclScanner
+from Chunking.dependency_scanner.interfaces.telon_scanner import TelonScanner
 from Persistence.sqlite.models import FileRelation
 
 
 class DependencyManager:
-    """Scans source content and stores discovered file relations."""
+    """Scans source content and stores raw discovered file relations."""
 
     def __init__(self, db_session):
         self.db = db_session
@@ -18,6 +19,9 @@ class DependencyManager:
             "cpy": CobolScanner,
             "copybook": CobolScanner,
             "jcl": JclScanner,
+            "telon": TelonScanner,
+            "tln": TelonScanner,
+            "tel": TelonScanner,
         }
 
     def scan_and_store(self, run_id: str, source_file: str, content: str, lang: str) -> List[FileRelation]:
@@ -35,7 +39,7 @@ class DependencyManager:
             if not target:
                 continue
 
-            key = (source_file, target, relation_type)
+            key = (source_file, target.upper(), relation_type)
             if key in seen:
                 continue
             seen.add(key)

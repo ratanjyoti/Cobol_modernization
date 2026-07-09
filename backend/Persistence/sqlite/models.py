@@ -90,5 +90,6 @@ class FileRelation(Base):
     run_id = Column(String, ForeignKey("projects.run_id"), nullable=False)
     source_file = Column(String, nullable=False) # e.g., 'ACCOUNT.cbl'
     target_item = Column(String, nullable=False) # e.g., 'CUST-PROC' or 'CUST_TABLE'
-    relation_type = Column(String, nullable=False) # 'CALLS', 'INCLUDES', 'READS_WRITES'
+    relation_type = Column(String, nullable=False) # 'CALLS', 'INCLUDES', 'READS', 'WRITES', 'ACCESSES'
+
 

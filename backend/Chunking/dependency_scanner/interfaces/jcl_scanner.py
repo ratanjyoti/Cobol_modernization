@@ -1,4 +1,4 @@
-import re
+﻿import re
 from Chunking.dependency_scanner.interfaces.i_scanner import IDependencyScanner
 
 
@@ -6,9 +6,12 @@ class JclScanner(IDependencyScanner):
     def scan(self, content: str):
         relations = []
 
-        # Find both //EXEC PGM=PROGRAM and //STEP EXEC PGM=PROGRAM forms.
-        programs = re.findall(r"^//[^\s]*\s+EXEC\s+PGM=([A-Z0-9_-]+)", content, re.IGNORECASE | re.MULTILINE)
+        programs = re.findall(r"\bEXEC\s+PGM=([A-Z0-9#@$_.-]+)", content, re.IGNORECASE)
         for target in programs:
-            relations.append({"target": target.upper(), "type": "CALLS"})
+            relations.append({"target": target, "type": "EXECUTES"})
+
+        includes = re.findall(r"\bINCLUDE\s+MEMBER=([A-Z0-9#@$_.-]+)", content, re.IGNORECASE)
+        for target in includes:
+            relations.append({"target": target, "type": "INCLUDES"})
 
         return relations

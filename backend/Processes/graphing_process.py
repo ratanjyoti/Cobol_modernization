@@ -1,4 +1,5 @@
-﻿from Persistence.neo4j.graph_service import GraphService
+﻿from Chunking.dependency_scanner.resolution_service import ResolutionService
+from Persistence.neo4j.graph_service import GraphService
 from Persistence.sqlite.models import FileRelation, ProjectFile
 
 
@@ -8,12 +9,16 @@ class GraphingProcess:
         self.graph_service = GraphService()
 
     def build_full_graph(self, run_id: str):
-        files = self.db.query(ProjectFile).filter(
-            ProjectFile.run_id == run_id
-        ).all()
-        relations = self.db.query(FileRelation).filter(
-            FileRelation.run_id == run_id
-        ).all()
+        ResolutionService(self.db).resolve_run_relations(run_id)
+        self.db.commit()
+
+        files = self.db.query(ProjectFile).filter(ProjectFile.run_id == run_id).all()
+        valid_names = {file_record.filepath or file_record.filename for file_record in files}
+        relations = self.db.query(FileRelation).filter(FileRelation.run_id == run_id).all()
+        relations = [
+            relation for relation in relations
+            if relation.source_file in valid_names and relation.target_item in valid_names
+        ]
 
         self.graph_service.clear_run(run_id)
 
@@ -25,3 +30,7 @@ class GraphingProcess:
 
         self.graph_service.close()
         return True
+
+
+
+

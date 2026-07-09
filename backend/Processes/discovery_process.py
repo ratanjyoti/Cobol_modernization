@@ -1,4 +1,4 @@
-import os
+﻿import os
 import zipfile
 import asyncio
 import shutil
@@ -13,7 +13,8 @@ from Chunking.core.language_detector import LanguageDetector
 from Chunking.core.complexity_scorer import ComplexityScorer
 from Chunking.core.sizing_router import SizingRouter
 from Chunking.chunking_orchestrator import ChunkingOrchestrator
-from Chunking.dependency_scanner.dependency_manager import DependencyManager 
+from Chunking.dependency_scanner.dependency_manager import DependencyManager
+from Chunking.dependency_scanner.resolution_service import ResolutionService
 from Processes.graphing_process import GraphingProcess
 from paths import UPLOADS_DIR
 from source.websockets.socket_manager import manager
@@ -98,7 +99,7 @@ class DiscoveryProcess:
         def process_intelligence():
             # A. Dependency Scan (CALLs, COPYs, SQL)
             dep_manager = DependencyManager(self.db)
-            dep_manager.scan_and_store(run_id, filename, content, lang)
+            dep_manager.scan_and_store(run_id, rel_path, content, lang)
 
             # B. Complexity Scoring
             # Store both per-file scoring details and the highest run-level score.
@@ -186,6 +187,9 @@ class DiscoveryProcess:
         }
 
 
+    def _resolve_dependencies(self, run_id: str):
+        ResolutionService(self.db).resolve_run_relations(run_id)
+
     def _sync_neo4j_graph(self, run_id: str):
         try:
             GraphingProcess(self.db).build_full_graph(run_id)
@@ -262,6 +266,7 @@ class DiscoveryProcess:
             mapped_files.append(file_record)
             await self._notify_detection(run_id, filename, lang, is_valid)
 
+        self._resolve_dependencies(run_id)
         self.db.commit()
         self._sync_neo4j_graph(run_id)
         return mapped_files
@@ -287,6 +292,7 @@ class DiscoveryProcess:
             mapped_files.append(file_record)
             await self._notify_detection(run_id, filename, lang, is_valid)
 
+        self._resolve_dependencies(run_id)
         self.db.commit()
         self._sync_neo4j_graph(run_id)
         return mapped_files
@@ -316,6 +322,7 @@ class DiscoveryProcess:
 
             await self._notify_detection(run_id, filename, lang, is_valid)
 
+        self._resolve_dependencies(run_id)
         self.db.commit()
         self._sync_neo4j_graph(run_id)
         return mapped_files
@@ -342,12 +349,16 @@ class DiscoveryProcess:
             
             await self._notify_detection(run_id, filename, detected_lang, is_valid)
 
+        self._resolve_dependencies(run_id)
         self.db.commit()
         self._sync_neo4j_graph(run_id)
         return mapped_files
 
     async def process_upload(self, run_id: str, zip_path: str):
         return await self.process_zip_upload(run_id, zip_path)
+
+
+
 
 
 

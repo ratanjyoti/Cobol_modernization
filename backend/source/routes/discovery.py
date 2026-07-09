@@ -1,4 +1,4 @@
-from typing import List, Optional
+﻿from typing import List, Optional
 import asyncio
 import os
 import shutil
@@ -26,6 +26,7 @@ from Processes.discovery_process import DiscoveryProcess
 from Processes.graphing_process import GraphingProcess
 from source.websockets.socket_manager import manager
 from Chunking.chunking_orchestrator import ChunkingOrchestrator
+from Chunking.dependency_scanner.resolution_service import ResolutionService
 from paths import UPLOADS_DIR
 
 
@@ -103,8 +104,24 @@ async def get_complexity(run_id: str, db: Session = Depends(get_db)):
 # 2. THE DEPENDENCIES TAB DATA
 @router.get("/graph/{run_id}")
 async def get_graph_data(run_id: str, db: Session = Depends(get_db)):
+    try:
+        ResolutionService(db).resolve_run_relations(run_id)
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        print(f"Dependency resolution skipped for {run_id}: {exc}")
+
+    graph_refreshed = False
+    try:
+        GraphingProcess(db).build_full_graph(run_id)
+        graph_refreshed = True
+    except Exception as exc:
+        print(f"Neo4j graph refresh skipped for {run_id}: {exc}")
+
     graph_service = None
     try:
+        if not graph_refreshed:
+            raise RuntimeError("Skipping Neo4j read because graph refresh did not complete")
         graph_service = GraphService()
         graph_data = graph_service.get_graph(run_id)
         if graph_data["nodes"] or graph_data["edges"]:
@@ -120,8 +137,9 @@ async def get_graph_data(run_id: str, db: Session = Depends(get_db)):
 
     nodes_by_id = {}
     for file in files:
-        nodes_by_id[file.filename] = {
-            "id": file.filename,
+        node_id = file.filepath or file.filename
+        nodes_by_id[node_id] = {
+            "id": node_id,
             "label": file.filename,
             "type": file.detected_lang or "file",
             "filepath": file.filepath,
@@ -130,18 +148,11 @@ async def get_graph_data(run_id: str, db: Session = Depends(get_db)):
 
     edges = []
     for relation in relations:
-        target_id = relation.target_item
-        if target_id not in nodes_by_id:
-            nodes_by_id[target_id] = {
-                "id": target_id,
-                "label": target_id,
-                "type": relation.relation_type,
-                "filepath": None,
-                "resolved": False,
-            }
+        if relation.source_file not in nodes_by_id or relation.target_item not in nodes_by_id:
+            continue
         edges.append({
             "from": relation.source_file,
-            "to": target_id,
+            "to": relation.target_item,
             "type": relation.relation_type,
         })
 
@@ -150,12 +161,25 @@ async def get_graph_data(run_id: str, db: Session = Depends(get_db)):
 # 3. THE DDD TAB DATA
 @router.get("/ddd/{run_id}")
 async def get_ddd_discovery(run_id: str, db: Session = Depends(get_db)):
+    try:
+        ResolutionService(db).resolve_run_relations(run_id)
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        print(f"Dependency resolution skipped for DDD {run_id}: {exc}")
+
     files = db.query(ProjectFile).filter(ProjectFile.run_id == run_id).all()
+    valid_names = {file.filepath or file.filename for file in files}
     relations = db.query(FileRelation).filter(FileRelation.run_id == run_id).all()
+    relations = [relation for relation in relations if relation.source_file in valid_names and relation.target_item in valid_names]
 
     domain_map = {
-        "READS_WRITES": {"name": "Data Access", "programs": set(), "rules": 0, "color": "bg-rose-500"},
-        "CALLS": {"name": "Program Orchestration", "programs": set(), "rules": 0, "color": "bg-blue-500"},
+        "ACCESSES": {"name": "Data Access", "programs": set(), "rules": 0, "color": "bg-rose-500"},
+        "READS": {"name": "Data Reads", "programs": set(), "rules": 0, "color": "bg-sky-500"},
+        "WRITES": {"name": "Data Writes", "programs": set(), "rules": 0, "color": "bg-rose-500"},
+        "CALLS": {"name": "Program Calls", "programs": set(), "rules": 0, "color": "bg-blue-500"},
+        "EXECUTES": {"name": "Job Execution", "programs": set(), "rules": 0, "color": "bg-violet-500"},
+        "MAPS_TO": {"name": "Telon Module Mapping", "programs": set(), "rules": 0, "color": "bg-indigo-500"},
         "INCLUDES": {"name": "Shared Copybooks", "programs": set(), "rules": 0, "color": "bg-emerald-500"},
         "UNLINKED": {"name": "Standalone Modules", "programs": set(), "rules": 0, "color": "bg-amber-500"},
     }
@@ -271,6 +295,7 @@ def run_chunking_task(run_id: str):
         db.close()
 
 
+@router.get("/impact/{item_name}")
 @router.get("/impact-analysis/{item_name}")
 async def get_impact_analysis(item_name: str):
     """
@@ -451,3 +476,15 @@ async def confirm_language(data: dict, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+
+
+
+
+
+
+
+
+
+

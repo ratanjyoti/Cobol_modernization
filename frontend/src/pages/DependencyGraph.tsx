@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   Box,
@@ -97,7 +97,7 @@ const MODE_LABELS: Record<GraphMode, string> = {
   isolated: 'Isolated Files',
 };
 
-const REQUESTED_RELATION_ORDER = ['CALLS', 'INCLUDES', 'READS_WRITES', 'IMPORTS', 'REFERENCES', 'INHERITS'];
+const REQUESTED_RELATION_ORDER = ['CALLS', 'EXECUTES', 'MAPS_TO', 'INCLUDES', 'ACCESSES', 'READS', 'WRITES', 'READS_WRITES', 'IMPORTS', 'REFERENCES', 'INHERITS'];
 
 const cloneNode = (node: DependencyNode): DependencyNode => ({ ...node });
 
@@ -148,10 +148,17 @@ const getLinkColor = (relationType: string) => {
   switch (relationType) {
     case 'CALLS':
       return 'var(--corporate-warning)';
+    case 'EXECUTES':
+    case 'MAPS_TO':
+      return '#60a5fa';
     case 'INCLUDES':
       return 'var(--corporate-success)';
+    case 'ACCESSES':
+    case 'READS':
     case 'READS_WRITES':
       return 'var(--corporate-accent)';
+    case 'WRITES':
+      return '#ef4444';
     case 'IMPORTS':
       return '#8f6f4f';
     case 'REFERENCES':
@@ -182,12 +189,89 @@ const evenlySpacedAngle = (index: number, total: number, startAngle = -Math.PI /
   if (total <= 1) return startAngle + arc / 2;
   return startAngle + (arc * index) / total;
 };
+const getLayoutCenter = (node: DependencyNode) => ({
+  x: node.x + NODE_WIDTH / 2,
+  y: node.y + CIRCLE_SIZE / 2 + 4,
+});
+
+const clampLayout = (nodes: DependencyNode[], padding = 90) => {
+  nodes.forEach((node) => {
+    node.x = Math.max(padding, node.x);
+    node.y = Math.max(padding, node.y);
+  });
+};
+
+const relaxNodeSpacing = (nodes: DependencyNode[], links: DependencyLink[], iterations = 90) => {
+  if (nodes.length < 2) return nodes;
+
+  const linkedPairs = links
+    .map((link) => [nodes.find((node) => node.id === link.from), nodes.find((node) => node.id === link.to)] as const)
+    .filter((pair): pair is readonly [DependencyNode, DependencyNode] => Boolean(pair[0] && pair[1]));
+
+  for (let iteration = 0; iteration < iterations; iteration += 1) {
+    const cooling = 1 - iteration / iterations;
+
+    for (let i = 0; i < nodes.length; i += 1) {
+      for (let j = i + 1; j < nodes.length; j += 1) {
+        const a = nodes[i];
+        const b = nodes[j];
+        const ac = getLayoutCenter(a);
+        const bc = getLayoutCenter(b);
+        const dx = bc.x - ac.x || 0.01;
+        const dy = bc.y - ac.y || 0.01;
+        const distance = Math.max(1, Math.hypot(dx, dy));
+        const minDistance = 190 + Math.min(80, Math.max(a.label.length, b.label.length) * 2.2);
+
+        if (distance >= minDistance) continue;
+
+        const push = (minDistance - distance) * 0.44 * cooling;
+        const ux = dx / distance;
+        const uy = dy / distance;
+        a.x -= ux * push;
+        a.y -= uy * push;
+        b.x += ux * push;
+        b.y += uy * push;
+      }
+    }
+
+    linkedPairs.forEach(([source, target]) => {
+      const sourceCenter = getLayoutCenter(source);
+      const targetCenter = getLayoutCenter(target);
+      const dx = targetCenter.x - sourceCenter.x || 0.01;
+      const dy = targetCenter.y - sourceCenter.y || 0.01;
+      const distance = Math.max(1, Math.hypot(dx, dy));
+      const desiredDistance = 330;
+      const pull = (distance - desiredDistance) * 0.018 * cooling;
+      const ux = dx / distance;
+      const uy = dy / distance;
+
+      source.x += ux * pull;
+      source.y += uy * pull;
+      target.x -= ux * pull;
+      target.y -= uy * pull;
+    });
+
+    clampLayout(nodes);
+  }
+
+  clampLayout(nodes);
+  return nodes;
+};
+
+const staggerNodesByRows = (nodes: DependencyNode[]) => {
+  const sorted = [...nodes].sort((a, b) => a.y - b.y || a.x - b.x);
+  sorted.forEach((node, index) => {
+    node.y += (index % 3 - 1) * 18;
+  });
+  return nodes;
+};
 
 const layoutNetworkMap = (nodes: DependencyNode[], links: DependencyLink[]) => {
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const degree = new Map(nodes.map((node) => [node.id, node.incoming + node.outgoing]));
-  const centerX = 720;
-  const centerY = 430;
+  const graphScale = Math.max(1, Math.sqrt(Math.max(nodes.length, 1) / 18));
+  const centerX = Math.round(820 * graphScale);
+  const centerY = Math.round(520 * graphScale);
 
   const hubs = [...nodes]
     .filter((node) => (degree.get(node.id) || 0) > 0)
@@ -196,9 +280,9 @@ const layoutNetworkMap = (nodes: DependencyNode[], links: DependencyLink[]) => {
   if (hubs.length === 0) {
     nodes.forEach((node, index) => {
       const angle = evenlySpacedAngle(index, nodes.length);
-      placeNodeByCenter(node, centerX + Math.cos(angle) * 280, centerY + Math.sin(angle) * 220);
+      placeNodeByCenter(node, centerX + Math.cos(angle) * 420, centerY + Math.sin(angle) * 320);
     });
-    return nodes;
+    return relaxNodeSpacing(staggerNodesByRows(nodes), links, 70);
   }
 
   const primary = hubs[0];
@@ -216,8 +300,8 @@ const layoutNetworkMap = (nodes: DependencyNode[], links: DependencyLink[]) => {
     .sort((a, b) => (degree.get(b.id) || 0) - (degree.get(a.id) || 0) || a.label.localeCompare(b.label));
 
   const placed = new Set<string>([primary.id]);
-  const innerRadiusX = Math.max(260, Math.min(460, 230 + primaryNeighbors.length * 18));
-  const innerRadiusY = Math.max(190, Math.min(340, 170 + primaryNeighbors.length * 12));
+  const innerRadiusX = Math.max(430, Math.min(820, 360 + primaryNeighbors.length * 34));
+  const innerRadiusY = Math.max(310, Math.min(620, 260 + primaryNeighbors.length * 24));
 
   primaryNeighbors.forEach((node, index) => {
     const angle = evenlySpacedAngle(index, primaryNeighbors.length, -Math.PI * 0.9);
@@ -233,18 +317,19 @@ const layoutNetworkMap = (nodes: DependencyNode[], links: DependencyLink[]) => {
     const ring = Math.floor(index / 12);
     const position = index % 12;
     const itemsInRing = Math.min(12, remaining.length - ring * 12);
-    const radiusX = 470 + ring * 220;
-    const radiusY = 340 + ring * 155;
+    const radiusX = 680 + ring * 310;
+    const radiusY = 500 + ring * 230;
     const angle = evenlySpacedAngle(position, itemsInRing, -Math.PI / 2 + ring * 0.28);
     placeNodeByCenter(node, centerX + Math.cos(angle) * radiusX, centerY + Math.sin(angle) * radiusY);
   });
 
-  return nodes;
+  return relaxNodeSpacing(staggerNodesByRows(nodes), links, 110);
 };
 
 const layoutImpact = (nodes: DependencyNode[], links: DependencyLink[], focusIds: Set<string>) => {
-  const centerX = 720;
-  const centerY = Math.max(430, Math.ceil(Math.max(nodes.length - focusIds.size, 1) / 10) * 90 + 330);
+  const graphScale = Math.max(1, Math.sqrt(Math.max(nodes.length, 1) / 16));
+  const centerX = Math.round(780 * graphScale);
+  const centerY = Math.max(520, Math.ceil(Math.max(nodes.length - focusIds.size, 1) / 8) * 115 + 360);
   const focusNodes = nodes.filter((node) => focusIds.has(node.id));
   const primaryFocus = focusNodes[0] || nodes[0];
 
@@ -267,8 +352,8 @@ const layoutImpact = (nodes: DependencyNode[], links: DependencyLink[], focusIds
     const ring = Math.floor(index / 10);
     const position = index % 10;
     const itemsInRing = Math.min(10, directNodes.length - ring * 10);
-    const radiusX = 360 + ring * 210;
-    const radiusY = 265 + ring * 150;
+    const radiusX = 460 + ring * 260;
+    const radiusY = 340 + ring * 190;
     const angle = evenlySpacedAngle(position, itemsInRing, -Math.PI / 2 + ring * 0.22);
     placeNodeByCenter(node, centerX + Math.cos(angle) * radiusX, centerY + Math.sin(angle) * radiusY);
   });
@@ -282,8 +367,8 @@ const layoutImpact = (nodes: DependencyNode[], links: DependencyLink[], focusIds
     const ring = Math.floor(index / 12);
     const position = index % 12;
     const itemsInRing = Math.min(12, remaining.length - ring * 12);
-    const radiusX = 590 + ring * 230;
-    const radiusY = 410 + ring * 160;
+    const radiusX = 740 + ring * 320;
+    const radiusY = 520 + ring * 230;
     const angle = evenlySpacedAngle(position, itemsInRing, -Math.PI / 2 + ring * 0.2);
     placeNodeByCenter(node, centerX + Math.cos(angle) * radiusX, centerY + Math.sin(angle) * radiusY);
   });
@@ -291,10 +376,10 @@ const layoutImpact = (nodes: DependencyNode[], links: DependencyLink[], focusIds
   focusNodes.slice(1).forEach((node, index) => {
     if (node.id === primaryFocus.id) return;
     const angle = evenlySpacedAngle(index, Math.max(1, focusNodes.length - 1), -Math.PI / 2);
-    placeNodeByCenter(node, centerX + Math.cos(angle) * 160, centerY + Math.sin(angle) * 120, true);
+    placeNodeByCenter(node, centerX + Math.cos(angle) * 230, centerY + Math.sin(angle) * 170, true);
   });
 
-  return nodes;
+  return relaxNodeSpacing(staggerNodesByRows(nodes), links, 80);
 };
 const buildOverviewNodes = (stats: DependencyGraphStats): DependencyNode[] => {
   const groups: Array<Pick<DependencyNode, 'id' | 'label' | 'type' | 'groupCount' | 'subtitle'> & { x: number; y: number }> = [
@@ -401,6 +486,17 @@ const DependencyGraph = ({
   }, [expandedNodeIds, mode, selectedNodeId]);
 
   const selectedNode = selectedNodeId ? nodeById.get(selectedNodeId) : undefined;
+
+  const impactedProgramIds = useMemo(() => {
+    if (mode !== 'impact') return new Set<string>();
+    const ids = new Set<string>();
+    filteredLinks.forEach((link) => {
+      if (!focusedNodeIds.has(link.to)) return;
+      const source = nodeById.get(link.from);
+      if (source?.type === 'program' || source?.type === 'job') ids.add(link.from);
+    });
+    return ids;
+  }, [filteredLinks, focusedNodeIds, mode, nodeById]);
 
   const visibleLinks = useMemo(() => {
     if (mode === 'overview' || mode === 'isolated') return [];
@@ -624,7 +720,7 @@ const DependencyGraph = ({
                         );
                       })}
                     </defs>
-                    {visibleLinks.map((link) => {
+                    {visibleLinks.map((link, linkIndex) => {
                       const fromNode = displayNodeById.get(link.from);
                       const toNode = displayNodeById.get(link.to);
 
@@ -646,10 +742,13 @@ const DependencyGraph = ({
                       const y1 = fromCenter.y + unitY * fromRadius;
                       const x2 = toCenter.x - unitX * toRadius;
                       const y2 = toCenter.y - unitY * toRadius;
-                      const deltaX = Math.max(120, Math.abs(x2 - x1) / 2);
-                      const curveLift = Math.min(120, Math.abs(y2 - y1) * 0.22 + 24);
+                      const deltaX = Math.max(150, Math.abs(x2 - x1) / 2);
+                      const curveLift = Math.min(180, Math.abs(y2 - y1) * 0.25 + 34);
+                      const laneOffset = ((linkIndex % 5) - 2) * 18;
+                      const normalX = -unitY * laneOffset;
+                      const normalY = unitX * laneOffset;
                       const controlOffset = x2 >= x1 ? deltaX : -deltaX;
-                      const path = `M ${x1} ${y1} C ${x1 + controlOffset} ${y1 - curveLift}, ${x2 - controlOffset} ${y2 + curveLift}, ${x2} ${y2}`;
+                      const path = `M ${x1} ${y1} C ${x1 + controlOffset + normalX} ${y1 - curveLift + normalY}, ${x2 - controlOffset + normalX} ${y2 + curveLift + normalY}, ${x2} ${y2}`;
                       const markerId = `arrow-${link.relationType.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
 
                       return (
@@ -754,3 +853,9 @@ const DependencyGraph = ({
 };
 
 export default DependencyGraph;
+
+
+
+
+
+
