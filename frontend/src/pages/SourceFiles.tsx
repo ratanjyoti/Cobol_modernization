@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ProjectAPI, WS_BASE_URL } from '../services/api';
-import { clearAnalysisWarmCache, warmAnalysisTabs } from '../services/analysisPrefetch';
+import { clearAnalysisWarmCache, warmAnalysisTabsWithRetry } from '../services/analysisPrefetch';
 
 import {
   Upload, FileText, CheckCircle2, Clock,
@@ -175,9 +175,7 @@ const SourceFiles = () => {
   const refreshAnalysisTabs = () => {
     if (!runId) return;
     clearAnalysisWarmCache(runId);
-    void warmAnalysisTabs(runId, true).catch((error) => {
-      console.warn('Failed to refresh analysis tabs after source file change:', error);
-    });
+    warmAnalysisTabsWithRetry(runId);
   };
 
   // HELPER: Ensures mapping backend data to frontend state correctly across all handlers
@@ -193,6 +191,34 @@ const SourceFiles = () => {
       isValid: f.is_valid ?? (f.status === 'CONFIRMED' || f.status === 'Analyzed'),
     }));
   };
+
+  useEffect(() => {
+    let active = true;
+
+    const loadExistingFiles = async () => {
+      if (!runId) {
+        setFiles([]);
+        queuedDetectionKeys.current.clear();
+        return;
+      }
+
+      try {
+        const response = await ProjectAPI.listFiles(runId);
+        if (!active) return;
+        setFiles(mapBackendFiles(response.files || []));
+      } catch (error: any) {
+        if (active) {
+          toast.error(error.response?.data?.detail || 'Unable to load uploaded files for this project');
+        }
+      }
+    };
+
+    loadExistingFiles();
+
+    return () => {
+      active = false;
+    };
+  }, [runId]);
 
   const enqueueLanguageDetections = (mappedFiles: any[]) => {
     if (sourceLang !== 'auto') return;

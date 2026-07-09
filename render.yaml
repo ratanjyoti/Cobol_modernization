@@ -5,7 +5,14 @@ services:
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    disk:
+      name: modernizer-data
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
+      - key: MODERNIZER_DATA_DIR
+        value: /var/data
+      - key: MODERNIZER_STORAGE_DIR
+        value: /var/data/storage/projects
       - key: CORS_ALLOWED_ORIGINS
         value: https://cobol-modernization-green.vercel.app
-

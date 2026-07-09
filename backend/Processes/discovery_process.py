@@ -8,7 +8,7 @@ import stat
 from git import GitCommandError, Repo
 
 # Models and Services
-from Persistence.sqlite.models import FileChunk, FileComplexity, ProjectFile, FileStatus, ProjectComplexity
+from Persistence.sqlite.models import FileChunk, FileComplexity, FileRelation, ProjectFile, FileStatus, ProjectComplexity
 from Chunking.core.language_detector import LanguageDetector
 from Chunking.core.complexity_scorer import ComplexityScorer
 from Chunking.core.sizing_router import SizingRouter
@@ -81,8 +81,130 @@ class DiscoveryProcess:
         self.db.flush() # Ensures project_file.id is generated
         return project_file
 
+    def _run_file_intelligence(self, run_id: str, project_file: ProjectFile, content: str):
+        filename = project_file.filename
+        rel_path = project_file.filepath or filename
+        lang = project_file.detected_lang or "unknown"
+
+        # A. Dependency Scan (CALLs, COPYs, SQL)
+        dep_manager = DependencyManager(self.db)
+        dep_manager.scan_and_store(run_id, rel_path, content, lang)
+
+        # B. Complexity Scoring
+        comp_data = self.scorer.calculate_score(content)
+        existing_file_complexity = self.db.query(FileComplexity).filter(
+            FileComplexity.run_id == run_id,
+            FileComplexity.file_id == project_file.id,
+        ).first()
+        file_complexity_values = {
+            "filename": filename,
+            "filepath": rel_path,
+            "score": comp_data["score"],
+            "tier": comp_data["tier"],
+            "effort": comp_data["reasoning_effort"],
+            "logic_count": comp_data["logic_count"],
+            "table_count": comp_data["table_count"],
+            "table_bonus": comp_data["table_bonus"],
+            "if_count": comp_data["if_count"],
+            "perform_until_count": comp_data["perform_until_count"],
+            "perform_varying_count": comp_data["perform_varying_count"],
+            "evaluate_count": comp_data["evaluate_count"],
+        }
+        if existing_file_complexity:
+            for key, value in file_complexity_values.items():
+                setattr(existing_file_complexity, key, value)
+        else:
+            self.db.add(FileComplexity(
+                run_id=run_id,
+                file_id=project_file.id,
+                **file_complexity_values,
+            ))
+
+        existing_complexity = self.db.query(ProjectComplexity).filter(
+            ProjectComplexity.run_id == run_id
+        ).first()
+        if existing_complexity:
+            if comp_data["score"] > (existing_complexity.score or 0):
+                existing_complexity.score = comp_data["score"]
+                existing_complexity.tier = comp_data["tier"]
+                existing_complexity.reasoning_effort = comp_data["reasoning_effort"]
+        else:
+            self.db.add(ProjectComplexity(
+                run_id=run_id,
+                score=comp_data["score"],
+                tier=comp_data["tier"],
+                reasoning_effort=comp_data["reasoning_effort"],
+            ))
+
+        # C. Smart Chunking
+        self.chunking_orchestrator.process_file(
+            run_id=run_id,
+            file_id=project_file.id,
+            filename=filename,
+            content=content,
+            lang=lang,
+        )
+
+    def _uploaded_file_candidates(self, project_file: ProjectFile) -> List[Path]:
+        rel_path = self._safe_relative_upload_path(project_file.filepath or project_file.filename)
+        project_folder = self.upload_dir / project_file.run_id
+        candidates = []
+
+        if rel_path is not None:
+            candidates.append(project_folder / rel_path)
+            candidates.append(project_folder / "local_repo" / rel_path)
+
+        candidates.append(project_folder / project_file.filename)
+        return candidates
+
+    def _read_uploaded_file_content(self, project_file: ProjectFile) -> str:
+        for candidate in self._uploaded_file_candidates(project_file):
+            try:
+                if candidate.exists() and candidate.is_file():
+                    return candidate.read_text(errors="ignore")
+            except OSError as exc:
+                print(f"Could not read file {candidate}: {exc}")
+        print(f"Uploaded file not found for analysis: {project_file.filepath or project_file.filename}")
+        return ""
+
+    def analyze_run(self, run_id: str, file_ids: List[int] | None = None):
+        query = self.db.query(ProjectFile).filter(ProjectFile.run_id == run_id)
+        if file_ids:
+            query = query.filter(ProjectFile.id.in_(file_ids))
+        project_files = query.order_by(ProjectFile.id.asc()).all()
+        if not project_files:
+            return {"files_analyzed": 0}
+
+        target_ids = [project_file.id for project_file in project_files]
+        target_paths = [project_file.filepath or project_file.filename for project_file in project_files]
+        target_names = [project_file.filename for project_file in project_files]
+
+        self.db.query(FileChunk).filter(
+            FileChunk.run_id == run_id,
+            FileChunk.file_id.in_(target_ids),
+        ).delete(synchronize_session=False)
+        self.db.query(FileComplexity).filter(
+            FileComplexity.run_id == run_id,
+            FileComplexity.file_id.in_(target_ids),
+        ).delete(synchronize_session=False)
+        self.db.query(FileRelation).filter(
+            FileRelation.run_id == run_id,
+            FileRelation.source_file.in_(target_paths + target_names),
+        ).delete(synchronize_session=False)
+        self.db.query(ProjectComplexity).filter(ProjectComplexity.run_id == run_id).delete(synchronize_session=False)
+        self.db.flush()
+
+        for project_file in project_files:
+            content = self._read_uploaded_file_content(project_file)
+            self._run_file_intelligence(run_id, project_file, content)
+
+        self._resolve_dependencies(run_id)
+        self.db.commit()
+        self._sync_neo4j_graph(run_id)
+        return {"files_analyzed": len(project_files)}
+
     # --- CORE PIPELINE: Save -> Scan -> Score -> Chunk ---
-    async def _save_and_scan(self, run_id: str, full_path: Path, filename: str, rel_path: str, lang: str):
+    async def _save_and_scan(self, run_id: str, full_path: Path, filename: str, rel_path: str, lang: str, analyze_inline: bool = True):
         # 1. Save Basic File Info to DB
         size = full_path.stat().st_size
         project_file = self._save_project_file(run_id, filename, rel_path, lang, size)
@@ -94,80 +216,11 @@ class DiscoveryProcess:
         except Exception as e:
             print(f"Could not read file {filename}: {e}")
 
-        # 2. Perform Dependency Scan, Complexity Scoring, and Chunking
-        # We wrap these in to_thread because they are CPU-intensive Regex operations
-        def process_intelligence():
-            # A. Dependency Scan (CALLs, COPYs, SQL)
-            dep_manager = DependencyManager(self.db)
-            dep_manager.scan_and_store(run_id, rel_path, content, lang)
-
-            # B. Complexity Scoring
-            # Store both per-file scoring details and the highest run-level score.
-            comp_data = self.scorer.calculate_score(content)
-            existing_file_complexity = self.db.query(FileComplexity).filter(
-                FileComplexity.run_id == run_id,
-                FileComplexity.file_id == project_file.id,
-            ).first()
-            file_complexity_values = {
-                "filename": filename,
-                "filepath": rel_path,
-                "score": comp_data["score"],
-                "tier": comp_data["tier"],
-                "effort": comp_data["reasoning_effort"],
-                "logic_count": comp_data["logic_count"],
-                "table_count": comp_data["table_count"],
-                "table_bonus": comp_data["table_bonus"],
-                "if_count": comp_data["if_count"],
-                "perform_until_count": comp_data["perform_until_count"],
-                "perform_varying_count": comp_data["perform_varying_count"],
-                "evaluate_count": comp_data["evaluate_count"],
-            }
-            if existing_file_complexity:
-                for key, value in file_complexity_values.items():
-                    setattr(existing_file_complexity, key, value)
-            else:
-                self.db.add(FileComplexity(
-                    run_id=run_id,
-                    file_id=project_file.id,
-                    **file_complexity_values,
-                ))
-
-            existing_complexity = self.db.query(ProjectComplexity).filter(
-                ProjectComplexity.run_id == run_id
-            ).first()
-            if existing_complexity:
-                if comp_data["score"] > (existing_complexity.score or 0):
-                    existing_complexity.score = comp_data["score"]
-                    existing_complexity.tier = comp_data["tier"]
-                    existing_complexity.reasoning_effort = comp_data["reasoning_effort"]
-            else:
-                complexity_record = ProjectComplexity(
-                    run_id=run_id,
-                    score=comp_data["score"],
-                    tier=comp_data["tier"],
-                    reasoning_effort=comp_data["reasoning_effort"]
-                )
-                self.db.add(complexity_record)
-
-            # C. Smart Chunking
-            # Only chunks if the SizingRouter says the file is too large
-            if SizingRouter.needs_chunking(content):
-                self.chunking_orchestrator.process_file(
-                    run_id=run_id, 
-                    file_id=project_file.id, 
-                    filename=filename, 
-                    content=content, 
-                    lang=lang
-                )
-            else:
-                # Even if not chunked, we store it as a single chunk (Index 0) 
-                # so the SLM knows where to look.
-                self.chunking_orchestrator.process_file(run_id, project_file.id, filename, content, lang)
-
-        try:
-            await asyncio.to_thread(process_intelligence)
-        except Exception as e:
-            print(f"Intelligence processing failed for {filename}: {e}")
+        if analyze_inline:
+            try:
+                await asyncio.to_thread(self._run_file_intelligence, run_id, project_file, content)
+            except Exception as e:
+                print(f"Intelligence processing failed for {filename}: {e}")
 
         chunk_count = self.db.query(FileChunk).filter(
             FileChunk.run_id == run_id,
@@ -205,7 +258,7 @@ class DiscoveryProcess:
         })
 
     # --- Ingestion Methods ---
-    async def ingest_local_git_repo(self, run_id: str, repo_path: str) -> List[Dict[str, Any]]:
+    async def ingest_local_git_repo(self, run_id: str, repo_path: str, analyze_inline: bool = True) -> List[Dict[str, Any]]:
         source_path = Path(repo_path).expanduser().resolve()
         if not source_path.exists() or not source_path.is_dir():
             raise ValueError(f"Repository path does not exist: {repo_path}")
@@ -213,9 +266,9 @@ class DiscoveryProcess:
         if not (source_path / ".git").exists():
             raise ValueError("Not a Git repository (missing .git folder)")
 
-        return await self.process_folder(run_id, str(source_path))
+        return await self.process_folder(run_id, str(source_path), analyze_inline)
 
-    async def ingest_github_repo(self, run_id: str, repo_url: str, github_token: str = None) -> List[Dict[str, Any]]:
+    async def ingest_github_repo(self, run_id: str, repo_url: str, github_token: str = None, analyze_inline: bool = True) -> List[Dict[str, Any]]:
         project_folder = self.upload_dir / run_id
         if project_folder.exists():
             self._force_remove_tree(project_folder)
@@ -231,12 +284,12 @@ class DiscoveryProcess:
             if git_dir.exists():
                 self._force_remove_tree(git_dir)
 
-            return await self.process_folder(run_id, str(project_folder))
+            return await self.process_folder(run_id, str(project_folder), analyze_inline)
         except Exception:
             self._force_remove_tree(project_folder)
             raise
 
-    async def process_folder_upload(self, run_id: str, files: List[Any], paths: List[str]) -> List[Dict[str, Any]]:
+    async def process_folder_upload(self, run_id: str, files: List[Any], paths: List[str], analyze_inline: bool = True) -> List[Dict[str, Any]]:
         project_folder = self.upload_dir / run_id / "local_repo"
         project_folder.mkdir(parents=True, exist_ok=True)
         mapped_files = []
@@ -261,17 +314,19 @@ class DiscoveryProcess:
 
             filename = rel_path_obj.name
             lang, is_valid = await asyncio.to_thread(self.detector.validate_and_detect, str(destination))
-            file_record = await self._save_and_scan(run_id, destination, filename, str(rel_path_obj), lang)
+            file_record = await self._save_and_scan(run_id, destination, filename, str(rel_path_obj), lang, analyze_inline)
             file_record["is_valid"] = is_valid
             mapped_files.append(file_record)
             await self._notify_detection(run_id, filename, lang, is_valid)
 
-        self._resolve_dependencies(run_id)
         self.db.commit()
-        self._sync_neo4j_graph(run_id)
+        if analyze_inline:
+            self._resolve_dependencies(run_id)
+            self.db.commit()
+            self._sync_neo4j_graph(run_id)
         return mapped_files
 
-    async def process_folder(self, run_id: str, folder_path: str) -> List[Dict[str, Any]]:
+    async def process_folder(self, run_id: str, folder_path: str, analyze_inline: bool = True) -> List[Dict[str, Any]]:
         source_path = Path(folder_path)
         project_folder = self.upload_dir / run_id
         project_folder.mkdir(parents=True, exist_ok=True)
@@ -287,17 +342,19 @@ class DiscoveryProcess:
             filename = full_path.name
             lang, is_valid = await asyncio.to_thread(self.detector.validate_and_detect, str(full_path))
 
-            file_record = await self._save_and_scan(run_id, full_path, filename, rel_path, lang)
+            file_record = await self._save_and_scan(run_id, full_path, filename, rel_path, lang, analyze_inline)
             file_record["is_valid"] = is_valid
             mapped_files.append(file_record)
             await self._notify_detection(run_id, filename, lang, is_valid)
 
-        self._resolve_dependencies(run_id)
         self.db.commit()
-        self._sync_neo4j_graph(run_id)
+        if analyze_inline:
+            self._resolve_dependencies(run_id)
+            self.db.commit()
+            self._sync_neo4j_graph(run_id)
         return mapped_files
 
-    async def process_zip_upload(self, run_id: str, zip_file_path: str) -> List[Dict[str, Any]]:
+    async def process_zip_upload(self, run_id: str, zip_file_path: str, analyze_inline: bool = True) -> List[Dict[str, Any]]:
         project_folder = self.upload_dir / run_id
         project_folder.mkdir(parents=True, exist_ok=True)
 
@@ -316,18 +373,20 @@ class DiscoveryProcess:
             filename = full_path.name
             lang, is_valid = await asyncio.to_thread(self.detector.validate_and_detect, str(full_path))
             
-            file_record = await self._save_and_scan(run_id, full_path, filename, rel_path, lang)
+            file_record = await self._save_and_scan(run_id, full_path, filename, rel_path, lang, analyze_inline)
             file_record["is_valid"] = is_valid
             mapped_files.append(file_record)
 
             await self._notify_detection(run_id, filename, lang, is_valid)
 
-        self._resolve_dependencies(run_id)
         self.db.commit()
-        self._sync_neo4j_graph(run_id)
+        if analyze_inline:
+            self._resolve_dependencies(run_id)
+            self.db.commit()
+            self._sync_neo4j_graph(run_id)
         return mapped_files
 
-    async def process_individual_files(self, run_id: str, files) -> List[Dict[str, Any]]:
+    async def process_individual_files(self, run_id: str, files, analyze_inline: bool = True) -> List[Dict[str, Any]]:
         project_folder = self.upload_dir / run_id
         project_folder.mkdir(parents=True, exist_ok=True)
 
@@ -343,19 +402,21 @@ class DiscoveryProcess:
 
             detected_lang, is_valid = await asyncio.to_thread(self.detector.validate_and_detect, str(destination))
             
-            file_record = await self._save_and_scan(run_id, destination, filename, filename, detected_lang)
+            file_record = await self._save_and_scan(run_id, destination, filename, filename, detected_lang, analyze_inline)
             file_record["is_valid"] = is_valid
             mapped_files.append(file_record)
             
             await self._notify_detection(run_id, filename, detected_lang, is_valid)
 
-        self._resolve_dependencies(run_id)
         self.db.commit()
-        self._sync_neo4j_graph(run_id)
+        if analyze_inline:
+            self._resolve_dependencies(run_id)
+            self.db.commit()
+            self._sync_neo4j_graph(run_id)
         return mapped_files
 
-    async def process_upload(self, run_id: str, zip_path: str):
-        return await self.process_zip_upload(run_id, zip_path)
+    async def process_upload(self, run_id: str, zip_path: str, analyze_inline: bool = True):
+        return await self.process_zip_upload(run_id, zip_path, analyze_inline)
 
 
 

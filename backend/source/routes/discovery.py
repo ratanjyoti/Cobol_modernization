@@ -51,6 +51,19 @@ def remove_tree_sync(path: Path):
     if path.exists():
         shutil.rmtree(path, onerror=handle_remove_error)
 
+
+def run_analysis_task(run_id: str):
+    """Build dependency maps and analysis data after upload without blocking the response."""
+    db = SessionLocal()
+    try:
+        result = DiscoveryProcess(db).analyze_run(run_id)
+        print(f"Background analysis completed for {run_id}: {result}")
+    except Exception as exc:
+        db.rollback()
+        print(f"Background analysis failed for {run_id}: {exc}")
+    finally:
+        db.close()
+
 # 1. THE COMPLEXITY TAB DATA
 @router.get("/complexity/{run_id}")
 async def get_complexity(run_id: str, db: Session = Depends(get_db)):
@@ -208,6 +221,7 @@ async def get_ddd_discovery(run_id: str, db: Session = Depends(get_db)):
     return domains
 @router.post("/upload-zip")
 async def upload_zip(
+    background_tasks: BackgroundTasks,
     run_id: str = Form(...),
     zip_file: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -222,8 +236,9 @@ async def upload_zip(
     try:
         await asyncio.to_thread(save_file_sync, zip_file, temp_zip_path)
         discovery = DiscoveryProcess(db)
-        mapped_files = await discovery.process_zip_upload(run_id, str(temp_zip_path))
-        return {"status": "Success", "mapped_files": mapped_files}
+        mapped_files = await discovery.process_zip_upload(run_id, str(temp_zip_path), analyze_inline=False)
+        background_tasks.add_task(run_analysis_task, run_id)
+        return {"status": "Success", "mapped_files": mapped_files, "analysis_status": "queued"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing zip: {str(e)}")
     finally:
@@ -320,6 +335,7 @@ async def get_impact_analysis(item_name: str):
 
 @router.post("/upload-folder")
 async def upload_folder(
+    background_tasks: BackgroundTasks,
     run_id: str = Form(...),
     files: List[UploadFile] = File(...),
     paths: List[str] = Form(...),
@@ -327,8 +343,9 @@ async def upload_folder(
 ):
     try:
         discovery = DiscoveryProcess(db)
-        mapped_files = await discovery.process_folder_upload(run_id, files, paths)
-        return {"status": "Success", "mapped_files": mapped_files}
+        mapped_files = await discovery.process_folder_upload(run_id, files, paths, analyze_inline=False)
+        background_tasks.add_task(run_analysis_task, run_id)
+        return {"status": "Success", "mapped_files": mapped_files, "analysis_status": "queued"}
     except Exception as e:
         print(f"Folder upload error: {e}")
         raise HTTPException(status_code=500, detail=f"Folder upload failed: {str(e)}")
@@ -336,6 +353,7 @@ async def upload_folder(
 
 @router.post("/local-repo")
 async def ingest_local_repo(
+    background_tasks: BackgroundTasks,
     run_id: str = Form(...),
     repo_path: str = Form(...),
     db: Session = Depends(get_db),
@@ -346,11 +364,13 @@ async def ingest_local_repo(
     """
     try:
         discovery = DiscoveryProcess(db)
-        mapped_files = await discovery.ingest_local_git_repo(run_id, repo_path)
+        mapped_files = await discovery.ingest_local_git_repo(run_id, repo_path, analyze_inline=False)
+        background_tasks.add_task(run_analysis_task, run_id)
         return {
             "status": "Success",
             "message": f"Successfully inventoried {len(mapped_files)} files from local repository",
             "mapped_files": mapped_files,
+            "analysis_status": "queued",
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -360,6 +380,7 @@ async def ingest_local_repo(
 
 @router.post("/github")
 async def ingest_github(
+    background_tasks: BackgroundTasks,
     request: Request,
     run_id: Optional[str] = Form(None),
     repo_url: Optional[str] = Form(None),
@@ -389,12 +410,14 @@ async def ingest_github(
 
     try:
         discovery = DiscoveryProcess(db)
-        mapped_files = await discovery.ingest_github_repo(run_id, repo_url, github_token)
+        mapped_files = await discovery.ingest_github_repo(run_id, repo_url, github_token, analyze_inline=False)
+        background_tasks.add_task(run_analysis_task, run_id)
 
         return {
             "status": "Success",
             "message": f"Successfully ingested {len(mapped_files)} files from GitHub",
             "mapped_files": mapped_files,
+            "analysis_status": "queued",
         }
     except Exception as e:
         print(f"GitHub Error: {str(e)}")
@@ -403,6 +426,7 @@ async def ingest_github(
 
 @router.post("/upload")
 async def upload_source(
+    background_tasks: BackgroundTasks,
     run_id: str = Form(...),
     files: Optional[List[UploadFile]] = File(None),
     zip_file: Optional[UploadFile] = File(None),
@@ -417,16 +441,17 @@ async def upload_source(
 
         try:
             await asyncio.to_thread(save_file_sync, zip_file, temp_path)
-            mapped_files = await discovery.process_upload(run_id, str(temp_path))
+            mapped_files = await discovery.process_upload(run_id, str(temp_path), analyze_inline=False)
         finally:
             if temp_path.exists():
                 os.remove(temp_path)
     elif files:
-        mapped_files = await discovery.process_individual_files(run_id, files)
+        mapped_files = await discovery.process_individual_files(run_id, files, analyze_inline=False)
     else:
         raise HTTPException(status_code=400, detail="No files uploaded")
 
-    return {"status": "Success", "mapped_files": mapped_files}
+    background_tasks.add_task(run_analysis_task, run_id)
+    return {"status": "Success", "mapped_files": mapped_files, "analysis_status": "queued"}
 
 
 @router.websocket("/ws/{run_id}")
@@ -440,7 +465,11 @@ async def websocket_endpoint(websocket: WebSocket, run_id: str):
 
 
 @router.post("/confirm-language")
-async def confirm_language(data: dict, db: Session = Depends(get_db)):
+async def confirm_language(
+    data: dict,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     run_id = data.get("run_id")
     filename = data.get("filename")
     lang = data.get("lang")
@@ -481,6 +510,7 @@ async def confirm_language(data: dict, db: Session = Depends(get_db)):
         file_record.status = FileStatus.CONFIRMED
         db.commit()
         db.refresh(file_record)
+        background_tasks.add_task(run_analysis_task, run_id)
         return {
             "status": "Success",
             "message": f"Language updated to {normalized_lang} for {file_record.filename}",
