@@ -4,34 +4,40 @@
 
 :root {
   /* LIGHT MODE PALETTE */
-  --app-bg: #f8fafc;        /* Light Slate 50 */
-  --panel-bg: #ffffff;      /* Pure White */
-  --panel-border: #e2e8f0;  /* Slate 200 */
-  --text-main: #0f172a;     /* Slate 900 */
-  --text-muted: #64748b;    /* Slate 500 */
-  --accent: #4f46e5;        /* Indigo 600 */
-  --accent-hover: #4338ca;  /* Indigo 700 */
-  --terminal-bg: #f1f5f9;   /* Light Slate 100 */
-  --terminal-text: #1e293b; /* Slate 800 */
+  --app-bg: #f6f0e6;        /* Warm corporate ivory */
+  --panel-bg: #fffaf1;      /* Soft paper panel */
+  --panel-border: #dfd3c2;  /* Warm stone border */
+  --text-main: #231f1a;     /* Charcoal ink */
+  --text-muted: #766a5c;    /* Muted warm gray */
+  --accent: #e4572e;        /* Corporate rust orange */
+  --accent-hover: #bf3f20;  /* Deep rust */
+  --terminal-bg: #2a241f;   /* Warm charcoal */
+  --terminal-text: #f6f0e6; /* Ivory terminal text */
 }
 
 
 .dark {
   /* DARK MODE PALETTE */
-  --app-bg: #0f172a;        /* Deep Slate 900 */
-  --panel-bg: #1e293b;      /* Slate 800 */
-  --panel-border: #334155;  /* Slate 700 */
-  --text-main: #f8fafc;     /* Slate 50 */
-  --text-muted: #94a3b8;    /* Slate 400 */
-  --accent: #6366f1;        /* Indigo 500 */
-  --accent-hover: #4f46e5;  /* Indigo 600 */
-  --terminal-bg: #020617;   /* Slate 950 */
-  --terminal-text: #10b981;  /* Emerald 500 */
+  --app-bg: #f6f0e6;        /* Warm corporate ivory */
+  --panel-bg: #fffaf1;      /* Soft paper panel */
+  --panel-border: #dfd3c2;  /* Warm stone border */
+  --text-main: #231f1a;     /* Charcoal ink */
+  --text-muted: #766a5c;    /* Muted warm gray */
+  --accent: #e4572e;        /* Corporate rust orange */
+  --accent-hover: #bf3f20;  /* Deep rust */
+  --terminal-bg: #2a241f;   /* Warm charcoal */
+  --terminal-text: #f6f0e6;  /* Ivory terminal text */
 }
 
 body {
   @apply bg-[var(--app-bg)] text-[var(--text-main)] transition-colors duration-300 antialiased;
   font-family: 'Inter', system-ui, sans-serif;
+  font-size: 18px;
+  line-height: 1.6;
+  background:
+    radial-gradient(circle at 20% 10%, rgba(228, 87, 46, 0.08), transparent 28rem),
+    linear-gradient(135deg, rgba(255, 250, 241, 0.92), rgba(241, 232, 216, 0.9)),
+    var(--app-bg);
 }
 
 @layer components {
@@ -63,4 +69,663 @@ body {
     opacity: 1;
   }
 
+}
+
+/* Readability scale: keep the existing font family, only make text easier to see. */
+.text-\[10px\],
+[class~="text-[10px]"] {
+  font-size: 0.8125rem !important;
+  line-height: 1.25rem !important;
+}
+
+.text-\[11px\],
+[class~="text-[11px]"] {
+  font-size: 0.875rem !important;
+  line-height: 1.25rem !important;
+}
+
+.text-xs {
+  font-size: 0.9375rem !important;
+  line-height: 1.375rem !important;
+}
+
+.text-sm {
+  font-size: 1.0625rem !important;
+  line-height: 1.625rem !important;
+}
+
+.text-base {
+  font-size: 1.125rem !important;
+  line-height: 1.75rem !important;
+}
+
+.text-lg {
+  font-size: 1.375rem !important;
+  line-height: 1.875rem !important;
+}
+
+.text-xl {
+  font-size: 1.625rem !important;
+  line-height: 2.125rem !important;
+}
+
+.text-2xl {
+  font-size: 2rem !important;
+  line-height: 2.5rem !important;
+}
+
+.text-3xl {
+  font-size: 2.5rem !important;
+  line-height: 3rem !important;
+}
+
+.text-5xl {
+  font-size: clamp(3.5rem, 6vw, 6.5rem) !important;
+  line-height: 0.95 !important;
+}
+
+button,
+input,
+select,
+textarea,
+table,
+.btn-primary,
+.btn-secondary,
+.status-pill {
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+/* Corporate visual system inspired by the supplied reference: ivory canvas, rust accent, charcoal text. */
+:root,
+.dark {
+  color-scheme: light;
+  --corporate-bg: #f6f0e6;
+  --corporate-bg-soft: #fffaf1;
+  --corporate-panel: rgba(255, 250, 241, 0.92);
+  --corporate-panel-strong: #fff7ea;
+  --corporate-border: #dfd3c2;
+  --corporate-border-strong: #cdbda6;
+  --corporate-text: #231f1a;
+  --corporate-muted: #766a5c;
+  --corporate-faint: #a09486;
+  --corporate-accent: #e4572e;
+  --corporate-accent-dark: #bf3f20;
+  --corporate-accent-soft: rgba(228, 87, 46, 0.12);
+  --corporate-shadow: 0 18px 45px rgba(61, 45, 32, 0.12);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  background-color: var(--corporate-bg);
+  color: var(--corporate-text);
+}
+
+main {
+  background:
+    radial-gradient(circle at 85% 12%, rgba(228, 87, 46, 0.07), transparent 26rem),
+    linear-gradient(180deg, rgba(255, 250, 241, 0.75), rgba(246, 240, 230, 0.98));
+}
+
+.glass-card,
+.bg-panel,
+[class~="bg-slate-900"],
+[class~="bg-slate-900/30"],
+[class~="bg-slate-900/50"],
+[class~="bg-slate-900/60"],
+[class~="bg-slate-950"],
+[class~="bg-slate-950/50"],
+[class~="bg-slate-800"],
+[class~="bg-slate-800/30"],
+[class~="bg-slate-800/40"],
+[class~="bg-slate-800/50"],
+[class~="bg-slate-700"],
+[class~="dark:bg-slate-800"] {
+  background-color: var(--corporate-panel) !important;
+  color: var(--corporate-text) !important;
+}
+
+.glass-card,
+[class*="border-slate-"],
+[class~="border-indigo-500/20"],
+[class~="border-indigo-500/30"],
+[class~="border-indigo-500/50"],
+[class~="border-indigo-500"],
+[class~="border-blue-500"],
+[class~="border-blue-600"] {
+  border-color: var(--corporate-border) !important;
+}
+
+[class~="rounded-3xl"],
+[class~="rounded-2xl"],
+[class~="rounded-xl"] {
+  border-radius: 0.5rem !important;
+}
+
+[class~="shadow-2xl"],
+[class~="shadow-xl"],
+[class~="shadow-lg"],
+.glass-card {
+  box-shadow: var(--corporate-shadow) !important;
+}
+
+.text-white,
+[class~="text-slate-200"],
+[class~="text-slate-300"],
+[class~="text-slate-400"],
+[class~="text-slate-500"],
+[class~="text-slate-600"],
+[class~="text-slate-950"],
+[class~="dark:text-slate-300"] {
+  color: var(--corporate-text) !important;
+}
+
+[class~="text-slate-400"],
+[class~="text-slate-500"],
+[class~="text-slate-600"],
+[class~="dark:text-slate-400"] {
+  color: var(--corporate-muted) !important;
+}
+
+[class~="text-indigo-300"],
+[class~="text-indigo-400"],
+[class~="text-indigo-500"],
+[class~="text-blue-300"],
+[class~="text-blue-400"],
+[class~="text-blue-500"],
+.text-accent {
+  color: var(--corporate-accent) !important;
+}
+
+[class~="bg-indigo-600"],
+[class~="bg-indigo-500"],
+[class~="bg-blue-600"],
+[class~="bg-blue-500"],
+.bg-accent,
+.btn-primary {
+  background-color: var(--corporate-accent) !important;
+  border-color: var(--corporate-accent) !important;
+  color: #fffaf1 !important;
+}
+
+[class~="hover:bg-indigo-500"]:hover,
+[class~="hover:bg-blue-500"]:hover,
+[class~="hover:bg-blue-600"]:hover,
+.btn-primary:hover {
+  background-color: var(--corporate-accent-dark) !important;
+  border-color: var(--corporate-accent-dark) !important;
+  color: #fffaf1 !important;
+}
+
+[class~="bg-indigo-500/5"],
+[class~="bg-indigo-500/10"],
+[class~="bg-indigo-500/20"],
+[class~="bg-blue-500/10"],
+[class~="bg-blue-500/20"],
+.bg-accent\/10 {
+  background-color: var(--corporate-accent-soft) !important;
+}
+
+[class~="bg-gradient-to-br"] {
+  background-image:
+    linear-gradient(135deg, rgba(255, 250, 241, 0.98), rgba(239, 225, 204, 0.92)) !important;
+  background-color: var(--corporate-panel-strong) !important;
+}
+
+[class~="from-indigo-900/40"],
+[class~="via-slate-900"],
+[class~="to-slate-900"] {
+  --tw-gradient-from: rgba(255, 250, 241, 0.98) var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: rgba(239, 225, 204, 0.92) var(--tw-gradient-to-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+button:not(.btn-primary),
+.btn-secondary,
+select,
+input,
+textarea {
+  border-color: var(--corporate-border) !important;
+}
+
+input,
+select,
+textarea {
+  background-color: #fffaf1 !important;
+  color: var(--corporate-text) !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--corporate-faint) !important;
+}
+
+table,
+thead,
+tbody,
+tr,
+th,
+td {
+  color: var(--corporate-text) !important;
+  border-color: var(--corporate-border) !important;
+}
+
+thead,
+[class~="bg-slate-800/50"] {
+  background-color: #efe4d2 !important;
+}
+
+[class~="hover:bg-slate-900"]:hover,
+[class~="hover:bg-slate-800"]:hover,
+[class~="hover:bg-slate-800/30"]:hover,
+[class~="hover:bg-slate-800/40"]:hover,
+[class~="hover:bg-slate-800/60"]:hover,
+[class~="dark:hover:bg-slate-800"]:hover {
+  background-color: #efe4d2 !important;
+  color: var(--corporate-text) !important;
+}
+
+[class~="bg-emerald-600"],
+[class~="bg-emerald-500"] {
+  background-color: #52745a !important;
+  color: #fffaf1 !important;
+}
+
+[class~="text-emerald-400"],
+[class~="text-emerald-500"] {
+  color: #52745a !important;
+}
+
+[class~="bg-amber-500/5"],
+[class~="bg-amber-500/10"],
+[class~="bg-amber-500/20"] {
+  background-color: rgba(190, 120, 35, 0.13) !important;
+}
+
+[class~="text-amber-400"],
+[class~="text-amber-500"] {
+  color: #a8641f !important;
+}
+
+[class~="bg-red-500/10"],
+[class~="bg-red-500/20"] {
+  background-color: rgba(170, 58, 43, 0.12) !important;
+}
+
+[class~="text-red-300"],
+[class~="text-red-400"],
+[class~="text-red-500"] {
+  color: #aa3a2b !important;
+}
+
+[class~="bg-slate-950"].font-mono,
+.font-mono[class~="bg-slate-950"],
+[class~="bg-slate-950"][class~="font-mono"] {
+  background-color: var(--terminal-bg) !important;
+  color: var(--terminal-text) !important;
+}
+
+aside.h-screen {
+  background: linear-gradient(180deg, #fffaf1 0%, #f1e6d5 100%) !important;
+  border-right-color: var(--corporate-border-strong) !important;
+}
+
+aside.h-screen nav a {
+  color: var(--corporate-muted) !important;
+}
+
+aside.h-screen nav a:hover,
+aside.h-screen nav a[class*="bg-indigo"] {
+  background-color: var(--corporate-accent-soft) !important;
+  color: var(--corporate-accent) !important;
+}
+
+aside.h-screen [class~="bg-indigo-600"] {
+  background-color: var(--corporate-accent) !important;
+  color: #fffaf1 !important;
+}
+
+.fixed.bottom-8 button,
+[class~="bg-indigo-600"].text-white,
+[class~="bg-blue-600"].text-white,
+[class~="bg-emerald-600"].text-white {
+  color: #fffaf1 !important;
+}
+
+/* Final corporate light/dark theme pass. These variables intentionally come last. */
+:root {
+  color-scheme: light;
+  --corporate-bg: #f6f0e6;
+  --corporate-bg-soft: #fffaf1;
+  --corporate-panel: rgba(255, 250, 241, 0.96);
+  --corporate-panel-strong: #fff7ea;
+  --corporate-border: #dfd3c2;
+  --corporate-border-strong: #cdbda6;
+  --corporate-text: #231f1a;
+  --corporate-muted: #766a5c;
+  --corporate-faint: #a09486;
+  --corporate-accent: #e4572e;
+  --corporate-accent-dark: #bf3f20;
+  --corporate-accent-soft: rgba(228, 87, 46, 0.12);
+  --corporate-success: #52745a;
+  --corporate-warning: #a8641f;
+  --corporate-danger: #aa3a2b;
+  --corporate-graph-grid: #d9cabb;
+  --corporate-shadow: 0 18px 45px rgba(61, 45, 32, 0.12);
+}
+
+.dark {
+  color-scheme: dark;
+  --app-bg: #1f1a16;
+  --panel-bg: #2a241f;
+  --panel-border: #4a3e34;
+  --text-main: #f7efe4;
+  --text-muted: #c8b9a6;
+  --accent: #f06a3d;
+  --accent-hover: #ff8358;
+  --terminal-bg: #15110e;
+  --terminal-text: #f7efe4;
+  --corporate-bg: #1f1a16;
+  --corporate-bg-soft: #251f1a;
+  --corporate-panel: rgba(42, 36, 31, 0.96);
+  --corporate-panel-strong: #332b24;
+  --corporate-border: #4a3e34;
+  --corporate-border-strong: #5a4a3d;
+  --corporate-text: #f7efe4;
+  --corporate-muted: #c8b9a6;
+  --corporate-faint: #958675;
+  --corporate-accent: #f06a3d;
+  --corporate-accent-dark: #ff8358;
+  --corporate-accent-soft: rgba(240, 106, 61, 0.18);
+  --corporate-success: #7aa36f;
+  --corporate-warning: #d39a4a;
+  --corporate-danger: #d46a57;
+  --corporate-graph-grid: #4a3e34;
+  --corporate-shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
+}
+
+html,
+body,
+#root,
+main {
+  background-color: var(--corporate-bg) !important;
+  color: var(--corporate-text) !important;
+}
+
+main {
+  background:
+    radial-gradient(circle at 85% 12%, color-mix(in srgb, var(--corporate-accent) 10%, transparent), transparent 26rem),
+    linear-gradient(180deg, var(--corporate-bg-soft), var(--corporate-bg)) !important;
+}
+
+aside.h-screen {
+  background: linear-gradient(180deg, var(--corporate-panel-strong), var(--corporate-bg-soft)) !important;
+  border-right-color: var(--corporate-border-strong) !important;
+}
+
+[class~="bg-slate-900/80"],
+[class~="bg-slate-900/95"],
+[class~="bg-slate-800/80"],
+[class~="bg-slate-950/50"],
+[class~="bg-slate-800/95"],
+[class~="dark:bg-slate-800"] {
+  background-color: var(--corporate-panel) !important;
+  color: var(--corporate-text) !important;
+}
+
+[class~="border-slate-700/70"],
+[class~="border-blue-400/60"],
+[class~="border-emerald-400/60"],
+[class~="border-rose-400/60"],
+[class~="border-violet-400/60"],
+[class~="border-orange-400/70"],
+[class~="border-slate-400/50"],
+[class~="border-slate-600"] {
+  border-color: var(--corporate-border-strong) !important;
+}
+
+[class~="bg-blue-500/15"],
+[class~="bg-emerald-500/15"],
+[class~="bg-rose-500/15"],
+[class~="bg-violet-500/15"],
+[class~="bg-orange-500/15"],
+[class~="bg-slate-500/15"] {
+  background-color: var(--corporate-accent-soft) !important;
+}
+
+[class~="text-blue-200"],
+[class~="text-emerald-200"],
+[class~="text-rose-200"],
+[class~="text-violet-200"],
+[class~="text-orange-200"],
+[class~="text-sky-200"],
+[class~="text-indigo-200"],
+[class~="text-slate-100"] {
+  color: var(--corporate-accent) !important;
+}
+
+[class~="shadow-indigo-900/30"],
+[class~="shadow-blue-950/40"],
+[class~="shadow-emerald-950/40"],
+[class~="shadow-rose-950/40"],
+[class~="shadow-violet-950/40"],
+[class~="shadow-orange-950/40"],
+[class~="shadow-slate-950/40"],
+[class~="shadow-black/30"],
+[class~="shadow-black/60"] {
+  box-shadow: var(--corporate-shadow) !important;
+}
+
+thead,
+[class~="bg-slate-800/50"],
+[class~="hover:bg-slate-900"]:hover,
+[class~="hover:bg-slate-800"]:hover,
+[class~="hover:bg-slate-800/30"]:hover,
+[class~="hover:bg-slate-800/40"]:hover,
+[class~="hover:bg-slate-800/60"]:hover,
+[class~="dark:hover:bg-slate-800"]:hover {
+  background-color: var(--corporate-bg-soft) !important;
+}
+
+[class~="bg-emerald-600"],
+[class~="bg-emerald-500"] {
+  background-color: var(--corporate-success) !important;
+}
+
+[class~="text-emerald-300"],
+[class~="text-emerald-400"],
+[class~="text-emerald-500"] {
+  color: var(--corporate-success) !important;
+}
+
+[class~="text-amber-400"],
+[class~="text-amber-500"],
+[class~="text-orange-300"] {
+  color: var(--corporate-warning) !important;
+}
+
+[class~="text-red-300"],
+[class~="text-red-400"],
+[class~="text-red-500"],
+[class~="text-rose-300"] {
+  color: var(--corporate-danger) !important;
+}
+
+/* Dark-mode completion pass: keep every major surface truly dark when .dark is active. */
+.dark body {
+  background:
+    radial-gradient(circle at 20% 10%, rgba(240, 106, 61, 0.12), transparent 28rem),
+    linear-gradient(135deg, #1f1a16, #15110e),
+    var(--corporate-bg) !important;
+}
+
+.dark main {
+  background:
+    radial-gradient(circle at 85% 12%, rgba(240, 106, 61, 0.12), transparent 26rem),
+    linear-gradient(180deg, #1f1a16, #15110e) !important;
+}
+
+.dark [class~="bg-gradient-to-br"] {
+  background-image: linear-gradient(135deg, #2a241f 0%, #332b24 52%, #1f1a16 100%) !important;
+  background-color: var(--corporate-panel) !important;
+  border-color: var(--corporate-border-strong) !important;
+  color: var(--corporate-text) !important;
+}
+
+.dark [class~="from-indigo-900/40"],
+.dark [class~="via-slate-900"],
+.dark [class~="to-slate-900"] {
+  --tw-gradient-from: #2a241f var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: #1f1a16 var(--tw-gradient-to-position) !important;
+  --tw-gradient-stops: #2a241f, #332b24, #1f1a16 !important;
+}
+
+.dark .glass-card,
+.dark .bg-panel,
+.dark [class~="bg-slate-900"],
+.dark [class~="bg-slate-900/30"],
+.dark [class~="bg-slate-900/50"],
+.dark [class~="bg-slate-900/60"],
+.dark [class~="bg-slate-900/70"],
+.dark [class~="bg-slate-900/80"],
+.dark [class~="bg-slate-900/95"],
+.dark [class~="bg-slate-950"],
+.dark [class~="bg-slate-950/50"],
+.dark [class~="bg-slate-950/80"],
+.dark [class~="bg-slate-800"],
+.dark [class~="bg-slate-800/30"],
+.dark [class~="bg-slate-800/40"],
+.dark [class~="bg-slate-800/50"],
+.dark [class~="bg-slate-800/80"],
+.dark [class~="bg-slate-800/95"],
+.dark [class~="bg-slate-700"],
+.dark [class~="dark:bg-slate-800"] {
+  background-color: var(--corporate-panel) !important;
+  color: var(--corporate-text) !important;
+}
+
+.dark [class~="bg-white"],
+.dark [class~="bg-slate-100"],
+.dark [class~="dark:bg-slate-800"] {
+  background-color: var(--corporate-panel-strong) !important;
+  color: var(--corporate-text) !important;
+}
+
+.dark input,
+.dark select,
+.dark textarea,
+.dark [class~="bg-slate-950"] input,
+.dark [class~="bg-slate-950"] select,
+.dark [class~="bg-slate-950"] textarea {
+  background-color: #1a1512 !important;
+  color: var(--corporate-text) !important;
+  border-color: var(--corporate-border-strong) !important;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: var(--corporate-faint) !important;
+}
+
+.dark table,
+.dark thead,
+.dark tbody,
+.dark tr,
+.dark th,
+.dark td {
+  background-color: transparent !important;
+  color: var(--corporate-text) !important;
+  border-color: var(--corporate-border) !important;
+}
+
+.dark thead,
+.dark [class~="bg-slate-800/50"] {
+  background-color: var(--corporate-panel-strong) !important;
+}
+
+.dark [class~="bg-black/60"],
+.dark [class~="bg-slate-950/80"] {
+  background-color: rgba(10, 8, 7, 0.72) !important;
+}
+
+.dark [class~="fixed"][class~="right-0"],
+.dark [class~="fixed"][class~="inset-4"],
+.dark [class~="z-[100]"],
+.dark [class~="z-[200]"],
+.dark [class~="z-[9999]"] {
+  color: var(--corporate-text) !important;
+}
+
+.dark [class~="text-white"],
+.dark [class~="text-slate-100"],
+.dark [class~="text-slate-200"],
+.dark [class~="text-slate-300"],
+.dark [class~="dark:text-slate-300"] {
+  color: var(--corporate-text) !important;
+}
+
+.dark [class~="text-slate-400"],
+.dark [class~="text-slate-500"],
+.dark [class~="text-slate-600"],
+.dark [class~="dark:text-slate-400"] {
+  color: var(--corporate-muted) !important;
+}
+
+.dark [class~="hover:bg-slate-900"]:hover,
+.dark [class~="hover:bg-slate-800"]:hover,
+.dark [class~="hover:bg-slate-800/30"]:hover,
+.dark [class~="hover:bg-slate-800/40"]:hover,
+.dark [class~="hover:bg-slate-800/60"]:hover,
+.dark [class~="hover:bg-slate-700"]:hover,
+.dark [class~="dark:hover:bg-slate-800"]:hover,
+.dark [class~="hover:bg-slate-100"]:hover {
+  background-color: #3a3028 !important;
+  color: var(--corporate-text) !important;
+}
+
+.dark aside.h-screen {
+  background: linear-gradient(180deg, #2a241f 0%, #211b17 100%) !important;
+  border-right-color: var(--corporate-border-strong) !important;
+}
+
+.dark aside.h-screen nav a:hover,
+.dark aside.h-screen nav a[class*="bg-indigo"] {
+  background-color: rgba(240, 106, 61, 0.18) !important;
+  color: var(--corporate-accent) !important;
+}
+
+.dark [class~="bg-indigo-500/5"],
+.dark [class~="bg-indigo-500/10"],
+.dark [class~="bg-indigo-500/20"],
+.dark [class~="bg-blue-500/10"],
+.dark [class~="bg-blue-500/15"],
+.dark [class~="bg-blue-500/20"],
+.dark [class~="bg-emerald-500/10"],
+.dark [class~="bg-emerald-500/15"],
+.dark [class~="bg-emerald-500/20"],
+.dark [class~="bg-amber-500/5"],
+.dark [class~="bg-amber-500/10"],
+.dark [class~="bg-amber-500/20"],
+.dark [class~="bg-red-500/10"],
+.dark [class~="bg-red-500/20"],
+.dark [class~="bg-rose-500/15"],
+.dark [class~="bg-violet-500/15"],
+.dark [class~="bg-orange-500/15"],
+.dark [class~="bg-slate-500/15"] {
+  background-color: var(--corporate-accent-soft) !important;
+}
+
+.dark [class~="bg-slate-950"].font-mono,
+.dark .font-mono[class~="bg-slate-950"],
+.dark [class~="bg-slate-950"][class~="font-mono"] {
+  background-color: var(--terminal-bg) !important;
+  color: var(--terminal-text) !important;
+}
+
+.dark .react-flow,
+.dark canvas,
+.dark svg {
+  color: var(--corporate-text);
 }

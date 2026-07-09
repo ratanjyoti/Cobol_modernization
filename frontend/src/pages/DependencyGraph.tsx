@@ -147,19 +147,19 @@ const getNodeChrome = (type: DependencyNode['type']) => {
 const getLinkColor = (relationType: string) => {
   switch (relationType) {
     case 'CALLS':
-      return '#f59e0b';
+      return 'var(--corporate-warning)';
     case 'INCLUDES':
-      return '#10b981';
+      return 'var(--corporate-success)';
     case 'READS_WRITES':
-      return '#38bdf8';
+      return 'var(--corporate-accent)';
     case 'IMPORTS':
-      return '#818cf8';
+      return '#8f6f4f';
     case 'REFERENCES':
-      return '#60a5fa';
+      return '#9a6b36';
     case 'INHERITS':
-      return '#a78bfa';
+      return '#7f5f48';
     default:
-      return '#94a3b8';
+      return 'var(--corporate-muted)';
   }
 };
 
@@ -608,7 +608,7 @@ const DependencyGraph = ({
                   <div
                     className="absolute inset-0 opacity-20"
                     style={{
-                      backgroundImage: 'radial-gradient(#334155 1px, transparent 1px)',
+                      backgroundImage: 'radial-gradient(var(--corporate-graph-grid) 1px, transparent 1px)',
                       backgroundSize: '40px 40px',
                     }}
                   />
@@ -619,7 +619,7 @@ const DependencyGraph = ({
                         const markerId = `arrow-${type.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
                         return (
                           <marker key={markerId} id={markerId} markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
-                            <path d="M 0 0 L 9 3 L 0 6 z" fill={type === 'DEFAULT' ? '#94a3b8' : getLinkColor(type)} />
+                            <path d="M 0 0 L 9 3 L 0 6 z" fill={type === 'DEFAULT' ? 'var(--corporate-muted)' : getLinkColor(type)} />
                           </marker>
                         );
                       })}
@@ -665,7 +665,7 @@ const DependencyGraph = ({
                           />
                           {mode === 'impact' && (
                             <g transform={`translate(${(x1 + x2) / 2 - 44}, ${(y1 + y2) / 2 - 15})`}>
-                              <rect width="88" height="24" rx="8" fill="#020617" stroke={color} strokeOpacity="0.65" />
+                              <rect width="88" height="24" rx="8" fill="var(--corporate-panel-strong)" stroke={color} strokeOpacity="0.65" />
                               <text x="44" y="16" fill={color} fontSize="11" fontWeight="800" textAnchor="middle">
                                 {link.relationType}
                               </text>
@@ -727,8 +727,8 @@ const DependencyGraph = ({
                             width: `${visualSize.circle}px`,
                             height: `${visualSize.circle}px`,
                             boxShadow: isSelected
-                              ? '0 0 0 8px rgba(16,185,129,0.14), 0 0 34px rgba(34,211,238,0.55)'
-                              : '0 0 0 5px rgba(15,23,42,0.75), 0 0 24px rgba(59,130,246,0.35)',
+                              ? '0 0 0 8px color-mix(in srgb, var(--corporate-success) 20%, transparent), 0 0 30px color-mix(in srgb, var(--corporate-accent) 35%, transparent)'
+                              : '0 0 0 5px color-mix(in srgb, var(--corporate-panel-strong) 85%, transparent), 0 0 24px color-mix(in srgb, var(--corporate-accent) 22%, transparent)',
                           }}
                         >
                           <span className="absolute inset-2 rounded-full bg-white/10 blur-[1px]" />

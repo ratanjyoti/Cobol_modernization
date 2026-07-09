@@ -83,12 +83,12 @@ const Tooltip = ({
     "top" | "bottom" | "left" | "right",
     string
   > = {
-    top: "top-full left-1/2 -translate-x-1/2 border-[8px] border-transparent border-t-slate-900",
+    top: "top-full left-1/2 -translate-x-1/2 border-[8px] border-transparent border-t-[var(--corporate-panel)]",
     bottom:
-      "bottom-full left-1/2 -translate-x-1/2 border-[8px] border-transparent border-b-slate-900",
-    left: "left-full top-1/2 -translate-y-1/2 border-[8px] border-transparent border-l-slate-900",
+      "bottom-full left-1/2 -translate-x-1/2 border-[8px] border-transparent border-b-[var(--corporate-panel)]",
+    left: "left-full top-1/2 -translate-y-1/2 border-[8px] border-transparent border-l-[var(--corporate-panel)]",
     right:
-      "right-full top-1/2 -translate-y-1/2 border-[8px] border-transparent border-r-slate-900",
+      "right-full top-1/2 -translate-y-1/2 border-[8px] border-transparent border-r-[var(--corporate-panel)]",
   };
 
   return (
@@ -135,29 +135,28 @@ const Tooltip = ({
                 w-80
                 overflow-hidden
                 rounded-2xl
-                border border-slate-700/70
-                bg-slate-900/95
+                border border-[var(--corporate-border-strong)]
+                bg-[var(--corporate-panel)]
                 backdrop-blur-xl
                 shadow-2xl
-                shadow-indigo-900/30
                 pointer-events-none
               "
             >
               {/* Left Accent */}
-              <div className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-indigo-500 via-violet-500 to-cyan-400" />
+              <div className="absolute left-0 top-0 h-full w-1 bg-[var(--corporate-accent)]" />
 
               <div className="px-5 py-4 pl-6">
                 {title && (
                   <div className="flex items-center gap-2 mb-3">
-                    <div className="h-2 w-2 rounded-full bg-indigo-400" />
+                    <div className="h-2 w-2 rounded-full bg-[var(--corporate-accent)]" />
 
-                    <h3 className="text-[15px] font-semibold text-white">
+                    <h3 className="text-[15px] font-semibold text-[var(--corporate-text)]">
                       {title}
                     </h3>
                   </div>
                 )}
 
-                <p className="text-[14px] leading-6 text-slate-300">
+                <p className="text-[14px] leading-6 text-[var(--corporate-muted)]">
                   {text}
                 </p>
               </div>

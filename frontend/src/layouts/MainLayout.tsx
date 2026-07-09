@@ -10,7 +10,7 @@ const MainLayout = () => {
   );
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [theme, setTheme] = useState(
-    localStorage.getItem('theme') || 'dark'
+    localStorage.getItem('theme') || 'light'
   );
 
   const [hitlOpen, setHitlOpen] = useState(false);
