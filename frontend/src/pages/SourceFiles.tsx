@@ -10,6 +10,9 @@ import {
   Activity, RotateCcw, Trash2, Languages, Target, XCircle, FolderOpen, AlertCircle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import PageHeader from '../components/PageHeader';
+import SectionLabel from '../components/SectionLabel';
+import StatusBadge from '../components/StatusBadge';
 
 type SourceFileRecord = {
   id: string;
@@ -490,29 +493,20 @@ const SourceFiles = () => {
 
   return (
     <div className="space-y-10 pb-20">
-      {/* HEADER */}
-      <div className="flex justify-between items-center">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-bold text-white">Source Files</h1>
-          <p className="text-slate-400">Configure your migration mapping and ingest source code.</p>
-        </div>
-        <div className="flex gap-3">
-          {pipelineActive && (
-            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-500 text-xs font-bold animate-pulse">
-              <Loader2 size={14} className="animate-spin" /> Pipeline Processing Active
-            </div>
-          )}
-          <button onClick={resetPipeline} className="p-2 text-slate-500 hover:text-white transition-colors" title="Reset Pipeline">
-            <RotateCcw size={18} />
+      <PageHeader
+        title="Source Files"
+        description="Configure migration mapping, ingest source code, confirm language detection, and launch the analysis pipeline."
+        meta={pipelineActive ? <StatusBadge status="Running" /> : <StatusBadge status="Pending" pulse={false} />}
+        action={(
+          <button onClick={resetPipeline} className="btn-secondary flex items-center gap-2 px-4 py-3" title="Reset Pipeline">
+            <RotateCcw size={18} /> Reset Pipeline
           </button>
-        </div>
-      </div>
+        )}
+      />
 
       {/* SECTION 1: CONFIGURATION */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-        <div className="flex items-center gap-2 text-indigo-400 text-sm font-bold uppercase tracking-widest">
-          <Layers size={16} /> Step 1: Project Configuration
-        </div>
+        <SectionLabel>Step 1: Project Configuration</SectionLabel>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="glass-card p-6 rounded-3xl border-slate-800 bg-slate-900/50 space-y-4">
@@ -577,9 +571,7 @@ const SourceFiles = () => {
 
       {/* SECTION 2: INGESTION */}
       <div className="space-y-6">
-        <div className="flex items-center gap-2 text-indigo-400 text-sm font-bold uppercase tracking-widest">
-          <Upload size={16} /> Step 2: Source Code Ingestion
-        </div>
+        <SectionLabel>Step 2: Source Code Ingestion</SectionLabel>
 
         <div className="flex justify-center">
           <div className="flex p-1 bg-slate-950 rounded-xl border border-slate-800 w-full max-w-md">
@@ -896,3 +888,5 @@ const SourceFiles = () => {
 };
 
 export default SourceFiles;
+
+

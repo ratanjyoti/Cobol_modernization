@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { CheckCircle2, AlertCircle, Edit3, ArrowRight } from 'lucide-react';
 import toast from 'react-hot-toast';
+import SectionLabel from '../components/SectionLabel';
+import StatusBadge from '../components/StatusBadge';
 
 interface BusinessRule {
   id: string;
@@ -16,80 +18,82 @@ const BusinessLogic = () => {
     { id: 'R3', rule: 'Customer Validation', description: 'Verify if Customer ID exists in CUST-DB before processing any transaction.', status: 'AI-Generated' },
   ]);
 
-  // This function MUST be inside the component to use setRules
   const updateStatus = (id: string, newStatus: BusinessRule['status']) => {
     setRules(rules.map(r => r.id === id ? { ...r, status: newStatus } : r));
-    
+
     if (newStatus === 'Verified') {
-      toast.success("Rule verified successfully!", { icon: '✅' });
+      toast.success('Rule verified successfully!', { icon: 'OK' });
     } else {
-      toast("Rule marked for modification", { icon: '📝' });
+      toast('Rule marked for modification', { icon: 'Edit' });
     }
   };
-   const handleFinalApproval = () => {
-    // Use the global function we attached to the window in MainLayout
+
+  const handleFinalApproval = () => {
     if (window.triggerHITL) {
-        window.triggerHITL(
-        "Business Logic", 
-        "Confirm Logic Baseline", 
-        "The AI has extracted 890 rules. Once approved, these will be used as the source of truth for Java code generation. This action cannot be undone."
-        );
+      window.triggerHITL(
+        'Business Logic',
+        'Confirm Logic Baseline',
+        'The AI has extracted 890 rules. Once approved, these will be used as the source of truth for Java code generation. This action cannot be undone.'
+      );
     }
-    };
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-end">
+    <div className="space-y-8">
+      <header className="flex flex-col gap-5 border-b border-slate-800 pb-7 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white">Business Logic Extraction</h1>
-          <p className="text-slate-400">Review and verify rules extracted from COBOL Procedure Divisions.</p>
+          <div className="mb-3 flex items-center gap-2">
+            <span className="label">Modernization Pipeline</span>
+            <span className="text-[var(--corporate-faint)]">/</span>
+            <span className="label text-[var(--corporate-accent)]">Business Logic</span>
+          </div>
+          <h1 className="text-page-title">Business Logic Extraction</h1>
+          <p className="text-body-sm mt-2 max-w-2xl">Review, edit, and verify rules extracted from COBOL Procedure Divisions before code generation.</p>
         </div>
-        <button onClick={handleFinalApproval} className="bg-accent text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-blue-600 transition-all">
+        <button onClick={handleFinalApproval} className="btn-glow">
           Approve All & Proceed <ArrowRight size={18} />
         </button>
-      </div>
+      </header>
 
-      <div className="grid grid-cols-1 gap-4">
-        {rules.map((rule) => (
-          <div key={rule.id} className="bg-panel border border-slate-700 rounded-xl p-5 flex items-start justify-between hover:border-slate-500 transition-all group">
-            <div className="space-y-3 flex-1">
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-mono text-accent bg-accent/10 px-2 py-1 rounded">{rule.id}</span>
-                <h3 className="text-white font-bold">{rule.rule}</h3>
-                <span className={`text-[10px] uppercase px-2 py-0.5 rounded-full font-bold ${
-                  rule.status === 'Verified' ? 'bg-green-500/20 text-green-400' : 
-                  rule.status === 'Modified' ? 'bg-amber-500/20 text-amber-400' : 'bg-blue-500/20 text-blue-400'
-                }`}>
-                  {rule.status}
-                </span>
+      <section>
+        <SectionLabel>Extracted Rules</SectionLabel>
+        <div className="grid grid-cols-1 gap-4">
+          {rules.map((rule) => (
+            <div key={rule.id} className="glass-card group flex items-start justify-between gap-5 border border-slate-700 bg-panel p-5 transition-all hover:border-slate-500">
+              <div className="min-w-0 flex-1 space-y-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="rounded-lg bg-accent/10 px-2 py-1 font-mono text-xs font-bold text-accent">{rule.id}</span>
+                  <h3 className="text-card-title">{rule.rule}</h3>
+                  <StatusBadge status={rule.status} />
+                </div>
+                <p className="text-body-sm max-w-4xl">{rule.description}</p>
               </div>
-              <p className="text-slate-400 text-sm leading-relaxed max-w-3xl">
-                {rule.description}
-              </p>
-            </div>
 
-            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button 
-                onClick={() => updateStatus(rule.id, 'Modified')}
-                className="p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-white border border-slate-600"
-              >
-                <Edit3 size={16} />
-              </button>
-              <button 
-                onClick={() => updateStatus(rule.id, 'Verified')}
-                className="p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-green-400 border border-slate-600"
-              >
-                <CheckCircle2 size={16} />
-              </button>
+              <div className="flex gap-2 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
+                <button
+                  aria-label="Mark rule modified"
+                  onClick={() => updateStatus(rule.id, 'Modified')}
+                  className="rounded-lg border border-slate-600 bg-slate-800 p-2 text-slate-400 transition-all hover:text-white"
+                >
+                  <Edit3 size={16} />
+                </button>
+                <button
+                  aria-label="Verify rule"
+                  onClick={() => updateStatus(rule.id, 'Verified')}
+                  className="rounded-lg border border-slate-600 bg-slate-800 p-2 text-slate-400 transition-all hover:text-green-400"
+                >
+                  <CheckCircle2 size={16} />
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      </section>
 
-      <div className="bg-amber-500/10 border border-amber-500/30 p-4 rounded-xl flex items-center gap-3 text-amber-400">
+      <div className="glass-card flex items-center gap-3 border border-amber-500/30 bg-amber-500/10 p-4 text-amber-400">
         <AlertCircle size={20} />
-        <p className="text-xs">
-          <strong className="text-white">Human-in-the-Loop Required:</strong> The conversion engine will not start until at least 80% of rules are marked as <span className="text-white underline">Verified</span>.
+        <p className="text-body-sm">
+          <strong className="text-[var(--corporate-text)]">Human-in-the-Loop Required:</strong> The conversion engine will not start until at least 80% of rules are marked as <span className="underline">Verified</span>.
         </p>
       </div>
     </div>

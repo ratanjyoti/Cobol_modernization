@@ -163,7 +163,29 @@ class GraphService:
                     for record in relations
                 ],
             }
+    def create_semantic_relation(self, source_name, target_name, relation_type):
+        """
+        Implements specific edges based on the detected relation type.
+        """
+        # Determine the Label for the target node
+        label_map = {
+            "CALLS": "Program",
+            "MAPS_TO": "Program",
+            "INCLUDES": "Copybook",
+            "READS": "Table",
+            "WRITES": "Table"
+        }
+        target_label = label_map.get(relation_type, "Element")
 
+        with self.driver.session() as session:
+            # 1. Create/Merge Nodes
+            session.run(f"MERGE (s:Program {{name: $source}})", source=source_name)
+            session.run(f"MERGE (t:{target_label} {{name: $target}})", target=target_name)
+
+            # 2. Create the specific semantic relationship
+            # Example: (p:Program)-[:READS]->(t:Table)
+            query = f"MATCH (a:Program {{name: $source}}), (b:{target_label} {{name: $target}}) MERGE (a)-[:{relation_type}]->(b)"
+            session.run(query, source=source_name, target=target_name)
     def get_graph(self, run_id):
         discovery_data = self.get_discovery_data(run_id)
         nodes_by_id = {}

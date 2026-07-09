@@ -1,18 +1,9 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
-  LayoutDashboard,
-  FolderOpen,
-  Cpu,
-  FileText,
-  MessageSquare,
-  Code2,
-  Activity,
-  Settings,
-  Database,
-  Menu,
-  Moon,
-  Sun,
-  BrainCircuit // <--- Added this icon for System Discovery
+  LayoutDashboard, FolderOpen, Cpu, FileText,
+  MessageSquare, Code2, Activity, Settings,
+  Database, Menu, Moon, Sun, BrainCircuit, Zap,
 } from 'lucide-react';
 import Tooltip from './Tooltip';
 
@@ -21,157 +12,276 @@ interface SidebarProps {
   toggleSidebar: () => void;
   theme: string;
   toggleTheme: () => void;
-  openConfig: () => void;
 }
+
 const menuGroups = [
   {
     group: 'Core',
     items: [
-      { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, desc: 'View project health, progress, and next modernization actions.' },
-      { name: 'Projects', path: '/projects', icon: Database, desc: 'Create a new migration run or resume an existing project.' },
+      { name: 'Dashboard',      path: '/dashboard',          icon: LayoutDashboard, desc: 'View project health, progress, and next modernization actions.' },
+      { name: 'Projects',       path: '/projects',           icon: Database,        desc: 'Create a new migration run or resume an existing project.' },
     ],
   },
   {
     group: 'Reverse Engineering',
     items: [
-      { name: 'Source Files', path: '/source-files', icon: FolderOpen, desc: 'Upload, inspect, and manage legacy source files for analysis.' },
-      { name: 'System Discovery', path: '/discovery', icon: BrainCircuit, desc: 'Analyze calls, copybooks, SQL tables, and dependency relationships.' }, 
-      { name: 'Analysis', path: '/reverse-engineering', icon: Cpu, desc: 'Review technical analysis, structure, and modernization insights.' },
-      { name: 'Business Logic', path: '/business-logic', icon: FileText, desc: 'Translate legacy code behavior into plain-English business rules.' },
+      { name: 'Source Files',     path: '/source-files',       icon: FolderOpen,   desc: 'Upload, inspect, and manage legacy source files for analysis.' },
+      { name: 'System Discovery', path: '/discovery',          icon: BrainCircuit, desc: 'Analyze calls, copybooks, SQL tables, and dependency relationships.' },
+      { name: 'Analysis',         path: '/reverse-engineering',icon: Cpu,          desc: 'Review technical analysis, structure, and modernization insights.' },
+      { name: 'Business Logic',   path: '/business-logic',     icon: FileText,     desc: 'Translate legacy code behavior into plain-English business rules.' },
     ],
   },
   {
-    group: "Modernization",
+    group: 'Modernization',
     items: [
-      { name: 'Code Gen', path: '/code-generation', icon: Code2, desc: 'Generate modern application code from the analyzed legacy system.' },
-      { name: 'Modernizer Chat', path: '/chat', icon: MessageSquare, desc: 'Ask guided questions about the migration and generated outputs.' },
-    ]
+      { name: 'Code Gen',        path: '/code-generation', icon: Code2,         desc: 'Generate modern application code from the analyzed legacy system.' },
+      { name: 'AI Chat',         path: '/chat',            icon: MessageSquare, desc: 'Ask guided questions about the migration and generated outputs.' },
+    ],
   },
   {
     group: 'System',
     items: [
       { name: 'Mission Control', path: '/mission-control', icon: Activity, desc: 'Monitor pipeline execution, validation loops, and run status.' },
-      { name: 'Prompt Studio', path: '/prompt-studio', icon: Settings, desc: 'Edit and tune prompts used by modernization agents.' },
-      { name: 'Settings', path: '/settings', icon: Settings, desc: 'Manage application preferences and system configuration.' },
+      { name: 'Prompt Studio',   path: '/prompt-studio',   icon: Zap,      desc: 'Edit and tune prompts used by modernization agents.' },
+      { name: 'AI Configuration', path: '/settings',        icon: Settings, desc: 'Change provider, API key, endpoint, and model settings.' },
     ],
   },
 ];
 
-const Sidebar = ({
-  isOpen,
-  toggleSidebar,
-  theme,
-  toggleTheme,
-  openConfig,
-}: SidebarProps) => {
+const Sidebar = ({ isOpen, toggleSidebar, theme, toggleTheme }: SidebarProps) => {
   const location = useLocation();
+  const navigate = useNavigate();
 
   return (
-    <aside
-      className={`h-screen bg-slate-950 border-r border-slate-800 flex flex-col transition-all duration-300 ease-in-out ${
-        isOpen ? 'w-72' : 'w-20'
-      }`}
+    <motion.aside
+      animate={{ width: isOpen ? 256 : 68 }}
+      transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
+      className="h-screen flex flex-col overflow-hidden shrink-0 relative"
+      style={{
+        background: 'linear-gradient(180deg, var(--corporate-bg-soft) 0%, var(--corporate-bg) 100%)',
+        borderRight: '1px solid var(--corporate-border)',
+      }}
     >
       {/* TOP BAR */}
-      <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+      <div
+        className="flex items-center justify-between px-3 py-3 shrink-0"
+        style={{ borderBottom: '1px solid var(--corporate-border)' }}
+      >
         <button
           onClick={toggleSidebar}
-          className="p-2 rounded-lg text-slate-400 hover:bg-slate-900 hover:text-white transition-all"
+          className="p-2 rounded-lg transition-all duration-150"
+          style={{ color: 'var(--corporate-muted)' }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLElement).style.background = 'var(--corporate-accent-soft)';
+            (e.currentTarget as HTMLElement).style.color = 'var(--corporate-accent)';
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLElement).style.background = 'transparent';
+            (e.currentTarget as HTMLElement).style.color = 'var(--corporate-muted)';
+          }}
         >
-          <Menu size={20} />
+          <Menu size={18} />
         </button>
 
-        {isOpen && (
-          <button
-            onClick={toggleTheme}
-            className="p-2 rounded-lg text-slate-400 hover:bg-slate-900 hover:text-white transition-all"
-          >
-            {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
-          </button>
-        )}
-      </div >
-
-      {/* LOGO SECTION */}
-      <div className="p-6 mb-2">
-        <div className="flex items-center gap-3">
-          <div className="min-w-[40px] h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
-            <span className="text-xl font-black">M</span>
-          </div>
+        <AnimatePresence>
           {isOpen && (
-            <div className="overflow-hidden transition-all duration-300">
-              <span className="block text-lg font-bold text-white whitespace-nowrap">
-                Modernizer<span className="text-indigo-500">AI</span>
-              </span>
-              <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">
-                Legacy Command Center
-              </p>
-            </div>
+            <motion.button
+              initial={{ opacity: 0, scale: 0.7 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.7 }}
+              transition={{ duration: 0.15 }}
+              onClick={toggleTheme}
+              className="p-2 rounded-lg transition-all duration-150"
+              style={{ color: 'var(--corporate-muted)' }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.background = 'var(--corporate-accent-soft)';
+                (e.currentTarget as HTMLElement).style.color = 'var(--corporate-accent)';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.background = 'transparent';
+                (e.currentTarget as HTMLElement).style.color = 'var(--corporate-muted)';
+              }}
+            >
+              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+            </motion.button>
           )}
+        </AnimatePresence>
+      </div>
+
+      {/* LOGO */}
+      <div className="px-3 py-4 shrink-0">
+        <div className="flex items-center gap-3 overflow-hidden">
+          {/* Spinning gradient logo mark */}
+          <div className="relative shrink-0" style={{ width: 34, height: 34 }}>
+            <div
+              className="absolute inset-0 rounded-xl"
+              style={{
+                background: 'conic-gradient(from 0deg, var(--corporate-accent), var(--corporate-success), var(--corporate-accent))',
+                borderRadius: 10,
+                animation: 'spin 4s linear infinite',
+              }}
+            />
+            <div
+              className="absolute flex items-center justify-center font-black text-white text-sm"
+              style={{
+                inset: 2,
+                borderRadius: 8,
+                background: 'var(--corporate-bg-soft)',
+                color: 'var(--corporate-accent)',
+              }}
+            >
+              M
+            </div>
+          </div>
+
+          <AnimatePresence>
+            {isOpen && (
+              <motion.div
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                transition={{ duration: 0.18 }}
+                className="overflow-hidden"
+              >
+                <div className="font-black text-[0.9375rem] leading-none whitespace-nowrap" style={{ color: 'var(--corporate-text)' }}>
+                  Modernizer<span style={{ color: 'var(--corporate-accent)' }}>AI</span>
+                </div>
+                <div
+                  className="mt-0.5 whitespace-nowrap"
+                  style={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--corporate-faint)' }}
+                >
+                  Legacy Command Center
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
-      {/* NAVIGATION MENU */}
-      <nav className="flex-1 px-3 space-y-6 overflow-y-auto scrollbar-hide">
-        {menuGroups.map((group, idx) => (
-          <div key={idx} className="space-y-1">
-            {isOpen && (
-              <p className="px-4 mb-2 text-[11px] font-bold text-slate-500 uppercase tracking-widest">
-                {group.group}
-              </p>
-            )}
+      {/* NAV */}
+      <nav className="flex-1 px-2 overflow-y-auto py-1 space-y-4" style={{ scrollbarWidth: 'none' }}>
+        {menuGroups.map((group, gIdx) => (
+          <div key={gIdx}>
+            <AnimatePresence>
+              {isOpen && (
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="px-3 mb-1"
+                  style={{ fontSize: '0.6rem', fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--corporate-faint)' }}
+                >
+                  {group.group}
+                </motion.p>
+              )}
+            </AnimatePresence>
 
-            {group.items.map(item => {
-              const isActive = location.pathname === item.path;
-              return (
-                <Tooltip key={item.path} title={item.name}text={item.desc} position="right" className="w-full">
-                  <Link
-                    to={item.path}
-                    aria-label={`${item.name}: ${item.desc}`}
-                    className={`
-                      relative flex w-full items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 group mb-1
-                      ${!isOpen ? 'justify-center' : ''}
-                      ${isActive 
-                        ? 'bg-indigo-600/10 text-indigo-400' 
-                        : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'}
-                    `}
-                  >
-                    {isActive && (
-                      <div className="absolute left-0 w-1 h-6 bg-indigo-500 rounded-r-full" />
-                    )}
-                    <item.icon 
-                      size={20} 
-                      className={`${isActive ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'} transition-colors`} 
-                    />
-                    {isOpen && (
-                      <span className={`text-sm font-medium transition-all ${isActive ? 'text-indigo-400' : 'text-slate-400 group-hover:text-slate-200'}`}>
-                        {item.name}
-                      </span>
-                    )}
-                  </Link>
-                </Tooltip>
-              );
-            })}
+            <div className="space-y-0.5">
+              {group.items.map(item => {
+                const isActive = location.pathname === item.path;
+                return (
+                  <Tooltip key={item.path} title={item.name} text={item.desc} position="right" className="w-full">
+                    <Link
+                      to={item.path}
+                      aria-label={`${item.name}: ${item.desc}`}
+                      className="relative flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all duration-150 w-full"
+                      style={{
+                        justifyContent: isOpen ? 'flex-start' : 'center',
+                        background: isActive ? 'var(--corporate-accent-soft)' : 'transparent',
+                        color: isActive ? 'var(--corporate-accent)' : 'var(--corporate-muted)',
+                      }}
+                      onMouseEnter={e => {
+                        if (!isActive) {
+                          (e.currentTarget as HTMLElement).style.background = 'var(--corporate-accent-soft)';
+                          (e.currentTarget as HTMLElement).style.color = 'var(--corporate-accent)';
+                        }
+                      }}
+                      onMouseLeave={e => {
+                        if (!isActive) {
+                          (e.currentTarget as HTMLElement).style.background = 'transparent';
+                          (e.currentTarget as HTMLElement).style.color = 'var(--corporate-muted)';
+                        }
+                      }}
+                    >
+                      {/* Animated active left pill */}
+                      {isActive && (
+                        <motion.div
+                          layoutId="sidebarActivePill"
+                          className="absolute left-0 rounded-r-full"
+                          style={{
+                            width: 3,
+                            height: 18,
+                            background: 'linear-gradient(180deg, var(--corporate-accent), var(--corporate-success))',
+                            boxShadow: '0 0 10px var(--corporate-accent)',
+                          }}
+                          transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                        />
+                      )}
+
+                      <item.icon size={16} className="shrink-0" />
+
+                      <AnimatePresence>
+                        {isOpen && (
+                          <motion.span
+                            initial={{ opacity: 0, x: -8 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -8 }}
+                            transition={{ duration: 0.14 }}
+                            className="text-sm font-semibold whitespace-nowrap"
+                          >
+                            {item.name}
+                          </motion.span>
+                        )}
+                      </AnimatePresence>
+                    </Link>
+                  </Tooltip>
+                );
+              })}
+            </div>
           </div>
         ))}
       </nav>
 
       {/* FOOTER */}
-      <div className="p-4 border-t border-slate-800 bg-slate-950/50">
+      <div className="p-2 shrink-0" style={{ borderTop: '1px solid var(--corporate-border)' }}>
         <button
-          onClick={openConfig}
-          className={`
-            w-full flex items-center gap-3 px-3 py-3 rounded-xl border transition-all
-            ${isOpen 
-              ? 'border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-white' 
-              : 'border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-white justify-center'}
-          `}
+          onClick={() => navigate('/settings')}
+          className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all duration-150"
+          style={{
+            justifyContent: isOpen ? 'flex-start' : 'center',
+            color: 'var(--corporate-muted)',
+          }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLElement).style.background = 'var(--corporate-accent-soft)';
+            (e.currentTarget as HTMLElement).style.color = 'var(--corporate-accent)';
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLElement).style.background = 'transparent';
+            (e.currentTarget as HTMLElement).style.color = 'var(--corporate-muted)';
+          }}
         >
-          <Settings size={20} />
-          {isOpen && <span className="text-sm font-medium">Configure AI</span>}
+          <Settings size={16} className="shrink-0" />
+          <AnimatePresence>
+            {isOpen && (
+              <motion.span
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.14 }}
+                className="text-sm font-semibold whitespace-nowrap"
+              >
+                AI Configuration
+              </motion.span>
+            )}
+          </AnimatePresence>
         </button>
       </div>
-    </aside>
+    </motion.aside>
   );
 };
 
 export default Sidebar;
+
+
+

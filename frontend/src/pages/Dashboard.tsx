@@ -1,21 +1,22 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { 
-  FileText, Activity, Layers, Database, 
-  ArrowUpRight, GitBranch, Play, ChevronRight, PlusCircle,
-  BrainCircuit, Rocket, ShieldCheck, Info, Lightbulb, 
-  CheckCircle2, Circle, Loader2, Clock, Zap,
-  Languages, Settings, Globe, Cpu, Save,
-  Target, Code2, AlertCircle, ChevronDown, Trash2 
+import {
+  FileText, Activity, Layers, Database,
+  GitBranch, Play, ChevronRight, PlusCircle,
+  BrainCircuit, Rocket, ShieldCheck, Info, Lightbulb,
+  CheckCircle2, Loader2, Clock, Zap,
+  Languages, Settings,
+  Target, Code2, AlertCircle, ChevronDown, Trash2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import ConfigPanel from '../components/ConfigPanel'; 
+import ConfigPanel from '../components/ConfigPanel';
 import { ProjectAPI } from '../services/api';
 import type { ProjectSummary } from '../services/api';
 import Tooltip from '../components/Tooltip';
+import SectionLabel from '../components/SectionLabel';
+import StatusBadge from '../components/StatusBadge';
 
-// --- Types ---
 type BlueprintActivity = string | { name: string; progress: number };
 
 interface BlueprintStage {
@@ -32,6 +33,8 @@ interface KPICardProps {
   value: string | number;
   icon: React.ElementType;
   status: 'Healthy' | 'Review' | 'Action';
+  featured?: boolean;
+  description?: string;
 }
 
 const BLUEPRINT_STAGES: BlueprintStage[] = [
@@ -53,20 +56,26 @@ const JOURNEY_STEPS = [
   { name: 'Deploy', path: '/code-generation', icon: Rocket, desc: 'Export the final codebase and generate the modernization audit report.' },
 ];
 
-const KPICard = ({ label, value, icon: Icon, status }: KPICardProps) => {
-  const statusColor = status === 'Healthy' ? 'text-emerald-400' : status === 'Review' ? 'text-amber-400' : 'text-red-400';
-  return (
-    <div className="glass-card p-5 rounded-2xl border-slate-800 hover:border-indigo-500/50 transition-all">
-      <div className="flex justify-between items-start mb-3">
-        <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">{label}</span>
-        <Icon size={18} className="text-slate-500" />
-      </div>
-      <div className="text-2xl font-bold text-white">{value}</div>
-      <div className={`text-[10px] font-bold mt-2 flex items-center gap-1 ${statusColor}`}>
-        <div className={`w-1.5 h-1.5 rounded-full bg-current`} /> {status}
-      </div>
+const KPICard = ({ label, value, icon: Icon, status, featured = false, description }: KPICardProps) => (
+  <div className={`glass-card ${featured ? 'kpi-featured p-7' : 'p-5'} flex flex-col border border-slate-800 bg-slate-900/50`}>
+    <div className="flex items-start justify-between gap-4">
+      <span className="label">{label}</span>
+      <span className="rounded-lg border border-slate-800 bg-slate-950/50 p-2 text-[var(--corporate-accent)]">
+        <Icon size={featured ? 24 : 18} />
+      </span>
     </div>
-  );
+    <div className={featured ? 'text-display mt-8' : 'mt-5 text-3xl font-black tracking-tight text-[var(--corporate-text)]'}>{value}</div>
+    <p className="text-body-sm mt-2">{description || 'Modernization signal tracked by the pipeline.'}</p>
+    <div className="mt-auto pt-5">
+      <StatusBadge status={status} />
+    </div>
+  </div>
+);
+
+const stageProgress = (stage: BlueprintStage) => {
+  if (stage.status === 'Complete') return 100;
+  if (stage.status === 'In Progress') return 56;
+  return 0;
 };
 
 const Dashboard = () => {
@@ -75,7 +84,6 @@ const Dashboard = () => {
 
   const [runId, setRunId] = useState<string | null>(localStorage.getItem('active_run_id'));
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [isLoadingProjects, setIsLoadingProjects] = useState(false);
   const [isDeletingRuns, setIsDeletingRuns] = useState(false);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [hasTriggeredNewProject, setHasTriggeredNewProject] = useState(false);
@@ -83,25 +91,40 @@ const Dashboard = () => {
   const [aiMode, setAiMode] = useState<'api' | 'local'>('api');
   const [aiConfig, setAiConfig] = useState({ key: '', url: 'http://localhost:11434', model: 'gpt-4o' });
 
-  const activeProject = useMemo(() => 
-    projects.find((p) => p.run_id === runId), 
+  const activeProject = useMemo(() =>
+    projects.find((p) => p.run_id === runId),
     [projects, runId]
   );
 
+  const applySavedAIConfig = (savedAiConfig = localStorage.getItem('ai_config')) => {
+    if (!savedAiConfig) {
+      setAiMode('api');
+      setAiConfig({ key: '', url: 'http://localhost:11434', model: 'gpt-4o' });
+      return;
+    }
+    try {
+      const parsed = typeof savedAiConfig === 'string' ? JSON.parse(savedAiConfig) : savedAiConfig;
+      setAiMode(parsed.mode || 'api');
+      setAiConfig({ key: parsed.key || '', url: parsed.url || 'http://localhost:11434', model: parsed.model || 'gpt-4o' });
+    } catch (e) { console.error('Config parse error', e); }
+  };
+
   useEffect(() => {
     if (searchParams.get('new') !== 'true') {
-      fetchProjectHistory();
+      void fetchProjectHistory();
     }
     const savedLang = localStorage.getItem('modernizer_source_lang');
-    const savedAiConfig = localStorage.getItem('ai_config');
     if (savedLang) setSourceMetaLang(savedLang);
-    if (savedAiConfig) {
-      try {
-        const parsed = JSON.parse(savedAiConfig);
-        setAiMode(parsed.mode || 'api');
-        setAiConfig({ key: parsed.key, url: parsed.url, model: parsed.model });
-      } catch (e) { console.error("Config parse error", e); }
-    }
+    applySavedAIConfig();
+
+    const handleAIConfigUpdate = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (detail) applySavedAIConfig(JSON.stringify(detail));
+      else applySavedAIConfig();
+    };
+
+    window.addEventListener('ai-config-updated', handleAIConfigUpdate);
+    return () => window.removeEventListener('ai-config-updated', handleAIConfigUpdate);
   }, []);
 
   useEffect(() => {
@@ -112,16 +135,13 @@ const Dashboard = () => {
   }, [searchParams, hasTriggeredNewProject]);
 
   const fetchProjectHistory = async () => {
-    setIsLoadingProjects(true);
     try {
       const data = await ProjectAPI.list();
       setProjects(data);
       return data;
     } catch (e) {
-      toast.error("Failed to load project history");
+      toast.error('Failed to load project history');
       return [] as ProjectSummary[];
-    } finally {
-      setIsLoadingProjects(false);
     }
   };
 
@@ -134,10 +154,10 @@ const Dashboard = () => {
 
   const handleDeleteAllRuns = async () => {
     if (projects.length === 0) {
-      toast.error("No runs to delete");
+      toast.error('No runs to delete');
       return;
     }
-    if (!window.confirm("Delete all runs and uploaded files?")) return;
+    if (!window.confirm('Delete all runs and uploaded files?')) return;
 
     setIsDeletingRuns(true);
     try {
@@ -147,20 +167,11 @@ const Dashboard = () => {
       localStorage.removeItem('active_run_id');
       localStorage.removeItem('modernizer_files');
       localStorage.removeItem('modernizer_pipeline_status');
-      toast.success("All runs deleted");
+      toast.success('All runs deleted');
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || "Failed to delete runs");
+      toast.error(error.response?.data?.detail || 'Failed to delete runs');
     } finally {
       setIsDeletingRuns(false);
-    }
-  };
-
-  const getStatusStyle = (status: string | undefined) => {
-    switch (status?.toLowerCase()) {
-      case 'completed': return 'text-emerald-400 bg-emerald-500/10';
-      case 'running': return 'text-amber-400 bg-amber-500/10';
-      case 'incomplete': return 'text-red-400 bg-red-500/10';
-      default: return 'text-slate-400 bg-slate-500/10';
     }
   };
 
@@ -170,14 +181,13 @@ const Dashboard = () => {
     if (runId) {
       try {
         await ProjectAPI.updateConfig(runId, { lang });
-        toast.success("Language updated in project");
+        toast.success('Language updated in project');
       } catch (e) {
-        toast.error("Failed to sync language to server");
+        toast.error('Failed to sync language to server');
       }
     }
   };
 
-  // FIXED: Regular Expression moved to a constant to avoid Vite/Babel parser error
   const getNextRunName = (projectList: ProjectSummary[] = projects) => {
     const runRegex = /^Run_(\d+)$/;
     const usedNumbers = projectList
@@ -210,7 +220,7 @@ const Dashboard = () => {
       const response = await ProjectAPI.create(config);
       const newRunId = response.run_id;
 
-      if (!newRunId) throw new Error("Backend did not return a run_id");
+      if (!newRunId) throw new Error('Backend did not return a run_id');
 
       localStorage.setItem('active_run_id', newRunId);
       setRunId(newRunId);
@@ -230,7 +240,7 @@ const Dashboard = () => {
       toast.success(`Project created: ${runName}`);
       navigate('/source-files');
     } catch (e: any) {
-      toast.error(e.response?.data?.detail || e.message || "Error creating project");
+      toast.error(e.response?.data?.detail || e.message || 'Error creating project');
     } finally {
       setIsCreatingProject(false);
     }
@@ -245,87 +255,95 @@ const Dashboard = () => {
     return Math.round((confirmed / total) * 100);
   };
 
+  const progress = calculateOverallProgress();
+
   return (
-    <div className="space-y-12 pb-20 animate-in fade-in duration-700">
-      <div className="relative overflow-hidden rounded-3xl p-8 bg-gradient-to-br from-indigo-900/40 via-slate-900 to-slate-900 border border-indigo-500/20 shadow-2xl">
-        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-          <div className="space-y-4">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 text-xs font-bold uppercase tracking-widest">
+    <div className="space-y-12 pb-24 animate-in fade-in duration-700">
+      <section className="premium-hero relative overflow-hidden rounded-3xl p-8 lg:p-10 shadow-2xl">
+        <div className="premium-hero-watermark">Modernize</div>
+        <div className="relative z-10 grid gap-10 lg:grid-cols-[minmax(0,1fr)_240px] lg:items-center">
+          <div>
+            <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/20 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-indigo-400">
               <Rocket size={14} /> Executive Command Center
             </div>
-            <h1 className="text-5xl font-black text-white tracking-tight">Welcome to <span className="text-indigo-500">ModernizerAI</span></h1>
-            <div className="flex flex-wrap gap-8 pt-4">
+            <h1 className="text-hero max-w-5xl">Modernizer<span className="text-[var(--corporate-accent)]">AI</span></h1>
+            <p className="text-body mt-5 max-w-2xl text-[var(--corporate-muted)]">
+              A governed command center for converting legacy COBOL estates into reviewed, traceable, modern application code.
+            </p>
+
+            <div className="mt-8 grid gap-6 md:grid-cols-[minmax(0,270px)_minmax(0,260px)_auto] md:items-end">
               <div className="space-y-2">
-                <p className="text-slate-500 text-xs uppercase font-bold">Active Project</p>
-                <div className="flex items-center gap-3">
-                  <div className="relative group">
-                    <select 
-                      value={runId || ''} 
-                      onChange={(e) => handleProjectChange(e.target.value)}
-                      className="appearance-none pl-4 pr-10 py-2 bg-slate-950 border border-slate-700 text-white rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer hover:border-indigo-500 transition-all min-w-[200px]"
-                    >
-                      <option value="" disabled>Select a Project</option>
-                      {projects.map((proj) => (
-                        <option key={proj.run_id} value={proj.run_id}>
-                          {proj.name || proj.run_id} ({proj.status})
-                        </option>
-                      ))}
-                    </select>
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                      <ChevronDown size={14} className="text-slate-500" />
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleDeleteAllRuns}
-                    disabled={isDeletingRuns || projects.length === 0}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                <p className="label">Active Project</p>
+                <div className="relative group">
+                  <select
+                    value={runId || ''}
+                    onChange={(e) => handleProjectChange(e.target.value)}
+                    className="w-full appearance-none rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 pr-10 text-sm font-bold text-white outline-none transition-all focus:ring-2 focus:ring-indigo-500"
                   >
-                    {isDeletingRuns ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
-                    Delete All Runs
-                  </button>
-                </div>
-                {activeProject && (
-                  <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase ${getStatusStyle(activeProject.status)}`}>
-                    <div className={`w-1.5 h-1.5 rounded-full bg-current`} /> 
-                    {activeProject.status}
+                    <option value="" disabled>Select a Project</option>
+                    {projects.map((proj) => (
+                      <option key={proj.run_id} value={proj.run_id}>
+                        {proj.name || proj.run_id} ({proj.status})
+                      </option>
+                    ))}
+                  </select>
+                  <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
+                    <ChevronDown size={14} className="text-slate-500" />
                   </div>
-                )}
+                </div>
+                {activeProject && <StatusBadge status={activeProject.status} />}
               </div>
-              <div className="space-y-1">
-                <p className="text-slate-500 text-xs uppercase font-bold">Overall Progress</p>
+
+              <div className="space-y-2">
+                <p className="label">Overall Progress</p>
                 <div className="flex items-center gap-3">
-                  <p className="text-white font-bold text-lg">{calculateOverallProgress()}%</p>
-                  <div className="w-24 h-2 bg-slate-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-indigo-500 transition-all duration-500" style={{ width: `${calculateOverallProgress()}%` }} />
+                  <p className="text-2xl font-black tracking-tight text-white">{progress}%</p>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-800">
+                    <div className="h-full rounded-full bg-indigo-500 transition-all duration-700" style={{ width: `${progress}%` }} />
                   </div>
                 </div>
               </div>
+
+              <button
+                onClick={handleDeleteAllRuns}
+                disabled={isDeletingRuns || projects.length === 0}
+                className="btn-glow disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isDeletingRuns ? <Loader2 className="animate-spin" size={16} /> : <Trash2 size={16} />}
+                Delete Runs
+              </button>
             </div>
           </div>
-          <div className="flex flex-col gap-3 w-full md:w-auto">
-            <button onClick={() => navigate('/projects')} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-2">
+
+          <div className="flex flex-col gap-3">
+            <button onClick={() => navigate('/projects')} className="btn-glow min-h-[5rem] text-center">
               Continue Current Project <ChevronRight size={18} />
             </button>
-            <button onClick={handleStartNewProject} disabled={isCreatingProject} className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition-all border border-slate-700 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
-              {isCreatingProject ? <Loader2 className="animate-spin" size={18} /> : <PlusCircle size={18} />} Start New Project
+            <button onClick={handleStartNewProject} disabled={isCreatingProject} className="rounded-xl border border-slate-700 bg-slate-800 px-6 py-4 font-black text-white transition-all hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60">
+              <span className="flex items-center justify-center gap-2">
+                {isCreatingProject ? <Loader2 className="animate-spin" size={18} /> : <PlusCircle size={18} />}
+                Start New Project
+              </span>
             </button>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="space-y-6">
-        <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest">
-          <Settings size={16} /> System & AI Configuration
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="glass-card p-6 rounded-3xl border-slate-800 bg-slate-900/50 space-y-4">
-            <div className="flex items-center gap-2 text-white font-bold">
-              <Languages size={18} className="text-indigo-400" /> Regional Language
+      <section>
+        <SectionLabel>System & AI Configuration</SectionLabel>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="glass-card space-y-5 border border-slate-800 bg-slate-900/50 p-6">
+            <div className="flex items-center gap-3">
+              <Languages size={20} className="text-indigo-400" />
+              <div>
+                <h3 className="text-heading">Regional Language</h3>
+                <p className="text-body-sm">Sets the language for prompts and source comments.</p>
+              </div>
             </div>
-            <select 
-              value={sourceMetaLang} 
+            <select
+              value={sourceMetaLang}
               onChange={(e) => saveLang(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <option value="en">English</option>
               <option value="hi">Hindi</option>
@@ -334,166 +352,147 @@ const Dashboard = () => {
               <option value="fr">French</option>
               <option value="es">Spanish</option>
             </select>
-            <p className="text-[10px] text-slate-500 italic leading-relaxed">Sets the language for prompts and source comments.</p>
           </div>
-          <div className="lg:col-span-2 glass-card p-6 rounded-3xl border-slate-800 bg-slate-900/50">
-            <ConfigPanel runId={runId} />
+          <div className="glass-card border border-slate-800 bg-slate-900/50 p-6 lg:col-span-2">
+            <ConfigPanel runId={runId} onSave={(saved) => applySavedAIConfig(JSON.stringify(saved))} />
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="space-y-6">
-        <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest">
-          <Info size={16} /> Modernization Journey
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
-          {JOURNEY_STEPS.map((step, i) => (
-            <Tooltip key={i} text={step.desc}>
-              <motion.div 
-                whileHover={{ y: -5 }} 
-                onClick={() => navigate(step.path)} 
-                className="group relative p-4 bg-slate-900/50 border border-slate-800 rounded-2xl hover:border-indigo-500/50 transition-all cursor-pointer"
-              >
-                <div className="flex justify-between items-start mb-2">
-                  <div className="text-xs font-black text-slate-600">0{i + 1}</div>
-                  <step.icon size={14} className="text-slate-500 group-hover:text-indigo-400" />
+      <section>
+        <SectionLabel>Modernization Journey</SectionLabel>
+        <div className="timeline-scroll flex items-start overflow-x-auto pb-3">
+          {JOURNEY_STEPS.map((step, i) => {
+            const isDone = i < 3;
+            const isActive = i === 3;
+            return (
+              <Tooltip key={step.name} text={step.desc} position="top">
+                <div className="flex min-w-[148px] items-start">
+                  <button
+                    type="button"
+                    onClick={() => navigate(step.path)}
+                    className="group flex w-[128px] flex-col items-center text-center"
+                  >
+                    <span className={`mb-3 flex h-11 w-11 items-center justify-center rounded-full border transition-all group-hover:scale-110 ${isDone || isActive ? 'border-indigo-500/40 bg-indigo-500/20 text-indigo-400 shadow-lg shadow-indigo-500/20' : 'border-slate-800 bg-slate-900/50 text-slate-500'}`}>
+                      <step.icon size={18} />
+                    </span>
+                    <span className="label mb-1">{String(i + 1).padStart(2, '0')}</span>
+                    <span className={`text-xs font-extrabold ${isDone || isActive ? 'text-white' : 'text-slate-500'}`}>{step.name}</span>
+                  </button>
+                  {i < JOURNEY_STEPS.length - 1 && (
+                    <span className={`mt-[22px] h-0.5 min-w-[34px] flex-1 ${i < 2 ? 'bg-indigo-500' : 'bg-slate-800'}`} />
+                  )}
                 </div>
-                <div className="text-sm font-bold text-slate-200 group-hover:text-white transition-colors">
-                  {step.name}
-                </div>
-              </motion.div>
-            </Tooltip>
-          ))}
+              </Tooltip>
+            );
+          })}
         </div>
-      </div>
+      </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        <div className="lg:col-span-8 space-y-6">
-          <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest">
-            <Activity size={16} /> Project Health Snapshot
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <KPICard label="Total COBOL Files" value={activeProject?.files_count || 0} icon={FileText} status="Healthy" />
+      <section className="grid grid-cols-1 gap-8 lg:grid-cols-12">
+        <div className="space-y-6 lg:col-span-8">
+          <SectionLabel>Project Health Snapshot</SectionLabel>
+          <div className="kpi-bento">
+            <KPICard featured label="Total COBOL Files" value={activeProject?.files_count || 0} icon={FileText} status="Healthy" description="Files loaded into the active modernization pipeline." />
             <KPICard label="Complex Modules" value="14" icon={AlertCircle} status="Review" />
             <KPICard label="Pending Chunks" value="35" icon={Layers} status="Review" />
             <KPICard label="Verified Rules" value="16" icon={CheckCircle2} status="Healthy" />
             <KPICard label="Critical Paths" value="8" icon={GitBranch} status="Action" />
-            <KPICard label="Discovered Domains" value="4" icon={Database} status="Healthy" />
           </div>
         </div>
         <div className="lg:col-span-4">
-          <div className="h-full glass-card p-6 rounded-3xl border-indigo-500/30 bg-indigo-500/5 space-y-6 border">
-            <div className="flex items-center gap-2 text-indigo-400 text-sm font-bold uppercase tracking-widest">
-              <Lightbulb size={16} /> AI Recommendations
+          <SectionLabel>AI Recommendations</SectionLabel>
+          <div className="glass-card flex h-full flex-col gap-5 border border-indigo-500/30 bg-indigo-500/5 p-6">
+            <div className="flex items-center gap-3 text-indigo-400">
+              <Lightbulb size={20} />
+              <h3 className="text-heading">Recommended Next Move</h3>
             </div>
-            <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
-              <p className="text-slate-300 text-sm leading-relaxed">
-                "Extract business rules before migration because <span className="text-amber-400 font-bold">14 complex modules</span> remain undocumented."
-              </p>
-            </div>
-            <div className="grid grid-cols-1 gap-3">
-              <button onClick={() => navigate('/business-logic')} className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2">
+            <p className="text-body text-slate-300">
+              Extract business rules before migration because <span className="font-bold text-amber-400">14 complex modules</span> remain undocumented.
+            </p>
+            <div className="mt-auto grid grid-cols-1 gap-3">
+              <button onClick={() => navigate('/business-logic')} className="btn-glow w-full">
                 Start Rule Extraction <ChevronRight size={14} />
               </button>
-              <button onClick={() => navigate('/mission-control')} className="w-full py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-all border border-slate-700">
+              <button onClick={() => navigate('/mission-control')} className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-xs font-black text-white transition-all hover:bg-slate-700">
                 Resume Processing
               </button>
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="space-y-8">
-        <div className="space-y-2">
-          <h2 className="text-3xl font-bold text-white">Modernization Blueprint</h2>
-          <p className="text-slate-400">Real-time execution roadmap showing the current state of the modernization pipeline.</p>
+      <section className="space-y-6">
+        <div>
+          <SectionLabel>Modernization Blueprint</SectionLabel>
+          <h2 className="text-page-title">Execution roadmap</h2>
+          <p className="text-body-sm mt-2 max-w-2xl">Real-time pipeline state from environment setup through production hardening.</p>
         </div>
-        <div className="glass-card p-6 rounded-3xl border-slate-800 bg-slate-900/50 flex flex-col lg:flex-row items-center gap-8">
-          <div className="flex-1 flex items-center justify-between w-full lg:w-auto gap-4">
-            {BLUEPRINT_STAGES.map((stage, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <div className={`flex items-center gap-2 ${stage.status === 'Complete' ? 'text-emerald-400' : stage.status === 'In Progress' ? 'text-amber-400' : 'text-slate-600'}`}>
-                  {stage.status === 'Complete' ? <CheckCircle2 size={16} /> : stage.status === 'In Progress' ? <Loader2 size={16} className="animate-spin" /> : <Circle size={16} />}
-                  <span className="text-xs font-bold uppercase">{stage.name.split(' ')[0]}</span>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+          {BLUEPRINT_STAGES.map((stage, i) => {
+            const progressValue = stageProgress(stage);
+            const isActive = stage.status === 'In Progress';
+            return (
+              <div key={stage.id} className={`glass-card flex min-h-[230px] flex-col gap-4 border p-5 ${isActive ? 'border-amber-500/50 bg-amber-500/5 shadow-lg shadow-amber-500/10' : 'border-slate-800 bg-slate-900/50'}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="label">Stage {String(i + 1).padStart(2, '0')}</span>
+                  <StatusBadge status={stage.status} />
                 </div>
-                {i < BLUEPRINT_STAGES.length - 1 && <ChevronRight size={16} className="text-slate-700" />}
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-4 shrink-0">
-             <div className="flex items-center gap-2 px-3 py-1 rounded-lg bg-slate-950 border border-slate-800 text-[10px] font-bold">
-                <div className="w-2 h-2 rounded-full bg-emerald-500" /> Env: Healthy
-             </div>
-             <div className="flex items-center gap-2 px-3 py-1 rounded-lg bg-slate-950 border border-slate-800 text-[10px] font-bold">
-                <div className="w-2 h-2 rounded-full bg-amber-500" /> Knowledge: Running
-             </div>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
-          {BLUEPRINT_STAGES.map((stage) => (
-            <div key={stage.id} className={`p-6 rounded-3xl border transition-all ${stage.status === 'In Progress' ? 'border-amber-500/50 bg-amber-500/5 shadow-lg shadow-amber-500/10' : 'border-slate-800 bg-slate-900/50'}`}>
-              <div className="flex justify-between items-center mb-4">
-                <div className={`p-1.5 rounded-lg ${stage.indicator === 'green' ? 'bg-emerald-500/20 text-emerald-400' : stage.indicator === 'amber' ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-800 text-slate-500'}`}>
-                  {stage.status === 'Complete' ? <CheckCircle2 size={16} /> : stage.status === 'In Progress' ? <Loader2 size={16} className="animate-spin" /> : <Circle size={16} />}
+                <div>
+                  <h3 className="text-card-title">{stage.name}</h3>
+                  <p className="text-body-sm mt-2">{stage.desc}</p>
                 </div>
-                <span className={`text-[10px] font-bold uppercase ${stage.indicator === 'green' ? 'text-emerald-400' : stage.indicator === 'amber' ? 'text-amber-400' : 'text-slate-500'}`}>{stage.status}</span>
-              </div>
-              <h4 className="text-white font-bold mb-2">{stage.name}</h4>
-              <p className="text-slate-500 text-xs mb-6 leading-relaxed">{stage.desc}</p>
-              <div className="space-y-3">
-                {stage.activities.map((act, i) => {
-                  const isObj = typeof act === 'object';
-                  return (
-                    <div key={i} className="space-y-1">
-                      <div className="flex justify-between text-[10px] mb-1">
-                        <span className="text-slate-400">{isObj ? act.name : act}</span>
-                        {isObj && <span className="text-white font-bold">{act.progress}%</span>}
+                <div className="space-y-2">
+                  {stage.activities.slice(0, 3).map((act, index) => {
+                    const label = typeof act === 'object' ? act.name : act;
+                    const value = typeof act === 'object' ? `${act.progress}%` : 'Done';
+                    return (
+                      <div key={`${label}-${index}`} className="flex items-center justify-between gap-3 text-[11px] font-bold text-slate-400">
+                        <span className="truncate">{label}</span>
+                        <span className="font-mono text-slate-500">{value}</span>
                       </div>
-                      {isObj && (
-                        <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
-                          <div className="h-full bg-amber-500 transition-all" style={{ width: `${act.progress}%` }} />
-                        </div>
-                      )}
-                      {!isObj && <div className="flex items-center gap-1 text-emerald-500 text-[10px]"><CheckCircle2 size={10} /> Completed</div>}
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+                <div className="pipeline-card-progress">
+                  <span style={{ width: `${progressValue}%` }} />
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
-      </div>
+      </section>
 
-      <div className="space-y-6">
-        <h2 className="text-2xl font-bold text-white">What's Next?</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="glass-card p-6 rounded-3xl border-indigo-500/30 bg-indigo-500/5 border space-y-4">
-            <div className="flex items-center gap-2 text-indigo-400 text-xs font-bold uppercase"><Zap size={14} /> Immediate Action</div>
-            <h4 className="text-white font-bold">Review HITL Validations</h4>
-            <p className="text-slate-400 text-sm">Approving remaining validations will unlock code generation.</p>
-            <button onClick={() => navigate('/business-logic')} className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all">Review HITL</button>
+      <section className="space-y-6">
+        <SectionLabel>What's Next</SectionLabel>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <div className="glass-card space-y-4 border border-indigo-500/30 bg-indigo-500/5 p-6">
+            <div className="flex items-center gap-2 text-xs font-black uppercase text-indigo-400"><Zap size={14} /> Immediate Action</div>
+            <h4 className="text-card-title">Review HITL Validations</h4>
+            <p className="text-body-sm">Approving remaining validations will unlock code generation.</p>
+            <button onClick={() => navigate('/business-logic')} className="btn-glow w-full">Review HITL</button>
           </div>
-          <div className="glass-card p-6 rounded-3xl border-slate-800 bg-slate-900/50 space-y-4">
-            <div className="flex items-center gap-2 text-slate-500 text-xs font-bold uppercase"><Clock size={14} /> Upcoming</div>
-            <h4 className="text-white font-bold">Generate Java Domain Models</h4>
-            <p className="text-slate-400 text-sm">Transform extracted DDD entities into Spring Boot artifacts.</p>
-            <button onClick={() => navigate('/code-generation')} className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-all border border-slate-700">Prepare Generation</button>
+          <div className="glass-card space-y-4 border border-slate-800 bg-slate-900/50 p-6">
+            <div className="flex items-center gap-2 text-xs font-black uppercase text-slate-500"><Clock size={14} /> Upcoming</div>
+            <h4 className="text-card-title">Generate Java Domain Models</h4>
+            <p className="text-body-sm">Transform extracted DDD entities into Spring Boot artifacts.</p>
+            <button onClick={() => navigate('/code-generation')} className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-xs font-black text-white transition-all hover:bg-slate-700 w-full">Prepare Generation</button>
           </div>
-          <div className="glass-card p-6 rounded-3xl border-slate-800 bg-slate-900/50 space-y-4">
-            <div className="flex items-center gap-2 text-slate-500 text-xs font-bold uppercase"><ShieldCheck size={14} /> Final Stage</div>
-            <h4 className="text-white font-bold">Run Agentic Refinement</h4>
-            <p className="text-slate-400 text-sm">Perform automated compile-test-fix loops for production readiness.</p>
-            <button onClick={() => navigate('/mission-control')} className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-all border border-slate-700">Start Refinement</button>
+          <div className="glass-card space-y-4 border border-slate-800 bg-slate-900/50 p-6">
+            <div className="flex items-center gap-2 text-xs font-black uppercase text-slate-500"><ShieldCheck size={14} /> Final Stage</div>
+            <h4 className="text-card-title">Run Agentic Refinement</h4>
+            <p className="text-body-sm">Perform automated compile-test-fix loops for production readiness.</p>
+            <button onClick={() => navigate('/mission-control')} className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-xs font-black text-white transition-all hover:bg-slate-700 w-full">Start Refinement</button>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
-        <motion.button 
+      <div className="fixed bottom-8 left-1/2 z-50 -translate-x-1/2">
+        <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           onClick={() => navigate('/mission-control')}
-          className="px-10 py-4 rounded-full font-black flex items-center gap-3 shadow-2xl transition-all bg-indigo-600 text-white hover:bg-indigo-500 shadow-indigo-500/40"
+          className="btn-glow rounded-full px-10 py-4 font-black shadow-2xl"
         >
           <Play size={20} fill="currentColor" /> Launch Migration Pipeline
         </motion.button>
@@ -503,3 +502,5 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+
+

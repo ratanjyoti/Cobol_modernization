@@ -9,6 +9,8 @@ import DDDDiscovery from './DDDDiscovery';
 import { Database, FileCode, FileQuestion, FileText, GitBranch, Loader2, Search, Share2 } from 'lucide-react';
 import { getAnalysisWarmCache, warmDiscoveryData } from '../services/analysisPrefetch';
 import type { DependencyRelation, FileRecord } from '../services/api';
+import PageHeader from '../components/PageHeader';
+import SectionLabel from '../components/SectionLabel';
 
 const normalizeName = (value: string) => value.trim().toLowerCase().replace(/\\/g, '/');
 const withoutExtension = (value: string) => value.replace(/\.[^.\/]+$/, '');
@@ -327,29 +329,13 @@ const SystemDiscovery = () => {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
-      <div className="flex shrink-0 justify-between items-center">
-        <div className="space-y-1">
-          <div className="flex items-center gap-3">
-            <Share2 className="text-indigo-500" size={28} />
-            <h1 className="text-3xl font-bold text-white">System Discovery</h1>
-          </div>
-          <p className="text-slate-400">
-            Dependency view for the active run, focused on meaningful connections while preserving every uploaded file in the explorer.
-          </p>
-        </div>
+      <PageHeader
+        title="System Discovery"
+        description="Dependency view for the active run, focused on meaningful connections while preserving every uploaded file in the explorer."
+        meta={<span className="flex items-center gap-2"><span className="status-badge status-badge-neutral"><span className="status-dot" />{files.length} Files</span><span className="status-badge status-badge-success"><span className="status-dot" />{links.length} Relations</span></span>}
+      />
 
-        <div className="hidden items-center gap-4 text-xs font-bold uppercase tracking-widest lg:flex">
-          <div className="flex items-center gap-2 text-slate-500">
-            <div className="w-2 h-2 rounded-full bg-indigo-500" />
-            <span>{files.length} Files</span>
-          </div>
-          <div className="flex items-center gap-2 text-slate-500">
-            <div className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span>{links.length} Relations</span>
-          </div>
-        </div>
-      </div>
-
+      <SectionLabel>Discovery Summary</SectionLabel>
       <div className="grid shrink-0 gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {summaryCards.map((card) => (
           <div key={card.label} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
@@ -524,3 +510,4 @@ const SystemDiscovery = () => {
 };
 
 export default SystemDiscovery;
+

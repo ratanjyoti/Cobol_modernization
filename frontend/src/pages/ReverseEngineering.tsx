@@ -5,7 +5,9 @@ import {
   AlertTriangle, Cpu, Database, FileCheck, FileText, GitBranch,
   Info, Layers, Loader2, Share2, X, Zap
 } from 'lucide-react';
-
+import PageHeader from '../components/PageHeader';
+import SectionLabel from '../components/SectionLabel';
+import StatusBadge from '../components/StatusBadge';
 const tierStyle: Record<string, string> = {
   High: 'bg-red-500/10 text-red-300 border-red-500/30',
   Medium: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
@@ -91,15 +93,15 @@ const ReverseEngineering = () => {
 
   return (
     <div className="space-y-6 h-full">
-      <div className="flex justify-between items-end gap-4">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-extrabold text-white tracking-tight">Reverse Engineering Explorer</h1>
-          <p className="text-slate-400">Complexity scoring, dependency discovery, and domain grouping for the active run.</p>
-        </div>
-        <div className="text-xs font-mono text-slate-500">Run: <span className="text-slate-300">{runId || 'none'}</span></div>
-      </div>
+      <PageHeader
+        title="Reverse Engineering Explorer"
+        description="Complexity scoring, dependency discovery, and domain grouping for the active run."
+        meta={<StatusBadge status={loading ? 'Running' : 'Verified'} />}
+        action={<div className="font-mono text-sm text-[var(--corporate-muted)]">Run: <span className="text-[var(--corporate-text)]">{runId || 'none'}</span></div>}
+      />
 
-      <div className="flex flex-wrap gap-2 p-1 bg-slate-950 rounded-xl border border-slate-800 w-fit">
+      <SectionLabel>Analysis Views</SectionLabel>
+      <div className="premium-tabs">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -237,3 +239,6 @@ const ReverseEngineering = () => {
 };
 
 export default ReverseEngineering;
+
+
+

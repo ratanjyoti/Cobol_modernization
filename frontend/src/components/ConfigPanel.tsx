@@ -60,9 +60,10 @@ const Sidebar = () => {
 // --- COMPONENT 2: CONFIG PANEL ---
 interface ConfigPanelProps {
   runId: string | null;
+  onSave?: (config: { mode: ConfigMode; key: string; url: string; model: string }) => void;
 }
 
-const ConfigPanel = ({ runId }: ConfigPanelProps) => {
+const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
   const [step, setStep] = useState(1);
   const [mode, setMode] = useState<ConfigMode>(null);
   const [config, setConfig] = useState<AIConfigForm>(DEFAULT_CONFIG);
@@ -74,11 +75,14 @@ const ConfigPanel = ({ runId }: ConfigPanelProps) => {
       try {
         const parsed = JSON.parse(savedConfig);
         setMode(parsed.mode);
+        const savedModel = parsed.model || DEFAULT_CONFIG.model;
+        const knownModels = [...CLOUD_MODELS, ...LOCAL_MODELS];
         setConfig({
           key: parsed.key || '',
           url: parsed.url || DEFAULT_CONFIG.url,
-          model: parsed.model || DEFAULT_CONFIG.model,
+          model: knownModels.includes(savedModel) ? savedModel : 'custom',
         });
+        setCustomModel(knownModels.includes(savedModel) ? '' : savedModel);
       } catch (e) { console.error("Config load error", e); }
     }
   }, []);
@@ -99,12 +103,16 @@ const ConfigPanel = ({ runId }: ConfigPanelProps) => {
       return;
     }
 
-    localStorage.setItem('ai_config', JSON.stringify({
+    const savedConfig = {
       mode,
       key: config.key,
       url: config.url,
       model: finalModel,
-    }));
+    };
+
+    localStorage.setItem('ai_config', JSON.stringify(savedConfig));
+    window.dispatchEvent(new CustomEvent('ai-config-updated', { detail: savedConfig }));
+    onSave?.(savedConfig);
 
     toast.success('Configuration saved successfully');
   };
@@ -222,3 +230,6 @@ const ConfigPanel = ({ runId }: ConfigPanelProps) => {
 };
 
 export default ConfigPanel;
+
+
+

@@ -1,4 +1,7 @@
 import { CheckCircle2, Circle, Zap } from 'lucide-react';
+import PageHeader from '../components/PageHeader';
+import SectionLabel from '../components/SectionLabel';
+import StatusBadge from '../components/StatusBadge';
 
 const ModernizationPlan = () => {
   const phases = [
@@ -9,51 +12,51 @@ const ModernizationPlan = () => {
     { name: 'Refinement', status: 'Pending', tasks: ['Agentic Compilation', 'Unit Test Generation'] },
   ];
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-white">Modernization Plan</h1>
-        <p className="text-slate-400">The generated blueprint for transforming COBOL into a modern application.</p>
-      </div>
+  const progressFor = (status: string) => {
+    if (status === 'Complete') return 100;
+    if (status === 'In Progress') return 54;
+    return 8;
+  };
 
-      <div className="max-w-4xl space-y-8">
-        {phases.map((phase, i) => (
-          <div key={i} className="relative pl-8 border-l-2 border-slate-700 pb-8 last:pb-0">
-            {/* Timeline Circle */}
-            <div className={`absolute -left-3 top-0 w-5 h-5 rounded-full border-4 border-darkbg ${
-              phase.status === 'Complete' ? 'bg-green-500' : 
-              phase.status === 'In Progress' ? 'bg-accent animate-pulse' : 'bg-slate-600'
-            }`} />
-            
-            <div className="bg-panel border border-slate-700 rounded-xl p-6 shadow-lg">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-white font-bold text-lg">{phase.name}</h3>
-                <span className={`text-xs px-3 py-1 rounded-full font-bold ${
-                  phase.status === 'Complete' ? 'bg-green-500/10 text-green-400' : 
-                  phase.status === 'In Progress' ? 'bg-accent/10 text-accent' : 'bg-slate-700 text-slate-400'
-                }`}>
-                  {phase.status}
-                </span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {phase.tasks.map((task, j) => (
-                  <div key={j} className="flex items-center gap-2 text-sm text-slate-400">
-                    {phase.status === 'Complete' ? <CheckCircle2 size={14} className="text-green-500" /> : <Circle size={14} />}
-                    {task}
+  return (
+    <div className="space-y-8">
+      <PageHeader
+        title="Modernization Plan"
+        description="A staged blueprint for transforming legacy COBOL into a modern application architecture."
+        meta={<StatusBadge status="In Progress" />}
+      />
+
+      <SectionLabel>Blueprint Stages</SectionLabel>
+
+      <div className="grid max-w-5xl gap-4">
+        {phases.map((phase, index) => {
+          const isComplete = phase.status === 'Complete';
+          const isActive = phase.status === 'In Progress';
+          return (
+            <div key={phase.name} className="glass-card p-6">
+              <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+                <div className="flex gap-4">
+                  <div className={`mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border ${isComplete ? 'border-[var(--corporate-success)] bg-[var(--corporate-success)] text-white' : isActive ? 'border-[var(--corporate-accent)] bg-[var(--corporate-accent-soft)] text-[var(--corporate-accent)]' : 'border-[var(--corporate-border-strong)] text-[var(--corporate-muted)]'}`}>
+                    {isComplete ? <CheckCircle2 size={20} /> : isActive ? <Zap size={18} /> : <Circle size={16} />}
                   </div>
-                ))}
+                  <div>
+                    <p className="label">Stage {String(index + 1).padStart(2, '0')}</p>
+                    <h3 className="text-heading mt-1">{phase.name}</h3>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {phase.tasks.map((task) => (
+                        <span key={task} className="rounded-full border border-[var(--corporate-border)] bg-[var(--corporate-bg-soft)] px-3 py-1 text-sm font-semibold text-[var(--corporate-muted)]">{task}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <StatusBadge status={phase.status} />
+              </div>
+              <div className="pipeline-card-progress mt-6">
+                <span style={{ width: `${progressFor(phase.status)}%` }} />
               </div>
             </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex justify-center pt-6">
-        <button className="bg-accent hover:bg-blue-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-accent/20 transition-all flex items-center gap-2 group">
-          <Zap size={20} />
-          Execute Modernization Pipeline
-          <span className="group-hover:translate-x-1 transition-transform">$\rightarrow$</span>
-        </button>
+          );
+        })}
       </div>
     </div>
   );

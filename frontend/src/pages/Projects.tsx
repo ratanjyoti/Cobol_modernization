@@ -8,6 +8,9 @@ import {
 import toast from 'react-hot-toast';
 import { ProjectAPI } from '../services/api';
 import type { FileRecord, ProjectSummary } from '../services/api';
+import PageHeader from '../components/PageHeader';
+import SectionLabel from '../components/SectionLabel';
+import StatusBadge from '../components/StatusBadge';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; text: string; border: string; animation: string }> = {
   CONFIGURING: { label: 'Configuring', color: 'bg-slate-500', text: 'text-slate-300', border: 'border-slate-500', animation: '' },
@@ -133,18 +136,16 @@ const Projects = () => {
 
   return (
     <div className="space-y-10">
-      <div className="flex justify-between items-center">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-bold text-white">Project Management Hub</h1>
-          <p className="text-slate-400">Manage migration runs, backend status, and run history.</p>
-        </div>
-        <button
-          onClick={() => navigate('/dashboard?new=true')}
-          className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-indigo-500/20"
-        >
-          <Plus size={20} /> Create New Run
-        </button>
-      </div>
+      <PageHeader
+        title="Project Management Hub"
+        description="Manage migration runs, backend status, active project context, and run history."
+        meta={activeProject ? <StatusBadge status={activeProject.status} /> : undefined}
+        action={(
+          <button onClick={() => navigate('/dashboard?new=true')} className="btn-glow">
+            <Plus size={20} /> Create New Run
+          </button>
+        )}
+      />
 
       {activeProject && (
         <div className="glass-card p-8 rounded-3xl border-indigo-500/50 bg-indigo-500/5 border-2 relative overflow-hidden shadow-[0_0_20px_rgba(99,102,241,0.2)]">
@@ -178,9 +179,7 @@ const Projects = () => {
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="xl:col-span-2 space-y-6">
-          <h3 className="text-xl font-bold text-white flex items-center gap-2">
-            <Clock size={20} className="text-slate-500" /> Version History / All Runs
-          </h3>
+          <SectionLabel>Version History / All Runs</SectionLabel>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {projects.map((project) => {
               const config = STATUS_CONFIG[project.status] || STATUS_CONFIG.CONFIGURING;
@@ -305,7 +304,7 @@ const Projects = () => {
               </div>
 
               <div className="space-y-3">
-                <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-widest"><Settings size={14} /> File Status</div>
+                <SectionLabel>File Status</SectionLabel>
                 {fileStatusRows.length > 0 ? fileStatusRows.map(([status, count]) => (
                   <div key={status} className="flex justify-between text-sm border-b border-slate-800 pb-2">
                     <span className="text-slate-400">{status.replaceAll('_', ' ')}</span>
@@ -315,7 +314,7 @@ const Projects = () => {
               </div>
 
               <div className="space-y-3">
-                <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-widest"><Languages size={14} /> Languages</div>
+                <SectionLabel>Languages</SectionLabel>
                 {languageRows.length > 0 ? languageRows.map(([language, count]) => (
                   <div key={language} className="flex justify-between text-sm border-b border-slate-800 pb-2">
                     <span className="text-slate-400">{language}</span>
@@ -325,7 +324,7 @@ const Projects = () => {
               </div>
 
               <div className="space-y-3">
-                <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-widest"><FileText size={14} /> Source Files</div>
+                <SectionLabel>Source Files</SectionLabel>
                 <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
                   {selectedFiles.length > 0 ? selectedFiles.map((file) => (
                     <div key={file.id} className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex justify-between gap-3 text-xs">
@@ -352,3 +351,5 @@ const Projects = () => {
 };
 
 export default Projects;
+
+
