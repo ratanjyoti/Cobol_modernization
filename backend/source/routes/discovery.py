@@ -1,4 +1,4 @@
-﻿from typing import List, Optional
+from typing import List, Optional
 import asyncio
 import os
 import shutil
@@ -457,34 +457,42 @@ async def confirm_language(data: dict, db: Session = Depends(get_db)):
         try:
             file_record = query.filter(ProjectFile.id == int(file_id)).first()
         except (TypeError, ValueError):
-            raise HTTPException(status_code=400, detail="Invalid file_id")
+            file_record = None
 
     if not file_record and filepath:
+        normalized_path = filepath.replace("\\", "/")
         file_record = query.filter(ProjectFile.filepath == filepath).first()
+        if not file_record and normalized_path != filepath:
+            file_record = query.filter(ProjectFile.filepath == normalized_path).first()
 
     if not file_record:
         file_record = query.filter(ProjectFile.filename == filename).first()
+
+    if not file_record and filepath:
+        basename = filepath.replace("\\", "/").split("/")[-1]
+        file_record = query.filter(ProjectFile.filename == basename).first()
 
     if not file_record:
         raise HTTPException(status_code=404, detail="File is not ready for confirmation yet. Please try again.")
 
     try:
-        file_record.detected_lang = lang
+        normalized_lang = str(lang).strip().lower() or "unknown"
+        file_record.detected_lang = normalized_lang
         file_record.status = FileStatus.CONFIRMED
         db.commit()
-        return {"status": "Success", "message": f"Language updated to {lang} for {file_record.filename}"}
+        db.refresh(file_record)
+        return {
+            "status": "Success",
+            "message": f"Language updated to {normalized_lang} for {file_record.filename}",
+            "file": {
+                "id": str(file_record.id),
+                "filename": file_record.filename,
+                "filepath": file_record.filepath,
+                "detected_lang": file_record.detected_lang,
+                "status": file_record.status.value if file_record.status else None,
+                "is_valid": file_record.status == FileStatus.CONFIRMED,
+            },
+        }
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-
-
-
-
-
-
-
-
-
-
-
-

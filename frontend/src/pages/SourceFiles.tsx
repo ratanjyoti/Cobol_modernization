@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { ProjectAPI, WS_BASE_URL } from '../services/api';
 import { clearAnalysisWarmCache, warmAnalysisTabs } from '../services/analysisPrefetch';
 
 import {
   Upload, FileText, CheckCircle2, Clock,
   Layers, Loader2, Zap, Play, GitBranch,
-  Activity, RotateCcw, Trash2, Languages, Target, XCircle, FolderOpen, AlertCircle
+  Activity, RotateCcw, Trash2, Languages, Target, FolderOpen
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import PageHeader from '../components/PageHeader';
@@ -36,13 +36,6 @@ const getFileType = (filename: string) => {
   if (ext.endsWith('.sln') || ext.endsWith('.csproj') || ext.endsWith('.vbproj')) return { label: '.NET Project', color: 'text-pink-400 bg-pink-500/10 border-pink-500/30' };
   if (ext.endsWith('.xml') || ext.endsWith('.config')) return { label: 'Config', color: 'text-slate-300 bg-slate-500/10 border-slate-500/30' };
   return { label: 'Other', color: 'text-slate-400 bg-slate-500/10 border-slate-500/30' };
-};
-
-type DetectionAlert = {
-  file: string;
-  lang: string;
-  id?: string;
-  filepath?: string;
 };
 
 const SUPPORTED_SOURCE_EXTENSIONS = [
@@ -112,6 +105,9 @@ const SOURCE_LANGUAGES = [
   { id: 'sql', name: 'SQL' },
   { id: 'vbnet', name: 'VB.NET' },
   { id: 'csharp', name: 'C#' },
+  { id: 'xml', name: 'XML' },
+  { id: 'text', name: 'Text' },
+  { id: 'unknown', name: 'Unknown' },
 ];
 
 const TARGET_LANGUAGES = [
@@ -139,7 +135,15 @@ const LANGUAGE_LABELS: Record<string, string> = {
   unknown: 'Unknown',
 };
 
-const formatLanguageName = (lang?: string) => LANGUAGE_LABELS[(lang || '').toLowerCase()] || lang || 'Unknown';
+const normalizeLanguageId = (lang?: string) => {
+  const normalized = (lang || '').trim().toLowerCase();
+  if (!normalized) return 'unknown';
+  if (SOURCE_LANGUAGES.some((item) => item.id === normalized)) return normalized;
+  const labelMatch = Object.entries(LANGUAGE_LABELS).find(([, label]) => label.toLowerCase() === normalized);
+  return labelMatch?.[0] || normalized;
+};
+
+const formatLanguageName = (lang?: string) => LANGUAGE_LABELS[normalizeLanguageId(lang)] || lang || 'Unknown';
 
 const SourceFiles = () => {
   const navigate = useNavigate();
@@ -162,11 +166,19 @@ const SourceFiles = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [isClearingFiles, setIsClearingFiles] = useState(false);
   const [pipelineActive, setPipelineActive] = useState(() => localStorage.getItem(STORAGE_KEYS.pipelineStatus) === 'active');
-  const [detectionAlert, setDetectionAlert] = useState<DetectionAlert | null>(null);
-  const [pendingDetections, setPendingDetections] = useState<DetectionAlert[]>([]);
+  const [savingLanguageIds, setSavingLanguageIds] = useState<Set<string>>(new Set());
+  const [languageCorrectionIds, setLanguageCorrectionIds] = useState<Set<string>>(new Set());
   const uploadBusyRef = useRef(false);
   
   const runId = localStorage.getItem('active_run_id');
+
+  const refreshAnalysisTabs = () => {
+    if (!runId) return;
+    clearAnalysisWarmCache(runId);
+    void warmAnalysisTabs(runId, true).catch((error) => {
+      console.warn('Failed to refresh analysis tabs after source file change:', error);
+    });
+  };
 
   // HELPER: Ensures mapping backend data to frontend state correctly across all handlers
   const mapBackendFiles = (backendFiles: any[]) => {
@@ -178,43 +190,32 @@ const SourceFiles = () => {
       chunks: f.chunks || 1,
       detectedLang: f.lang || f.detected_lang,
       relPath: f.filepath || f.rel_path,
-      isValid: f.is_valid,
+      isValid: f.is_valid ?? (f.status === 'CONFIRMED' || f.status === 'Analyzed'),
     }));
   };
 
   const enqueueLanguageDetections = (mappedFiles: any[]) => {
     if (sourceLang !== 'auto') return;
 
-    const detections = mappedFiles
-      .map((file) => ({
-        file: file.filename || file.name,
-        lang: file.lang || file.detected_lang || 'UNKNOWN',
-        id: file.id,
-        filepath: file.filepath || file.rel_path,
-        isValid: file.is_valid ?? file.isValid,
-      }))
-      .filter((item) => {
-        if (!item.file || !item.lang || item.lang === 'UNKNOWN' || item.isValid === false) return false;
-        const key = `${item.id || item.file}:${item.filepath || ''}:${item.lang}`;
-        if (queuedDetectionKeys.current.has(key)) return false;
-        queuedDetectionKeys.current.add(key);
-        return true;
+    setFiles((prev) => prev.map((file) => {
+      const detected = mappedFiles.find((item) => {
+        const itemName = item.filename || item.name || item.file;
+        const itemPath = item.filepath || item.rel_path;
+        return (item.id && item.id === file.id) || itemName === file.name || (itemPath && itemPath === file.relPath);
       });
 
-    if (detections.length === 0) return;
+      if (!detected) return file;
+      const lang = detected.lang || detected.detected_lang || detected.suggested_lang || file.detectedLang || 'UNKNOWN';
+      const key = `${file.id || file.name}:${file.relPath || ''}:${lang}`;
+      if (queuedDetectionKeys.current.has(key)) return file;
+      queuedDetectionKeys.current.add(key);
 
-    setDetectionAlert((current) => {
-      if (current) {
-        setPendingDetections((prev) => [...prev, ...detections]);
-        return current;
-      }
-
-      const [nextDetection, ...remaining] = detections;
-      if (remaining.length > 0) {
-        setPendingDetections((prev) => [...prev, ...remaining]);
-      }
-      return nextDetection;
-    });
+      return {
+        ...file,
+        detectedLang: lang,
+        isValid: detected.is_valid ?? detected.isValid ?? file.isValid,
+      };
+    }));
   };
 
   const clearAllFiles = async () => {
@@ -236,8 +237,6 @@ const SourceFiles = () => {
     try {
       await ProjectAPI.clearAllFiles(runId);
       setFiles([]);
-      setDetectionAlert(null);
-      setPendingDetections([]);
       queuedDetectionKeys.current.clear();
       localStorage.removeItem(STORAGE_KEYS.files);
       clearAnalysisWarmCache(runId);
@@ -253,80 +252,61 @@ const SourceFiles = () => {
     uploadBusyRef.current = isUploading || isReadingRepo;
   }, [isUploading, isReadingRepo]);
 
-  const showNextDetection = () => {
-    setPendingDetections((prev) => {
-      const [nextDetection, ...remaining] = prev;
-      setDetectionAlert(nextDetection || null);
-      return remaining;
-    });
-  };
+  const saveFileLanguage = async (file: SourceFileRecord, lang: string) => {
+    if (!runId) {
+      toast.error('No active project found');
+      return;
+    }
+    const normalizedLang = normalizeLanguageId(lang);
+    if (!normalizedLang || normalizedLang === 'auto') {
+      toast.error('Select a valid language');
+      return;
+    }
 
-  useEffect(() => {
-    if (!runId) return;
-    const socket = new WebSocket(`${WS_BASE_URL}/discovery/ws/${runId}`);
-    socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.event === 'LANGUAGE_DETECTED' && !uploadBusyRef.current) {
-        enqueueLanguageDetections([{ filename: data.file, lang: data.suggested_lang, is_valid: data.is_valid }]);
-      }
-    };
-    return () => socket.close();
-  }, [runId, sourceLang]);
-
-  const [isCorrecting, setIsCorrecting] = useState(false);
-  const [isConfirmingLanguage, setIsConfirmingLanguage] = useState(false);
-  const [selectedManualLang, setSelectedManualLang] = useState('');
-
-  const confirmLanguage = async (confirmed: boolean, manualLang?: string) => {
-    if (!runId || !detectionAlert || isConfirmingLanguage) return;
-
-    const finalLang = confirmed ? detectionAlert.lang : (manualLang || 'UNKNOWN');
-
-    setIsConfirmingLanguage(true);
+    setSavingLanguageIds((prev) => new Set(prev).add(file.id));
     try {
-      await ProjectAPI.confirmLanguage({
+      const numericFileId = /^\d+$/.test(String(file.id || '')) ? String(file.id) : undefined;
+      const response = await ProjectAPI.confirmLanguage({
         run_id: runId,
-        filename: detectionAlert.file,
-        lang: finalLang,
-        file_id: detectionAlert.id,
-        filepath: detectionAlert.filepath,
+        filename: file.name,
+        lang: normalizedLang,
+        ...(numericFileId ? { file_id: numericFileId } : {}),
+        ...(file.relPath ? { filepath: file.relPath } : {}),
       });
-      toast.success(`Updated ${detectionAlert.file} to ${finalLang}`);
-      setFiles(prev => prev.map(file => file.name === detectionAlert.file ? { ...file, status: 'Analyzed', detectedLang: finalLang } : file));
+
+      const savedFile = response?.file;
+      setFiles((prev) => prev.map((item) => item.id === file.id
+        ? {
+            ...item,
+            status: 'Analyzed',
+            detectedLang: savedFile?.detected_lang || normalizedLang,
+            relPath: savedFile?.filepath || item.relPath,
+            isValid: savedFile?.is_valid ?? true,
+          }
+        : item
+      ));
+      setLanguageCorrectionIds((prev) => {
+        const next = new Set(prev);
+        next.delete(file.id);
+        return next;
+      });
       refreshAnalysisTabs();
-      setIsCorrecting(false);
-      setSelectedManualLang('');
-      showNextDetection();
+      toast.success(`Language saved for ${file.name}`);
     } catch (e: any) {
-      toast.error(e.response?.data?.detail || "Failed to save language preference");
+      const detail = e.response?.data?.detail || e.message || 'Failed to save language preference';
+      toast.error(detail);
     } finally {
-      setIsConfirmingLanguage(false);
+      setSavingLanguageIds((prev) => {
+        const next = new Set(prev);
+        next.delete(file.id);
+        return next;
+      });
     }
   };
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.selectedScope, selectedScope);
-    localStorage.setItem(STORAGE_KEYS.sourceLang, sourceLang);
-    localStorage.setItem(STORAGE_KEYS.targetLang, targetLang);
-  }, [selectedScope, sourceLang, targetLang]);
-
-  useEffect(() => {
-    if (runId) { fetchProjectFiles(); }
-  }, [runId, sourceLang]);
-
-  const fetchProjectFiles = async () => {
-    try {
-      const response = await ProjectAPI.listFiles(runId!); 
-      const mapped = mapBackendFiles(response.files);
-      setFiles(mapped);
-    } catch (e) { console.error("Failed to fetch files", e); }
-  };
-
-  const refreshAnalysisTabs = (force = true) => {
-    if (!runId) return;
-    warmAnalysisTabs(runId, force).catch((error) => {
-      console.error("Failed to warm analysis tabs", error);
-    });
+  const markLanguageIncorrect = (fileId: string) => {
+    setLanguageCorrectionIds((prev) => new Set(prev).add(fileId));
+    setFiles((prev) => prev.map((file) => file.id === fileId ? { ...file, isValid: false } : file));
   };
 
   const removeFile = async (id: string) => {
@@ -740,27 +720,52 @@ const SourceFiles = () => {
                         {type.label}
                       </span>
                     </td>
-                    <td className="p-4">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono text-indigo-300">{formatLanguageName(file.detectedLang)}</span>
-                        {file.status === 'Analyzed' ? (
-                          <CheckCircle2 size={12} className="text-emerald-500" title="Confirmed" />
-                        ) : (
-                          <Clock size={12} className="text-slate-500" title="Suggested" />
-                        )}
+                    <td className="p-4 min-w-[220px]">
+                      <div className="space-y-2">
+                        <select
+                          value={normalizeLanguageId(file.detectedLang)}
+                          onChange={(event) => saveFileLanguage(file, event.target.value)}
+                          disabled={pipelineActive || savingLanguageIds.has(file.id)}
+                          className={`w-full rounded-lg border px-3 py-2 text-sm font-semibold outline-none transition-all ${languageCorrectionIds.has(file.id) ? 'border-amber-500 bg-amber-500/10' : 'border-slate-800 bg-slate-950'} disabled:cursor-not-allowed disabled:opacity-60`}
+                        >
+                          {SOURCE_LANGUAGES.filter((lang) => lang.id !== 'auto').map((lang) => (
+                            <option key={lang.id} value={lang.id}>{lang.name}</option>
+                          ))}
+
+                        </select>
+                        <div className="text-[10px] text-slate-500">
+                          {file.isValid === true ? 'Saved language' : `Detected: ${formatLanguageName(file.detectedLang)}`}
+                        </div>
                       </div>
                     </td>
-                    <td className="p-4">
-                      {file.isValid === true ? (
-                        <div className="flex items-center gap-1 text-emerald-400 text-xs font-medium">
-                          <CheckCircle2 size={14} /> Valid
+                    <td className="p-4 min-w-[190px]">
+                      {savingLanguageIds.has(file.id) ? (
+                        <div className="flex items-center gap-2 text-amber-400 text-xs font-bold">
+                          <Loader2 size={14} className="animate-spin" /> Saving
                         </div>
-                      ) : file.isValid === false ? (
-                        <div className="flex items-center gap-1 text-amber-400 text-xs font-medium">
-                          <AlertCircle size={14} /> Suspicious
+                      ) : file.isValid === true ? (
+                        <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold">
+                          <CheckCircle2 size={14} /> Validated
                         </div>
                       ) : (
-                        <span className="text-slate-600 text-xs">Unknown</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => saveFileLanguage(file, normalizeLanguageId(file.detectedLang))}
+                            disabled={pipelineActive}
+                            className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-500 transition-all hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Yes
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => markLanguageIncorrect(file.id)}
+                            disabled={pipelineActive}
+                            className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-bold text-amber-500 transition-all hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            No
+                          </button>
+                        </div>
                       )}
                     </td>
                     <td className="p-4 text-sm font-mono text-slate-400">
@@ -817,76 +822,18 @@ const SourceFiles = () => {
         </div>
       </div>
 
-      {/* LANGUAGE DETECTION MODAL */}
-      <AnimatePresence>
-        {detectionAlert && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="glass-card p-8 rounded-3xl border-indigo-500/50 bg-slate-900 border-2 max-w-md w-full shadow-2xl text-center space-y-6"
-            >
-              <div className="flex justify-center">
-                <div className="p-4 bg-indigo-500/20 rounded-full text-indigo-400">
-                  {isConfirmingLanguage ? <Loader2 className="animate-spin" size={40} /> : <Languages size={40} />}
-                </div>
-              </div>
-
-              {isConfirmingLanguage ? (
-                <div className="space-y-3">
-                  <h3 className="text-xl font-bold text-white">Saving Language</h3>
-                  <p className="text-sm text-slate-400">Preparing the next file confirmation...</p>
-                </div>
-              ) : !isCorrecting ? (
-                <div className="space-y-5">
-                  <div className="space-y-2">
-                    <h3 className="text-xl font-bold text-white">Language Detected</h3>
-                    <p className="text-slate-400">
-                      {detectionAlert.file.toLowerCase().endsWith('.txt') ? (
-                        <>This text file <span className="text-white font-mono">{detectionAlert.file}</span> contains <span className="text-indigo-400 font-bold">{formatLanguageName(detectionAlert.lang)}</span> code.</>
-                      ) : (
-                        <><span className="text-white font-mono">{detectionAlert.file}</span> was detected as <span className="text-indigo-400 font-bold">{formatLanguageName(detectionAlert.lang)}</span>.</>
-                      )}
-                    </p>
-                    <p className="text-sm text-slate-500 italic">Please confirm before continuing.</p>
-                  </div>
-                  <div className="flex gap-4">
-                    <button disabled={isConfirmingLanguage} onClick={() => setIsCorrecting(true)} className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"><XCircle size={18} /> No</button>
-                    <button disabled={isConfirmingLanguage} onClick={() => confirmLanguage(true)} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"><CheckCircle2 size={18} /> Yes</button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-5">
-                  <div className="space-y-2">
-                    <h3 className="text-xl font-bold text-white">Choose Correct Language</h3>
-                    <p className="text-slate-400 text-sm">Select the language for <span className="text-indigo-400 font-mono">{detectionAlert.file}</span>.</p>
-                  </div>
-                  <select
-                    value={selectedManualLang}
-                    onChange={(e) => setSelectedManualLang(e.target.value)}
-                    disabled={isConfirmingLanguage}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="" disabled>Select language</option>
-                    {SOURCE_LANGUAGES.filter(lang => lang.id !== 'auto').map(lang => (
-                      <option key={lang.id} value={lang.id}>{lang.name}</option>
-                    ))}
-                  </select>
-                  <div className="flex gap-3">
-                    <button disabled={isConfirmingLanguage} onClick={() => setIsCorrecting(false)} className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed">Back</button>
-                    <button disabled={!selectedManualLang || isConfirmingLanguage} onClick={() => confirmLanguage(false, selectedManualLang)} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2"><CheckCircle2 size={18} /> Confirm</button>
-                  </div>
-                </div>
-              )}
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>
   );
 };
 
 export default SourceFiles;
+
+
+
+
+
+
+
+
 
 
