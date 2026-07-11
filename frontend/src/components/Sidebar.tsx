@@ -72,8 +72,8 @@ const Sidebar = ({ isOpen, toggleSidebar, theme, toggleTheme }: SidebarProps) =>
           className="p-2 rounded-lg transition-all duration-150"
           style={{ color: 'var(--corporate-muted)' }}
           onMouseEnter={e => {
-            (e.currentTarget as HTMLElement).style.background = 'var(--corporate-accent-soft)';
-            (e.currentTarget as HTMLElement).style.color = 'var(--corporate-accent)';
+            (e.currentTarget as HTMLElement).style.background = 'rgba(31,31,29,0.055)';
+            (e.currentTarget as HTMLElement).style.color = '#1f1f1d';
           }}
           onMouseLeave={e => {
             (e.currentTarget as HTMLElement).style.background = 'transparent';
@@ -94,8 +94,8 @@ const Sidebar = ({ isOpen, toggleSidebar, theme, toggleTheme }: SidebarProps) =>
               className="p-2 rounded-lg transition-all duration-150"
               style={{ color: 'var(--corporate-muted)' }}
               onMouseEnter={e => {
-                (e.currentTarget as HTMLElement).style.background = 'var(--corporate-accent-soft)';
-                (e.currentTarget as HTMLElement).style.color = 'var(--corporate-accent)';
+                (e.currentTarget as HTMLElement).style.background = 'rgba(31,31,29,0.055)';
+                (e.currentTarget as HTMLElement).style.color = '#1f1f1d';
               }}
               onMouseLeave={e => {
                 (e.currentTarget as HTMLElement).style.background = 'transparent';
@@ -116,9 +116,9 @@ const Sidebar = ({ isOpen, toggleSidebar, theme, toggleTheme }: SidebarProps) =>
             <div
               className="absolute inset-0 rounded-xl"
               style={{
-                background: 'conic-gradient(from 0deg, var(--corporate-accent), var(--corporate-success), var(--corporate-accent))',
+                background: '#1f1f1d',
                 borderRadius: 10,
-                animation: 'spin 4s linear infinite',
+                animation: 'none',
               }}
             />
             <div
@@ -126,8 +126,8 @@ const Sidebar = ({ isOpen, toggleSidebar, theme, toggleTheme }: SidebarProps) =>
               style={{
                 inset: 2,
                 borderRadius: 8,
-                background: 'var(--corporate-bg-soft)',
-                color: 'var(--corporate-accent)',
+                background: '#1f1f1d',
+                color: '#ffffff',
               }}
             >
               M
@@ -188,13 +188,13 @@ const Sidebar = ({ isOpen, toggleSidebar, theme, toggleTheme }: SidebarProps) =>
                       className="relative flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all duration-150 w-full"
                       style={{
                         justifyContent: isOpen ? 'flex-start' : 'center',
-                        background: isActive ? 'var(--corporate-accent-soft)' : 'transparent',
-                        color: isActive ? 'var(--corporate-accent)' : 'var(--corporate-muted)',
+                        background: isActive ? 'rgba(31,31,29,0.055)' : 'transparent',
+                        color: isActive ? '#1f1f1d' : 'var(--corporate-muted)',
                       }}
                       onMouseEnter={e => {
                         if (!isActive) {
-                          (e.currentTarget as HTMLElement).style.background = 'var(--corporate-accent-soft)';
-                          (e.currentTarget as HTMLElement).style.color = 'var(--corporate-accent)';
+                          (e.currentTarget as HTMLElement).style.background = 'rgba(31,31,29,0.055)';
+                          (e.currentTarget as HTMLElement).style.color = '#1f1f1d';
                         }
                       }}
                       onMouseLeave={e => {
@@ -212,8 +212,8 @@ const Sidebar = ({ isOpen, toggleSidebar, theme, toggleTheme }: SidebarProps) =>
                           style={{
                             width: 3,
                             height: 18,
-                            background: 'linear-gradient(180deg, var(--corporate-accent), var(--corporate-success))',
-                            boxShadow: '0 0 10px var(--corporate-accent)',
+                            background: 'var(--corporate-accent)',
+                            boxShadow: 'none',
                           }}
                           transition={{ type: 'spring', stiffness: 400, damping: 32 }}
                         />
@@ -253,8 +253,8 @@ const Sidebar = ({ isOpen, toggleSidebar, theme, toggleTheme }: SidebarProps) =>
             color: 'var(--corporate-muted)',
           }}
           onMouseEnter={e => {
-            (e.currentTarget as HTMLElement).style.background = 'var(--corporate-accent-soft)';
-            (e.currentTarget as HTMLElement).style.color = 'var(--corporate-accent)';
+            (e.currentTarget as HTMLElement).style.background = 'rgba(31,31,29,0.055)';
+            (e.currentTarget as HTMLElement).style.color = '#1f1f1d';
           }}
           onMouseLeave={e => {
             (e.currentTarget as HTMLElement).style.background = 'transparent';
@@ -282,6 +282,8 @@ const Sidebar = ({ isOpen, toggleSidebar, theme, toggleTheme }: SidebarProps) =>
 };
 
 export default Sidebar;
+
+
 
 
 

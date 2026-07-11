@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ProjectAPI, WS_BASE_URL } from '../services/api';
@@ -13,6 +13,7 @@ import toast from 'react-hot-toast';
 import PageHeader from '../components/PageHeader';
 import SectionLabel from '../components/SectionLabel';
 import StatusBadge from '../components/StatusBadge';
+import { EmptyInspector } from '../components/AppPageShell';
 
 type SourceFileRecord = {
   id: string;
@@ -168,9 +169,11 @@ const SourceFiles = () => {
   const [pipelineActive, setPipelineActive] = useState(() => localStorage.getItem(STORAGE_KEYS.pipelineStatus) === 'active');
   const [savingLanguageIds, setSavingLanguageIds] = useState<Set<string>>(new Set());
   const [languageCorrectionIds, setLanguageCorrectionIds] = useState<Set<string>>(new Set());
+  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const uploadBusyRef = useRef(false);
   
   const runId = localStorage.getItem('active_run_id');
+  const selectedFile = useMemo(() => files.find((file) => file.id === selectedFileId) || null, [files, selectedFileId]);
 
   const refreshAnalysisTabs = () => {
     if (!runId) return;
@@ -205,7 +208,9 @@ const SourceFiles = () => {
       try {
         const response = await ProjectAPI.listFiles(runId);
         if (!active) return;
-        setFiles(mapBackendFiles(response.files || []));
+        const mapped = mapBackendFiles(response.files || []);
+        setFiles(mapped);
+        setSelectedFileId((current) => current && mapped.some((file) => file.id === current) ? current : mapped[0]?.id || null);
       } catch (error: any) {
         if (active) {
           toast.error(error.response?.data?.detail || 'Unable to load uploaded files for this project');
@@ -263,6 +268,7 @@ const SourceFiles = () => {
     try {
       await ProjectAPI.clearAllFiles(runId);
       setFiles([]);
+      setSelectedFileId(null);
       queuedDetectionKeys.current.clear();
       localStorage.removeItem(STORAGE_KEYS.files);
       clearAnalysisWarmCache(runId);
@@ -340,7 +346,11 @@ const SourceFiles = () => {
       toast.error("Cannot delete files while the pipeline is active.");
       return;
     }
-    setFiles(prev => prev.filter(f => f.id !== id));
+    setFiles(prev => {
+      const next = prev.filter(f => f.id !== id);
+      setSelectedFileId((current) => current === id ? next[0]?.id || null : current);
+      return next;
+    });
     toast.success("File removed from queue");
   };
 
@@ -362,6 +372,7 @@ const SourceFiles = () => {
           if (zipData && zipData.mapped_files) {
             const backendFiles = mapBackendFiles(zipData.mapped_files);
             setFiles(prev => [...prev, ...backendFiles]);
+            setSelectedFileId((current) => current || backendFiles[0]?.id || null);
             enqueueLanguageDetections(zipData.mapped_files);
             refreshAnalysisTabs();
             toast.success(`Extracted ${backendFiles.length} files`);
@@ -374,6 +385,7 @@ const SourceFiles = () => {
           const uploadedRecords = fileResponse.mapped_files || [];
           const backendFiles = mapBackendFiles(uploadedRecords);
           setFiles(prev => [...prev, ...backendFiles]);
+            setSelectedFileId((current) => current || backendFiles[0]?.id || null);
           enqueueLanguageDetections(uploadedRecords);
           refreshAnalysisTabs();
           toast.success(`Uploaded ${file.name}`);
@@ -417,6 +429,7 @@ const SourceFiles = () => {
       const backendFiles = mapBackendFiles(response.mapped_files || []);
       
       setFiles(prev => [...prev, ...backendFiles]);
+            setSelectedFileId((current) => current || backendFiles[0]?.id || null);
       enqueueLanguageDetections(response.mapped_files || []);
       refreshAnalysisTabs();
       toast.success(`Local repository ingested: ${backendFiles.length} files`);
@@ -449,6 +462,7 @@ const SourceFiles = () => {
       const backendFiles = mapBackendFiles(response.mapped_files || []);
 
       setFiles(prev => [...prev, ...backendFiles]);
+            setSelectedFileId((current) => current || backendFiles[0]?.id || null);
       enqueueLanguageDetections(response.mapped_files || []);
       refreshAnalysisTabs();
       toast.success(`Successfully ingested ${backendFiles.length} files from GitHub`);
@@ -498,8 +512,9 @@ const SourceFiles = () => {
   };
 
   return (
-    <div className="space-y-10 pb-20">
-      <PageHeader
+    <div className="enterprise-page">
+      <div className="enterprise-page-header">
+        <PageHeader
         title="Source Files"
         description="Configure migration mapping, ingest source code, confirm language detection, and launch the analysis pipeline."
         meta={pipelineActive ? <StatusBadge status="Running" /> : <StatusBadge status="Pending" pulse={false} />}
@@ -509,7 +524,11 @@ const SourceFiles = () => {
           </button>
         )}
       />
+      </div>
 
+      <div className="enterprise-split-pane source-files-split">
+        <section className="enterprise-explorer-panel">
+          <div className="space-y-8 pr-1">
       {/* SECTION 1: CONFIGURATION */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
         <SectionLabel>Step 1: Project Configuration</SectionLabel>
@@ -575,6 +594,55 @@ const SourceFiles = () => {
         </div>
       </motion.div>
 
+      {files.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="source-guided-path rocket-card p-6"
+        >
+          <div className="rocket-panel-header mb-5">
+            <div>
+              <SectionLabel>Guided Path</SectionLabel>
+              <h2>Next steps after upload</h2>
+              <p>{files.length} file{files.length === 1 ? '' : 's'} uploaded. Continue through the modernization flow in order.</p>
+            </div>
+          </div>
+
+          <div className="source-guided-actions">
+            <button type="button" onClick={() => navigate('/discovery')} className="source-guided-action">
+              <span className="rocket-flow-index">01</span>
+              <span className="rocket-flow-icon"><GitBranch size={22} /></span>
+              <span>
+                <strong>See dependency maps</strong>
+                <small>Open system discovery and review file relationships.</small>
+              </span>
+            </button>
+
+            <button type="button" onClick={() => navigate('/business-logic')} className="source-guided-action">
+              <span className="rocket-flow-index">02</span>
+              <span className="rocket-flow-icon"><Activity size={22} /></span>
+              <span>
+                <strong>Business logic analysis</strong>
+                <small>Extract and validate rules from uploaded source code.</small>
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={pipelineActive ? () => navigate('/mission-control') : launchPipeline}
+              disabled={isLaunching}
+              className="source-guided-action source-guided-action-primary"
+            >
+              <span className="rocket-flow-index">03</span>
+              <span className="rocket-flow-icon">{isLaunching ? <Loader2 className="animate-spin" size={22} /> : <Play size={22} fill="currentColor" />}</span>
+              <span>
+                <strong>{pipelineActive ? 'View migration progress' : 'Start migration'}</strong>
+                <small>{pipelineActive ? 'Open Mission Control for the active pipeline.' : 'Launch the modernization pipeline when ready.'}</small>
+              </span>
+            </button>
+          </div>
+        </motion.div>
+      )}
       {/* SECTION 2: INGESTION */}
       <div className="space-y-6">
         <SectionLabel>Step 2: Source Code Ingestion</SectionLabel>
@@ -727,7 +795,7 @@ const SourceFiles = () => {
               {files.map(file => {
                 const type = getFileType(file.name);
                 return (
-                  <tr key={file.id} className="border-t border-slate-700 hover:bg-slate-800/30 transition-colors">
+                  <tr key={file.id} onClick={() => setSelectedFileId(file.id)} className={`cursor-pointer border-t border-slate-700 transition-colors ${selectedFileId === file.id ? 'source-file-row-active' : 'hover:bg-slate-800/30'}`}>
                     <td className="p-4">
                       <div className="flex flex-col whitespace-normal break-words max-w-xs">
                         <div className="flex items-center gap-2 font-medium text-white">
@@ -829,30 +897,77 @@ const SourceFiles = () => {
               )}
             </tbody>
           </table>
-        </div>
+        </div>      </div>
+          </div>
+        </section>
 
-        <div className="flex justify-center pt-6">
-          {pipelineActive ? (
-            <button onClick={() => navigate('/mission-control')} className="px-12 py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full font-black shadow-2xl transition-all flex items-center gap-3">
-              <Activity size={20} /> View Pipeline Progress
-            </button>
+        <aside className="enterprise-inspector-panel">
+          {selectedFile ? (
+            <div className="enterprise-panel-card space-y-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <SectionLabel>File Inspector</SectionLabel>
+                  <h3 className="text-card-title mt-2 truncate">{selectedFile.name}</h3>
+                  <p className="rocket-muted mt-1 break-all font-mono text-xs">{selectedFile.relPath || selectedFile.name}</p>
+                </div>
+                <StatusBadge status={selectedFile.status} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-xl border border-slate-800/40 p-3">
+                  <span className="rocket-label">Type</span>
+                  <p className="mt-1 font-bold text-[var(--corporate-text)]">{getFileType(selectedFile.name).label}</p>
+                </div>
+                <div className="rounded-xl border border-slate-800/40 p-3">
+                  <span className="rocket-label">Size</span>
+                  <p className="mt-1 font-mono font-bold text-[var(--corporate-text)]">{selectedFile.size} LLOC</p>
+                </div>
+                <div className="rounded-xl border border-slate-800/40 p-3">
+                  <span className="rocket-label">Language</span>
+                  <p className="mt-1 font-bold text-[var(--corporate-text)]">{formatLanguageName(selectedFile.detectedLang)}</p>
+                </div>
+                <div className="rounded-xl border border-slate-800/40 p-3">
+                  <span className="rocket-label">Validity</span>
+                  <p className={selectedFile.isValid ? 'mt-1 font-bold text-emerald-500' : 'mt-1 font-bold text-amber-500'}>{selectedFile.isValid ? 'Validated' : 'Needs review'}</p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <button onClick={() => navigate('/discovery')} className="rocket-secondary-btn w-full justify-center">View dependency map</button>
+                <button onClick={() => navigate('/business-logic')} className="rocket-secondary-btn w-full justify-center">Analyze business logic</button>
+              </div>
+            </div>
           ) : (
-            <button 
-              onClick={launchPipeline} 
-              disabled={isLaunching || files.length === 0} 
-              className="px-12 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full font-black shadow-2xl transition-all flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLaunching ? <><Loader2 className="animate-spin" size={20} /> Initializing...</> : <><Play fill="currentColor" size={20} /> Launch Migration Pipeline</>}
-            </button>
+            <EmptyInspector title="Select a source file" description="Choose a file from Step 3 to inspect language, status, validity, and next analysis actions." />
           )}
-        </div>
+        </aside>
       </div>
 
+      <div className="enterprise-action-bar">
+        {pipelineActive ? (
+          <button onClick={() => navigate('/mission-control')} className="px-10 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full font-black transition-all flex items-center gap-3">
+            <Activity size={20} /> View Pipeline Progress
+          </button>
+        ) : (
+          <button
+            onClick={launchPipeline}
+            disabled={isLaunching || files.length === 0}
+            className="px-10 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full font-black transition-all flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isLaunching ? <><Loader2 className="animate-spin" size={20} /> Initializing...</> : <><Play fill="currentColor" size={20} /> Launch Migration Pipeline</>}
+          </button>
+        )}
+      </div>
     </div>
   );
 };
 
 export default SourceFiles;
+
+
+
+
+
 
 
 
