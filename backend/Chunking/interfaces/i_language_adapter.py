@@ -1,13 +1,20 @@
-from abc import ABC, abstractmethod
+﻿from abc import ABC, abstractmethod
+
 
 class ILanguageAdapter(ABC):
-    @abstractmethod
-    def detect(self, content: str) -> bool:
-        """Returns True if the content matches this language's signatures."""
-        pass
+    def preprocess(self, content: str) -> str:
+        return content
+
+    def identify_structure(self, content: str) -> list[dict]:
+        lines = content.splitlines()
+        return [{
+            "name": "FILE",
+            "kind": "file",
+            "start_line": 1,
+            "end_line": len(lines),
+        }] if lines else []
 
     @property
     @abstractmethod
     def language_name(self) -> str:
-        """Returns the name of the language (e.g., 'COBOL')."""
         pass

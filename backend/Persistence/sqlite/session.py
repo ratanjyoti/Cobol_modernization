@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, event, text
+﻿from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
 from paths import SQLITE_DB_PATH
 from Persistence.sqlite.models import Base
@@ -30,21 +30,49 @@ def init_db():
     ensure_indexes()
 
 
-def ensure_schema_columns():
-    column_statements = {
-        "mode": "ALTER TABLE file_complexity ADD COLUMN mode VARCHAR",
-        "multiplier": "ALTER TABLE file_complexity ADD COLUMN multiplier FLOAT",
-        "calculation": "ALTER TABLE file_complexity ADD COLUMN calculation TEXT",
-    }
+def _table_columns(connection, table_name: str) -> set[str]:
+    return {row[1] for row in connection.execute(text(f"PRAGMA table_info({table_name})"))}
 
+
+def _add_missing_columns(connection, table_name: str, column_statements: dict[str, str]):
+    existing_columns = _table_columns(connection, table_name)
+    for column_name, statement in column_statements.items():
+        if column_name not in existing_columns:
+            connection.execute(text(statement))
+
+
+def ensure_schema_columns():
     with engine.begin() as connection:
-        existing_columns = {
-            row[1]
-            for row in connection.execute(text("PRAGMA table_info(file_complexity)"))
-        }
-        for column_name, statement in column_statements.items():
-            if column_name not in existing_columns:
-                connection.execute(text(statement))
+        _add_missing_columns(connection, "file_complexity", {
+            "mode": "ALTER TABLE file_complexity ADD COLUMN mode VARCHAR",
+            "multiplier": "ALTER TABLE file_complexity ADD COLUMN multiplier FLOAT",
+            "calculation": "ALTER TABLE file_complexity ADD COLUMN calculation TEXT",
+        })
+        _add_missing_columns(connection, "file_chunks", {
+            "semantic_units": "ALTER TABLE file_chunks ADD COLUMN semantic_units TEXT",
+            "converted_code": "ALTER TABLE file_chunks ADD COLUMN converted_code TEXT",
+            "summary": "ALTER TABLE file_chunks ADD COLUMN summary TEXT",
+            "tokens_used": "ALTER TABLE file_chunks ADD COLUMN tokens_used INTEGER DEFAULT 0",
+            "processing_time": "ALTER TABLE file_chunks ADD COLUMN processing_time FLOAT DEFAULT 0",
+            "status": "ALTER TABLE file_chunks ADD COLUMN status VARCHAR DEFAULT 'PENDING'",
+            "error_message": "ALTER TABLE file_chunks ADD COLUMN error_message TEXT",
+        })
+        _add_missing_columns(connection, "type_mapping_table", {
+            "file_id": "ALTER TABLE type_mapping_table ADD COLUMN file_id INTEGER",
+            "legacy_type": "ALTER TABLE type_mapping_table ADD COLUMN legacy_type VARCHAR",
+            "target_type": "ALTER TABLE type_mapping_table ADD COLUMN target_type VARCHAR",
+            "target_field_name": "ALTER TABLE type_mapping_table ADD COLUMN target_field_name VARCHAR",
+        })
+        _add_missing_columns(connection, "signature_registry", {
+            "file_id": "ALTER TABLE signature_registry ADD COLUMN file_id INTEGER",
+            "target_method_name": "ALTER TABLE signature_registry ADD COLUMN target_method_name VARCHAR",
+            "target_signature": "ALTER TABLE signature_registry ADD COLUMN target_signature VARCHAR",
+            "converted_chunk_index": "ALTER TABLE signature_registry ADD COLUMN converted_chunk_index INTEGER",
+        })
+        _add_missing_columns(connection, "consistency_discrepancies", {
+            "file_id": "ALTER TABLE consistency_discrepancies ADD COLUMN file_id INTEGER",
+            "chunk_index": "ALTER TABLE consistency_discrepancies ADD COLUMN chunk_index INTEGER",
+        })
 
 
 def ensure_indexes():
@@ -54,7 +82,13 @@ def ensure_indexes():
         "CREATE INDEX IF NOT EXISTS ix_project_files_run_id_lang ON project_files (run_id, detected_lang)",
         "CREATE INDEX IF NOT EXISTS ix_file_relations_run_id ON file_relations (run_id)",
         "CREATE INDEX IF NOT EXISTS ix_file_chunks_run_id_file_id ON file_chunks (run_id, file_id)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_file_chunks_run_file_idx ON file_chunks (run_id, file_id, chunk_index)",
         "CREATE INDEX IF NOT EXISTS ix_file_complexity_run_id ON file_complexity (run_id)",
+        "CREATE INDEX IF NOT EXISTS ix_type_mapping_run_file ON type_mapping_table (run_id, file_id)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_type_mapping_run_file_var ON type_mapping_table (run_id, file_id, legacy_variable)",
+        "CREATE INDEX IF NOT EXISTS ix_signature_registry_run_file ON signature_registry (run_id, file_id)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_signature_registry_run_file_name ON signature_registry (run_id, file_id, legacy_name)",
+        "CREATE INDEX IF NOT EXISTS ix_discrepancies_run_file ON consistency_discrepancies (run_id, file_id)",
     ]
 
     with engine.begin() as connection:
@@ -68,3 +102,5 @@ def get_db():
         yield db
     finally:
         db.close()
+
+

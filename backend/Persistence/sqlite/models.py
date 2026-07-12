@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enum, Text
+﻿from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enum, Text
 from sqlalchemy.ext.declarative import declarative_base
 import enum
 import datetime
@@ -45,7 +45,16 @@ class ProjectFile(Base):
     detected_lang = Column(String)
     status = Column(Enum(FileStatus), default=FileStatus.PENDING_CONFIRMATION)
 
-
+class ChunkAnalysis(Base):
+    __tablename__ = "chunk_analysis"
+    
+    id = Column(Integer, primary_key=True)
+    chunk_id = Column(Integer, ForeignKey("file_chunks.id"), nullable=False)
+    run_id = Column(String, nullable=False)
+    technical_yaml = Column(Text, nullable=False) # The structured blueprint
+    analysis_status = Column(String, default="COMPLETED") # COMPLETED, FAILED
+    tokens_used = Column(Integer)
+    
 class ProjectComplexity(Base):
     __tablename__ = "project_complexity"
     run_id = Column(String, ForeignKey("projects.run_id"), primary_key=True)
@@ -86,6 +95,49 @@ class FileChunk(Base):
     start_line = Column(Integer)
     end_line = Column(Integer)
     overlap_content = Column(Text)
+    semantic_units = Column(Text)
+    converted_code = Column(Text)
+    summary = Column(Text)
+    tokens_used = Column(Integer, default=0)
+    processing_time = Column(Float, default=0)
+    status = Column(String, default="PENDING")
+    error_message = Column(Text)
+
+
+class TypeMappingTable(Base):
+    __tablename__ = "type_mapping_table"
+    id = Column(Integer, primary_key=True)
+    run_id = Column(String, ForeignKey("projects.run_id"), nullable=False)
+    file_id = Column(Integer, ForeignKey("project_files.id"), nullable=True)
+    legacy_variable = Column(String, nullable=False)
+    legacy_type = Column(String)
+    target_type = Column(String)
+    target_field_name = Column(String)
+
+
+class SignatureRegistry(Base):
+    __tablename__ = "signature_registry"
+    id = Column(Integer, primary_key=True)
+    run_id = Column(String, ForeignKey("projects.run_id"), nullable=False)
+    file_id = Column(Integer, ForeignKey("project_files.id"), nullable=True)
+    legacy_name = Column(String, nullable=False)
+    target_method_name = Column(String)
+    target_signature = Column(String)
+    converted_chunk_index = Column(Integer, nullable=True)
+
+
+class ConsistencyDiscrepancy(Base):
+    __tablename__ = "consistency_discrepancies"
+    id = Column(Integer, primary_key=True)
+    run_id = Column(String, ForeignKey("projects.run_id"), nullable=False)
+    file_id = Column(Integer, ForeignKey("project_files.id"), nullable=True)
+    chunk_index = Column(Integer, nullable=True)
+    discrepancy_type = Column(String, nullable=False)
+    legacy_name = Column(String)
+    expected_value = Column(Text)
+    actual_value = Column(Text)
+    message = Column(Text)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 
 class FileRelation(Base):
