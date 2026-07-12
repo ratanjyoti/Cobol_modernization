@@ -1,7 +1,8 @@
-﻿import os
+import os
 import zipfile
 import asyncio
 import shutil
+import json
 from pathlib import Path
 from typing import List, Dict, Any, Set
 import stat 
@@ -10,7 +11,7 @@ from git import GitCommandError, Repo
 # Models and Services
 from Persistence.sqlite.models import FileChunk, FileComplexity, FileRelation, ProjectFile, FileStatus, ProjectComplexity
 from Chunking.core.language_detector import LanguageDetector
-from Chunking.core.complexity_scorer import ComplexityScorer
+from Chunking.core.complexity_manager import ComplexityManager
 from Chunking.core.sizing_router import SizingRouter
 from Chunking.chunking_orchestrator import ChunkingOrchestrator
 from Chunking.dependency_scanner.dependency_manager import DependencyManager
@@ -19,6 +20,10 @@ from Processes.graphing_process import GraphingProcess
 from paths import UPLOADS_DIR
 from source.websockets.socket_manager import manager
 
+class GitHubIngestionError(RuntimeError):
+    pass
+
+
 class DiscoveryProcess:
     def __init__(self, db_session, upload_dir=None):
         self.db = db_session
@@ -26,7 +31,7 @@ class DiscoveryProcess:
         self.detector = LanguageDetector()
         
         # Initialize the "Intelligence" tools
-        self.scorer = ComplexityScorer()
+        self.scorer = ComplexityManager()
         self.chunking_orchestrator = ChunkingOrchestrator(self.db)
         
         self.allowed_extensions: Set[str] = {
@@ -91,7 +96,7 @@ class DiscoveryProcess:
         dep_manager.scan_and_store(run_id, rel_path, content, lang)
 
         # B. Complexity Scoring
-        comp_data = self.scorer.calculate_score(content)
+        comp_data = self.scorer.score_file(content, lang)
         existing_file_complexity = self.db.query(FileComplexity).filter(
             FileComplexity.run_id == run_id,
             FileComplexity.file_id == project_file.id,
@@ -101,14 +106,17 @@ class DiscoveryProcess:
             "filepath": rel_path,
             "score": comp_data["score"],
             "tier": comp_data["tier"],
-            "effort": comp_data["reasoning_effort"],
-            "logic_count": comp_data["logic_count"],
-            "table_count": comp_data["table_count"],
-            "table_bonus": comp_data["table_bonus"],
-            "if_count": comp_data["if_count"],
-            "perform_until_count": comp_data["perform_until_count"],
-            "perform_varying_count": comp_data["perform_varying_count"],
-            "evaluate_count": comp_data["evaluate_count"],
+            "effort": comp_data["mode"],
+            "mode": comp_data["mode"],
+            "multiplier": comp_data["multiplier"],
+            "calculation": json.dumps(comp_data["calculation"]),
+            "logic_count": comp_data["score"],
+            "table_count": 0,
+            "table_bonus": 0,
+            "if_count": 0,
+            "perform_until_count": 0,
+            "perform_varying_count": 0,
+            "evaluate_count": 0,
         }
         if existing_file_complexity:
             for key, value in file_complexity_values.items():
@@ -127,13 +135,13 @@ class DiscoveryProcess:
             if comp_data["score"] > (existing_complexity.score or 0):
                 existing_complexity.score = comp_data["score"]
                 existing_complexity.tier = comp_data["tier"]
-                existing_complexity.reasoning_effort = comp_data["reasoning_effort"]
+                existing_complexity.reasoning_effort = comp_data["mode"]
         else:
             self.db.add(ProjectComplexity(
                 run_id=run_id,
                 score=comp_data["score"],
                 tier=comp_data["tier"],
-                reasoning_effort=comp_data["reasoning_effort"],
+                reasoning_effort=comp_data["mode"],
             ))
 
         # C. Smart Chunking
@@ -268,10 +276,36 @@ class DiscoveryProcess:
 
         return await self.process_folder(run_id, str(source_path), analyze_inline)
 
+    def _cleanup_project_folder(self, project_folder: Path) -> bool:
+        try:
+            self._force_remove_tree(project_folder)
+            return True
+        except Exception as exc:
+            print(f"Could not clean up partial ingestion folder {project_folder}: {exc}")
+            return False
+
+    def _format_git_clone_error(self, repo_url: str, exc: GitCommandError) -> str:
+        stderr = (getattr(exc, "stderr", "") or "").strip()
+        message = stderr or str(exc)
+        lowered = message.lower()
+
+        if "could not resolve host" in lowered:
+            return (
+                "Cannot resolve github.com from the backend host. "
+                "Check DNS/internet/proxy access for the running backend process, then try again. "
+                "As a workaround, download the repository as a ZIP from GitHub and upload it, or use Local Repository ingestion."
+            )
+        if "authentication failed" in lowered or "could not read username" in lowered:
+            return "GitHub authentication failed. For private repositories, provide a valid GitHub token."
+        if "repository not found" in lowered or "not found" in lowered:
+            return f"GitHub repository was not found or is not accessible: {repo_url}"
+        if "unable to access" in lowered:
+            return f"Unable to access GitHub repository: {repo_url}. Git output: {message}"
+        return f"GitHub clone failed for {repo_url}. Git output: {message}"
     async def ingest_github_repo(self, run_id: str, repo_url: str, github_token: str = None, analyze_inline: bool = True) -> List[Dict[str, Any]]:
         project_folder = self.upload_dir / run_id
-        if project_folder.exists():
-            self._force_remove_tree(project_folder)
+        if project_folder.exists() and not self._cleanup_project_folder(project_folder):
+            raise GitHubIngestionError(f"Cannot prepare upload folder for GitHub ingestion: {project_folder}")
         project_folder.mkdir(parents=True, exist_ok=True)
 
         clone_url = repo_url
@@ -285,9 +319,12 @@ class DiscoveryProcess:
                 self._force_remove_tree(git_dir)
 
             return await self.process_folder(run_id, str(project_folder), analyze_inline)
-        except Exception:
-            self._force_remove_tree(project_folder)
-            raise
+        except GitCommandError as exc:
+            self._cleanup_project_folder(project_folder)
+            raise GitHubIngestionError(self._format_git_clone_error(repo_url, exc)) from exc
+        except Exception as exc:
+            self._cleanup_project_folder(project_folder)
+            raise GitHubIngestionError(f"GitHub ingestion failed before analysis could start: {exc}") from exc
 
     async def process_folder_upload(self, run_id: str, files: List[Any], paths: List[str], analyze_inline: bool = True) -> List[Dict[str, Any]]:
         project_folder = self.upload_dir / run_id / "local_repo"
@@ -417,6 +454,16 @@ class DiscoveryProcess:
 
     async def process_upload(self, run_id: str, zip_path: str, analyze_inline: bool = True):
         return await self.process_zip_upload(run_id, zip_path, analyze_inline)
+
+
+
+
+
+
+
+
+
+
 
 
 

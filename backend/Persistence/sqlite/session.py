@@ -26,7 +26,25 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+    ensure_schema_columns()
     ensure_indexes()
+
+
+def ensure_schema_columns():
+    column_statements = {
+        "mode": "ALTER TABLE file_complexity ADD COLUMN mode VARCHAR",
+        "multiplier": "ALTER TABLE file_complexity ADD COLUMN multiplier FLOAT",
+        "calculation": "ALTER TABLE file_complexity ADD COLUMN calculation TEXT",
+    }
+
+    with engine.begin() as connection:
+        existing_columns = {
+            row[1]
+            for row in connection.execute(text("PRAGMA table_info(file_complexity)"))
+        }
+        for column_name, statement in column_statements.items():
+            if column_name not in existing_columns:
+                connection.execute(text(statement))
 
 
 def ensure_indexes():

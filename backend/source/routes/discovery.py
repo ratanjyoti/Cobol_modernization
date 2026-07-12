@@ -1,5 +1,6 @@
 from typing import List, Optional
 import asyncio
+import json
 import os
 import shutil
 import stat
@@ -22,7 +23,7 @@ from sqlalchemy.orm import Session
 from Persistence.neo4j.graph_service import GraphService
 from Persistence.sqlite.models import FileChunk, FileComplexity, FileRelation, FileStatus, ProjectFile, ProjectComplexity
 from Persistence.sqlite.session import SessionLocal, get_db
-from Processes.discovery_process import DiscoveryProcess
+from Processes.discovery_process import DiscoveryProcess, GitHubIngestionError
 from Processes.graphing_process import GraphingProcess
 from source.websockets.socket_manager import manager
 from Chunking.chunking_orchestrator import ChunkingOrchestrator
@@ -51,6 +52,14 @@ def remove_tree_sync(path: Path):
     if path.exists():
         shutil.rmtree(path, onerror=handle_remove_error)
 
+def parse_calculation(calculation: str | None):
+    if not calculation:
+        return []
+    try:
+        parsed = json.loads(calculation)
+        return parsed if isinstance(parsed, list) else []
+    except (TypeError, json.JSONDecodeError):
+        return []
 
 def run_analysis_task(run_id: str):
     """Build dependency maps and analysis data after upload without blocking the response."""
@@ -85,8 +94,9 @@ async def get_complexity(run_id: str, db: Session = Depends(get_db)):
             "filepath": fs.filepath,
             "score": fs.score or 0,
             "tier": fs.tier or "Low",
-            "effort": fs.effort or "Turbo",
-            "mode": fs.effort or "Turbo",
+            "effort": fs.mode or fs.effort or "Turbo",
+            "mode": fs.mode or fs.effort or "Turbo",
+            "multiplier": fs.multiplier or 1.5,
             "chunks": chunk_count or 1,
             "logic_count": fs.logic_count or 0,
             "table_count": fs.table_count or 0,
@@ -95,13 +105,7 @@ async def get_complexity(run_id: str, db: Session = Depends(get_db)):
             "perform_until_count": fs.perform_until_count or 0,
             "perform_varying_count": fs.perform_varying_count or 0,
             "evaluate_count": fs.evaluate_count or 0,
-            "calculation": [
-                {"label": "IF statements", "value": fs.if_count or 0, "points": fs.if_count or 0},
-                {"label": "PERFORM UNTIL loops", "value": fs.perform_until_count or 0, "points": fs.perform_until_count or 0},
-                {"label": "PERFORM VARYING loops", "value": fs.perform_varying_count or 0, "points": fs.perform_varying_count or 0},
-                {"label": "EVALUATE branches", "value": fs.evaluate_count or 0, "points": fs.evaluate_count or 0},
-                {"label": "Unique SQL tables", "value": fs.table_count or 0, "points": fs.table_bonus or 0},
-            ],
+            "calculation": parse_calculation(fs.calculation),
         })
 
     average_score = round(total_score / len(file_scores), 1) if file_scores else 0
@@ -110,7 +114,7 @@ async def get_complexity(run_id: str, db: Session = Depends(get_db)):
         "overall_effort": proj_comp.reasoning_effort if proj_comp else "Balanced",
         "average_score": average_score,
         "files": file_breakdown,
-        "method": "Score = IF + PERFORM UNTIL + PERFORM VARYING + EVALUATE counts, plus 5 points when more than 3 unique SQL tables are referenced. Score < 5 uses Turbo, 5-14 uses Balanced, and 15+ uses Thorough.",
+        "method": "Language-specific complexity scoring. COBOL uses weighted indicators plus density/proximity/database bonuses; JCL uses step, DD, include, output, and conditional intensity; Telon uses panel, screen, map, and field density. Score < 5 uses Turbo, 5-14 uses Balanced, and 15+ uses Thorough.",
     }
 
 
@@ -419,10 +423,12 @@ async def ingest_github(
             "mapped_files": mapped_files,
             "analysis_status": "queued",
         }
+    except GitHubIngestionError as e:
+        print(f"GitHub Error: {str(e)}")
+        raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
         print(f"GitHub Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"GitHub ingestion failed: {str(e)}")
-
+        raise HTTPException(status_code=500, detail=f"GitHub ingestion failed unexpectedly: {str(e)}")
 
 @router.post("/upload")
 async def upload_source(
@@ -526,3 +532,8 @@ async def confirm_language(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+
+
+

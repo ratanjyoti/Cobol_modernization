@@ -115,8 +115,8 @@ const ReverseEngineering = () => {
         ))}
       </div>
 
-      <div className="grid grid-cols-12 gap-6 h-[calc(100vh-260px)] min-h-[560px]">
-        <div className="col-span-12 xl:col-span-9 glass-card p-6 overflow-y-auto relative">
+      <div className="grid grid-cols-12 gap-6 min-h-[560px] xl:min-h-[calc(100vh-260px)]">
+        <div className="col-span-12 xl:col-span-9 glass-card p-6 relative min-h-0">
           {loading && <div className="absolute inset-0 bg-slate-900/70 flex items-center justify-center z-10"><Loader2 className="animate-spin text-indigo-500" /></div>}
           {error && <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</div>}
 
@@ -142,7 +142,7 @@ const ReverseEngineering = () => {
                   <span className="font-bold text-indigo-300">How scoring works: </span>{complexityData?.method || 'Upload files to calculate complexity.'}
                 </div>
 
-                <div className="space-y-3">
+                <div className="max-h-[calc(100vh-460px)] min-h-[260px] space-y-3 overflow-y-auto pr-1">
                   {(complexityData?.files || []).map((file: any) => (
                     <button
                       key={file.id || file.name}
@@ -175,9 +175,9 @@ const ReverseEngineering = () => {
                   <div className="rounded-xl border border-slate-800 bg-slate-950 p-4"><p className="text-xs uppercase font-bold text-slate-500">Relations</p><p className="mt-1 text-xl font-bold text-white">{dependencySummary.edges}</p></div>
                   <div className="rounded-xl border border-slate-800 bg-slate-950 p-4"><p className="text-xs uppercase font-bold text-slate-500">Unresolved</p><p className="mt-1 text-xl font-bold text-white">{dependencySummary.unresolved}</p></div>
                 </div>
-                <div className="rounded-xl border border-slate-800 overflow-hidden">
+                <div className="max-h-[calc(100vh-430px)] min-h-[300px] overflow-auto rounded-xl border border-slate-800">
                   <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-800 text-slate-400 text-xs uppercase"><tr><th className="p-3">Source</th><th className="p-3">Relation</th><th className="p-3">Target</th></tr></thead>
+                    <thead className="sticky top-0 z-10 bg-slate-800 text-slate-400 text-xs uppercase"><tr><th className="p-3">Source</th><th className="p-3">Relation</th><th className="p-3">Target</th></tr></thead>
                     <tbody className="divide-y divide-slate-800">
                       {(graphData?.edges || []).map((edge: any, index: number) => <tr key={`${edge.from}-${edge.to}-${index}`} className="text-slate-300"><td className="p-3 font-mono text-xs">{edge.from}</td><td className="p-3 text-indigo-300 text-xs font-bold">{edge.type}</td><td className="p-3 font-mono text-xs">{edge.to}</td></tr>)}
                     </tbody>
@@ -239,6 +239,7 @@ const ReverseEngineering = () => {
 };
 
 export default ReverseEngineering;
+
 
 
 
