@@ -138,7 +138,7 @@ class CobolComplexityScorer(BaseComplexityScorer):
             points = call_count * 2
             score += points
             calculation.append({
-                "label": f"CALL ({call_count}x2)",
+                "label": f"CALL ({call_count} x 2)",
                 "points": points
             })
 
@@ -153,7 +153,7 @@ class CobolComplexityScorer(BaseComplexityScorer):
                 points = count * weight
                 score += points
                 calculation.append({
-                    "label": f"{label} ({count}x{weight})",
+                    "label": f"{label} ({count} x {weight})",
                     "points": points
                 })
 

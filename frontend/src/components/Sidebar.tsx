@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, FolderOpen, Cpu, FileText,
   MessageSquare, Code2, Activity, Settings,
-  Database, Menu, Moon, Sun, BrainCircuit, Zap,
+  Database, Menu, Moon, Sun, BrainCircuit, Zap, Workflow, ShieldCheck,
 } from 'lucide-react';
 import Tooltip from './Tooltip';
 
@@ -36,6 +36,7 @@ const menuGroups = [
     items: [
       { name: 'Code Gen',        path: '/code-generation', icon: Code2,         desc: 'Generate modern application code from the analyzed legacy system.' },
       { name: 'AI Chat',         path: '/chat',            icon: MessageSquare, desc: 'Ask guided questions about the migration and generated outputs.' },
+      { name: 'Modernization Plan', path: '/modernization-plan', icon: Workflow, desc: 'View the staged blueprint and execution roadmap.' },
     ],
   },
   {
@@ -44,6 +45,7 @@ const menuGroups = [
       { name: 'Mission Control', path: '/mission-control', icon: Activity, desc: 'Monitor pipeline execution, validation loops, and run status.' },
       { name: 'Prompt Studio',   path: '/prompt-studio',   icon: Zap,      desc: 'Edit and tune prompts used by modernization agents.' },
       { name: 'AI Configuration', path: '/settings',        icon: Settings, desc: 'Change provider, API key, endpoint, and model settings.' },
+      { name: 'System Admin',     path: '/admin',           icon: ShieldCheck, desc: 'Manage global administration and platform settings.' },
     ],
   },
 ];
@@ -69,6 +71,8 @@ const Sidebar = ({ isOpen, toggleSidebar, theme, toggleTheme }: SidebarProps) =>
       >
         <button
           onClick={toggleSidebar}
+          aria-label={isOpen ? 'Collapse sidebar' : 'Open sidebar'}
+          title={isOpen ? 'Collapse sidebar' : 'Open sidebar'}
           className="p-2 rounded-lg transition-all duration-150"
           style={{ color: 'var(--corporate-muted)' }}
           onMouseEnter={e => {
@@ -91,6 +95,8 @@ const Sidebar = ({ isOpen, toggleSidebar, theme, toggleTheme }: SidebarProps) =>
               exit={{ opacity: 0, scale: 0.7 }}
               transition={{ duration: 0.15 }}
               onClick={toggleTheme}
+              aria-label={'Toggle theme'}
+              title={'Toggle theme'}
               className="p-2 rounded-lg transition-all duration-150"
               style={{ color: 'var(--corporate-muted)' }}
               onMouseEnter={e => {
@@ -282,6 +288,8 @@ const Sidebar = ({ isOpen, toggleSidebar, theme, toggleTheme }: SidebarProps) =>
 };
 
 export default Sidebar;
+
+
 
 
 

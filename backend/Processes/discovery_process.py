@@ -5,7 +5,8 @@ import shutil
 import json
 from pathlib import Path
 from typing import List, Dict, Any, Set
-import stat 
+import stat
+import subprocess
 from git import GitCommandError, Repo
 
 # Models and Services
@@ -284,11 +285,46 @@ class DiscoveryProcess:
             print(f"Could not clean up partial ingestion folder {project_folder}: {exc}")
             return False
 
-    def _format_git_clone_error(self, repo_url: str, exc: GitCommandError) -> str:
-        stderr = (getattr(exc, "stderr", "") or "").strip()
-        message = stderr or str(exc)
+    def _git_clone_env(self) -> dict:
+        env = os.environ.copy()
+        for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+            env.pop(key, None)
+        return env
+
+    def _clone_repo_without_proxy(self, clone_url: str, destination: Path, display_url: str):
+        command = [
+            "git",
+            "-c", "http.proxy=",
+            "-c", "https.proxy=",
+            "-c", "http.https://github.com.proxy=",
+            "clone",
+            "--depth", "1",
+            clone_url,
+            str(destination),
+        ]
+        result = subprocess.run(
+            command,
+            cwd=str(self.upload_dir),
+            env=self._git_clone_env(),
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        if result.returncode != 0:
+            raise GitHubIngestionError(self._format_git_clone_error(repo_url=display_url, message=(result.stderr or result.stdout or "")))
+
+    def _format_git_clone_error(self, repo_url: str, exc: GitCommandError = None, message: str = "") -> str:
+        if exc is not None:
+            stderr = (getattr(exc, "stderr", "") or "").strip()
+            message = stderr or str(exc)
+        message = (message or "").strip()
         lowered = message.lower()
 
+        if "127.0.0.1 port 9" in lowered or "localhost port 9" in lowered:
+            return (
+                "Git is configured to use a broken local proxy at 127.0.0.1:9. "
+                "Unset HTTP_PROXY, HTTPS_PROXY, and ALL_PROXY for the backend process, then try again."
+            )
         if "could not resolve host" in lowered:
             return (
                 "Cannot resolve github.com from the backend host. "
@@ -313,7 +349,7 @@ class DiscoveryProcess:
             clone_url = repo_url.replace("https://", f"https://{github_token}@", 1)
 
         try:
-            await asyncio.to_thread(Repo.clone_from, clone_url, str(project_folder), depth=1)
+            await asyncio.to_thread(self._clone_repo_without_proxy, clone_url, project_folder, repo_url)
             git_dir = project_folder / ".git"
             if git_dir.exists():
                 self._force_remove_tree(git_dir)
@@ -321,7 +357,10 @@ class DiscoveryProcess:
             return await self.process_folder(run_id, str(project_folder), analyze_inline)
         except GitCommandError as exc:
             self._cleanup_project_folder(project_folder)
-            raise GitHubIngestionError(self._format_git_clone_error(repo_url, exc)) from exc
+            raise GitHubIngestionError(self._format_git_clone_error(repo_url, exc=exc)) from exc
+        except GitHubIngestionError:
+            self._cleanup_project_folder(project_folder)
+            raise
         except Exception as exc:
             self._cleanup_project_folder(project_folder)
             raise GitHubIngestionError(f"GitHub ingestion failed before analysis could start: {exc}") from exc

@@ -31,7 +31,7 @@ class TelonComplexityScorer(BaseComplexityScorer):
             if count > 0:
                 points = count * weight
                 score += points
-                calculation.append({"label": f"{label} ({count}x{weight})", "points": points})
+                calculation.append({"label": f"{label} ({count} x {weight})", "points": points})
 
         field_count = len(re.findall(r"\bFIELD\b", clean_code, re.IGNORECASE))
         if (field_count / total_lines) > 0.20:

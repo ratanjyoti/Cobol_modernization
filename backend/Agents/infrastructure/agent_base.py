@@ -1,5 +1,6 @@
-from Agents.interfaces.i_analyzer_agent import IAnalyzerAgent
-
-class Agent_base():
+class AgentBase:
     def __init__(self):
         pass
+
+
+Agent_base = AgentBase

@@ -2,6 +2,7 @@ from typing import List, Optional
 import asyncio
 import json
 import os
+import re
 import shutil
 import stat
 from pathlib import Path
@@ -25,8 +26,11 @@ from Persistence.sqlite.models import FileChunk, FileComplexity, FileRelation, F
 from Persistence.sqlite.session import SessionLocal, get_db
 from Processes.discovery_process import DiscoveryProcess, GitHubIngestionError
 from Processes.graphing_process import GraphingProcess
+from Processes.analysis_process import AnalysisProcess
+from Config.llm_config import settings
 from source.websockets.socket_manager import manager
 from Chunking.chunking_orchestrator import ChunkingOrchestrator
+from Chunking.core.complexity_manager import ComplexityManager
 from Chunking.dependency_scanner.resolution_service import ResolutionService
 from paths import UPLOADS_DIR
 
@@ -61,6 +65,85 @@ def parse_calculation(calculation: str | None):
     except (TypeError, json.JSONDecodeError):
         return []
 
+
+LEGACY_CALCULATION_LABELS = {
+    "IF statements",
+    "PERFORM UNTIL loops",
+    "PERFORM VARYING loops",
+    "EVALUATE branches",
+    "Unique SQL tables",
+}
+
+
+def has_current_calculation(calculation: list) -> bool:
+    return any(
+        isinstance(item, dict)
+        and item.get("label")
+        and item.get("label") not in LEGACY_CALCULATION_LABELS
+        for item in calculation
+    )
+
+
+def normalize_calculation_labels(calculation: list) -> list:
+    normalized = []
+    for item in calculation:
+        if not isinstance(item, dict):
+            continue
+        label = item.get("label")
+        if not label:
+            continue
+        normalized.append({
+            **item,
+            "label": re.sub(r"\((\d+)x(\d+)\)", r"(\1 x \2)", label),
+        })
+    return normalized
+
+
+def safe_relative_upload_path(rel_path: str | None) -> Path | None:
+    normalized = (rel_path or "").replace("\\", "/").strip("/")
+    parts = [part for part in normalized.split("/") if part]
+    if not parts or any(part in {".", ".."} for part in parts) or any(":" in part for part in parts):
+        return None
+    path = Path(*parts)
+    return None if path.is_absolute() else path
+
+
+def uploaded_file_candidates(run_id: str, filepath: str | None, filename: str | None) -> list[Path]:
+    project_folder = UPLOADS_DIR / run_id
+    candidates = []
+    rel_path = safe_relative_upload_path(filepath or filename)
+    if rel_path is not None:
+        candidates.append(project_folder / rel_path)
+        candidates.append(project_folder / "local_repo" / rel_path)
+    if filename:
+        candidates.append(project_folder / filename)
+    return candidates
+
+
+def read_uploaded_file_content(run_id: str, filepath: str | None, filename: str | None) -> str:
+    for candidate in uploaded_file_candidates(run_id, filepath, filename):
+        try:
+            if candidate.exists() and candidate.is_file():
+                return candidate.read_text(errors="ignore")
+        except OSError as exc:
+            print(f"Could not read file {candidate}: {exc}")
+    return ""
+
+
+def infer_file_language(project_file: ProjectFile | None, filename: str | None) -> str:
+    detected_lang = (project_file.detected_lang if project_file else "") or ""
+    if detected_lang.strip():
+        return detected_lang
+
+    suffix = Path(filename or "").suffix.lower()
+    if suffix in {".cbl", ".cob", ".cpy"}:
+        return "cobol"
+    if suffix == ".jcl":
+        return "jcl"
+    if suffix in {".tln", ".tel"}:
+        return "telon"
+    return "unknown"
+
 def run_analysis_task(run_id: str):
     """Build dependency maps and analysis data after upload without blocking the response."""
     db = SessionLocal()
@@ -78,6 +161,7 @@ def run_analysis_task(run_id: str):
 async def get_complexity(run_id: str, db: Session = Depends(get_db)):
     proj_comp = db.query(ProjectComplexity).filter_by(run_id=run_id).first()
     file_scores = db.query(FileComplexity).filter_by(run_id=run_id).order_by(FileComplexity.score.desc()).all()
+    scorer = ComplexityManager()
 
     file_breakdown = []
     total_score = 0
@@ -86,17 +170,43 @@ async def get_complexity(run_id: str, db: Session = Depends(get_db)):
             FileChunk.run_id == run_id,
             FileChunk.file_id == fs.file_id,
         ).count()
-        total_score += fs.score or 0
+
+        project_file = None
+        if fs.file_id:
+            project_file = db.query(ProjectFile).filter(
+                ProjectFile.run_id == run_id,
+                ProjectFile.id == fs.file_id,
+            ).first()
+
+        calculation = normalize_calculation_labels(parse_calculation(fs.calculation))
+        score = fs.score or 0
+        tier = fs.tier or "Low"
+        mode = fs.mode or fs.effort or "Turbo"
+        multiplier = fs.multiplier or 1.5
+
+        if not has_current_calculation(calculation):
+            content = read_uploaded_file_content(run_id, fs.filepath, fs.filename)
+            if content:
+                lang = infer_file_language(project_file, fs.filename)
+                recalculated = scorer.score_file(content, lang)
+                if recalculated.get("calculation"):
+                    calculation = normalize_calculation_labels(recalculated["calculation"])
+                    score = recalculated["score"]
+                    tier = recalculated["tier"]
+                    mode = recalculated["mode"]
+                    multiplier = recalculated["multiplier"]
+
+        total_score += score
         file_breakdown.append({
             "id": str(fs.file_id or fs.id),
             "name": fs.filename,
             "filename": fs.filename,
             "filepath": fs.filepath,
-            "score": fs.score or 0,
-            "tier": fs.tier or "Low",
-            "effort": fs.mode or fs.effort or "Turbo",
-            "mode": fs.mode or fs.effort or "Turbo",
-            "multiplier": fs.multiplier or 1.5,
+            "score": score,
+            "tier": tier,
+            "effort": mode,
+            "mode": mode,
+            "multiplier": multiplier,
             "chunks": chunk_count or 1,
             "logic_count": fs.logic_count or 0,
             "table_count": fs.table_count or 0,
@@ -105,7 +215,7 @@ async def get_complexity(run_id: str, db: Session = Depends(get_db)):
             "perform_until_count": fs.perform_until_count or 0,
             "perform_varying_count": fs.perform_varying_count or 0,
             "evaluate_count": fs.evaluate_count or 0,
-            "calculation": parse_calculation(fs.calculation),
+            "calculation": calculation,
         })
 
     average_score = round(total_score / len(file_scores), 1) if file_scores else 0
@@ -116,7 +226,6 @@ async def get_complexity(run_id: str, db: Session = Depends(get_db)):
         "files": file_breakdown,
         "method": "Language-specific complexity scoring. COBOL uses weighted indicators plus density/proximity/database bonuses; JCL uses step, DD, include, output, and conditional intensity; Telon uses panel, screen, map, and field density. Score < 5 uses Turbo, 5-14 uses Balanced, and 15+ uses Thorough.",
     }
-
 
 # 2. THE DEPENDENCIES TAB DATA
 @router.get("/graph/{run_id}")
@@ -261,13 +370,13 @@ async def launch_pipeline(
     # 1. Run Neo4j Graphing in background
     background_tasks.add_task(run_graphing_task, run_id)
     
-    # 2. Run Smart Chunking in background (Slicing the code)
-    background_tasks.add_task(run_chunking_task, run_id)
+    # 2. Run Smart Chunking, then Technical YAML, in order.
+    background_tasks.add_task(run_chunking_then_analysis_task, run_id)
 
     return {
         "status": "Pipeline Launched",
         "run_id": run_id,
-        "parallel_tasks": ["Neo4j_Graphing", "Semantic_Chunking"],
+        "parallel_tasks": ["Neo4j_Graphing", "Semantic_Chunking", "Technical_Analysis"],
     }
 
 def run_graphing_task(run_id: str):
@@ -280,6 +389,27 @@ def run_graphing_task(run_id: str):
         print(f"Graphing skipped for {run_id}: {str(e)}")
     finally:
         db.close()
+
+
+def run_technical_analysis_task(run_id: str):
+    """Generate Technical YAML rows consumed by business-rule extraction."""
+    db = SessionLocal()
+    try:
+        provider = "openrouter" if settings.OPENROUTER_API_KEY else "local"
+        asyncio.run(AnalysisProcess(db, provider).analyze_project(run_id))
+        print(f"Technical analysis completed for project {run_id}")
+    except Exception as e:
+        db.rollback()
+        print(f"Technical analysis failed for {run_id}: {str(e)}")
+    finally:
+        db.close()
+
+
+def run_chunking_then_analysis_task(run_id: str):
+    run_chunking_task(run_id)
+    run_technical_analysis_task(run_id)
+
+
 def run_chunking_task(run_id: str):
     """Process all confirmed files through the Smart Chunker."""
     db = SessionLocal()
@@ -532,6 +662,9 @@ async def confirm_language(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+
 
 
 

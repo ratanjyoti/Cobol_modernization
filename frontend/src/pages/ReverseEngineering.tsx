@@ -20,6 +20,29 @@ const modeStyle: Record<string, string> = {
   Turbo: 'text-emerald-300',
 };
 
+const CURRENT_COMPLEXITY_METHOD =
+  'Language-specific complexity scoring. COBOL uses weighted indicators such as CALL, EXEC SQL/CICS/DLI, PERFORM VARYING, EVALUATE, SEARCH ALL, REDEFINES, OCCURS DEPENDING, UNSTRING, ALTER, and GO TO DEPENDING, plus density/proximity/database bonuses. JCL and Telon use their own weighted indicators. Score < 5 uses Turbo, 5-14 uses Balanced, and 15+ uses Thorough.';
+
+const LEGACY_CALCULATION_LABELS = new Set([
+  'IF statements',
+  'PERFORM UNTIL loops',
+  'PERFORM VARYING loops',
+  'EVALUATE branches',
+  'Unique SQL tables',
+]);
+
+const getComplexityMethod = (method?: string) => {
+  if (!method || method.includes('IF + PERFORM UNTIL')) return CURRENT_COMPLEXITY_METHOD;
+  return method;
+};
+
+const getCurrentCalculationRows = (calculation?: any[]) => {
+  if (!Array.isArray(calculation)) return [];
+  return calculation.filter((item) => item?.label && !LEGACY_CALCULATION_LABELS.has(item.label));
+};
+
+const formatCalculationLabel = (label: string) => label.replace(/\((\d+)x(\d+)\)/g, '($1 x $2)');
+
 const ReverseEngineering = () => {
   const runId = localStorage.getItem('active_run_id');
   const [activeTab, setActiveTab] = useState('complexity');
@@ -91,6 +114,11 @@ const ReverseEngineering = () => {
     return { nodes: nodes.length, edges: edges.length, unresolved };
   }, [graphData]);
 
+  const selectedCalculationRows = useMemo(
+    () => getCurrentCalculationRows(selectedFile?.calculation),
+    [selectedFile]
+  );
+
   return (
     <div className="space-y-6 h-full">
       <PageHeader
@@ -139,7 +167,7 @@ const ReverseEngineering = () => {
                 </div>
 
                 <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4 text-sm text-slate-300">
-                  <span className="font-bold text-indigo-300">How scoring works: </span>{complexityData?.method || 'Upload files to calculate complexity.'}
+                  <span className="font-bold text-indigo-300">How scoring works: </span>{getComplexityMethod(complexityData?.method)}
                 </div>
 
                 <div className="max-h-[calc(100vh-460px)] min-h-[260px] space-y-3 overflow-y-auto pr-1">
@@ -217,7 +245,13 @@ const ReverseEngineering = () => {
               </div>
               <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-3">
                 <div className="flex items-center gap-2 text-indigo-400 text-xs font-bold uppercase"><Zap size={14} /> Calculation</div>
-                {(selectedFile.calculation || []).map((item: any) => <div key={item.label} className="flex justify-between gap-3 text-sm"><span className="text-slate-500">{item.label}</span><span className="text-white font-mono">{item.points}</span></div>)}
+                {selectedCalculationRows.length > 0 ? (
+                  selectedCalculationRows.map((item: any) => <div key={item.label} className="flex justify-between gap-3 text-sm"><span className="text-slate-500">{formatCalculationLabel(item.label)}</span><span className="text-white font-mono">= {item.points}</span></div>)
+                ) : (
+                  <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs leading-relaxed text-slate-500">
+                    Weighted calculation details are not available for this saved result. Re-run discovery analysis to populate the current backend breakdown.
+                  </div>
+                )}
                 <div className="h-px bg-slate-800" />
                 <div className="flex justify-between text-sm font-bold"><span className="text-slate-300">Final Score</span><span className="text-indigo-300">{selectedFile.score}</span></div>
               </div>
@@ -239,7 +273,6 @@ const ReverseEngineering = () => {
 };
 
 export default ReverseEngineering;
-
 
 
 

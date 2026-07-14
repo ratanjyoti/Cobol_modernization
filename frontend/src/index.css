@@ -2765,3 +2765,31 @@ body:not(.dark) th {
     grid-template-columns: minmax(0, 1fr) !important;
   }
 }
+
+/* Fixed sidebar shell: keep navigation locked while page content scrolls. */
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+}
+
+.app-shell {
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+}
+
+.app-main {
+  height: 100vh;
+  min-height: 0;
+  overflow-y: auto !important;
+  overflow-x: hidden;
+}
+
+.app-shell aside.h-screen {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  max-height: 100vh;
+}

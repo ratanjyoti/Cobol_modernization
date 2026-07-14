@@ -28,7 +28,7 @@ class JclComplexityScorer(BaseComplexityScorer):
             if count > 0:
                 points = count * weight
                 score += points
-                calculation.append({"label": f"{label} ({count}x{weight})", "points": points})
+                calculation.append({"label": f"{label} ({count} x {weight})", "points": points})
 
         step_count = len(re.findall(r"^\s*//\S+\s+EXEC\b", clean_code, re.IGNORECASE | re.MULTILINE))
         if step_count > 10:

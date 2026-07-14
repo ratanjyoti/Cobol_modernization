@@ -1,4 +1,4 @@
-﻿from sqlalchemy import create_engine, event, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
 from paths import SQLITE_DB_PATH
 from Persistence.sqlite.models import Base
@@ -57,6 +57,16 @@ def ensure_schema_columns():
             "status": "ALTER TABLE file_chunks ADD COLUMN status VARCHAR DEFAULT 'PENDING'",
             "error_message": "ALTER TABLE file_chunks ADD COLUMN error_message TEXT",
         })
+        _add_missing_columns(connection, "business_rules", {
+            "chunk_id": "ALTER TABLE business_rules ADD COLUMN chunk_id INTEGER",
+            "rule_id": "ALTER TABLE business_rules ADD COLUMN rule_id VARCHAR",
+            "rule_text": "ALTER TABLE business_rules ADD COLUMN rule_text TEXT",
+            "technical_ref": "ALTER TABLE business_rules ADD COLUMN technical_ref TEXT",
+            "file_id": "ALTER TABLE business_rules ADD COLUMN file_id INTEGER",
+            "chunk_index": "ALTER TABLE business_rules ADD COLUMN chunk_index INTEGER",
+            "technical_yaml": "ALTER TABLE business_rules ADD COLUMN technical_yaml TEXT",
+            "business_logic": "ALTER TABLE business_rules ADD COLUMN business_logic TEXT",
+        })
         _add_missing_columns(connection, "type_mapping_table", {
             "file_id": "ALTER TABLE type_mapping_table ADD COLUMN file_id INTEGER",
             "legacy_type": "ALTER TABLE type_mapping_table ADD COLUMN legacy_type VARCHAR",
@@ -102,5 +112,6 @@ def get_db():
         yield db
     finally:
         db.close()
+
 
 

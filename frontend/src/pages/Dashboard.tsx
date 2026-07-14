@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
-  FileText, Layers, Database, GitBranch, Play, ChevronRight, PlusCircle,
-  BrainCircuit, Rocket, ShieldCheck, Lightbulb, CheckCircle2, Loader2, Clock, Zap,
-  Languages, Code2, AlertCircle, Trash2, Workflow, ServerCog, Braces, Network,
-  ArrowRight, Sparkles, FolderOpen, BookOpen, Share2, Check
+  FileText, Activity, Layers, Database,
+  GitBranch, Play, ChevronRight, PlusCircle,
+  BrainCircuit, Rocket, ShieldCheck, Info, Lightbulb,
+  CheckCircle2, Loader2, Clock, Zap,
+  Languages, Settings,
+  Target, Code2, AlertCircle, ChevronDown, Trash2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import ConfigPanel from '../components/ConfigPanel';
@@ -21,6 +23,7 @@ interface BlueprintStage {
   id: number;
   name: string;
   status: 'Complete' | 'In Progress' | 'Pending';
+  indicator: 'green' | 'amber' | 'gray';
   desc: string;
   activities: BlueprintActivity[];
 }
@@ -34,113 +37,39 @@ interface KPICardProps {
   description?: string;
 }
 
-const Reveal = ({ children }: { children: React.ReactNode }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 32 }}
-    whileInView={{ opacity: 1, y: 0 }}
-    viewport={{ once: true, margin: '-80px' }}
-    transition={{ duration: 0.6, ease: 'easeOut' }}
-  >
-    {children}
-  </motion.div>
-);
-const getNextAction = (status?: string) => {
-  switch (status?.toUpperCase()) {
-    case 'CONFIGURING':
-      return {
-        title: 'Complete Setup',
-        desc: 'Your project is created. Now upload your COBOL source files to begin discovery.',
-        path: '/source-files',
-        icon: FolderOpen,
-        color: 'text-blue-400'
-      };
-    case 'INGESTING':
-      return {
-        title: 'Monitor Upload',
-        desc: 'Files are being processed. Once complete, you can analyze the dependency graph.',
-        path: '/discovery',
-        icon: Loader2,
-        color: 'text-amber-400'
-      };
-    case 'ANALYZING':
-      return {
-        title: 'Review Discovery',
-        desc: 'The AI has mapped your system. Review the dependency graph to resolve missing links.',
-        path: '/discovery',
-        icon: Network,
-        color: 'text-emerald-400'
-      };
-    case 'CONVERTING':
-      return {
-        title: 'Validate Logic',
-        desc: 'Business rules are being extracted. Review the rules to ensure accuracy before code gen.',
-        path: '/business-logic',
-        icon: BrainCircuit,
-        color: 'text-purple-400'
-      };
-    default:
-      return {
-        title: 'Resume Pipeline',
-        desc: 'Continue from where you left off in the modernization journey.',
-        path: '/mission-control',
-        icon: Play,
-        color: 'text-indigo-400'
-      };
-  }
-};
-
 const BLUEPRINT_STAGES: BlueprintStage[] = [
-  { id: 1, name: 'Environment Setup', status: 'Complete', desc: 'AI provider, token budget, and run configuration are prepared.', activities: ['AI Model Config', 'Token Budget', 'Source Lang Config'] },
-  { id: 2, name: 'Discovery & Analysis', status: 'Complete', desc: 'Legacy structure, dependencies, and complexity are mapped.', activities: ['Adaptive Chunking', 'Dependency Mapping', 'Complexity Analysis'] },
-  { id: 3, name: 'Knowledge Extraction', status: 'In Progress', desc: 'Business meaning is extracted from procedural code paths.', activities: [{ name: 'Rule Extraction', progress: 80 }, { name: 'DDD Discovery', progress: 45 }, { name: 'HITL Validation', progress: 20 }] },
-  { id: 4, name: 'Modern Code Generation', status: 'Pending', desc: 'Generate service, domain, and API artifacts.', activities: ['DTO Generation', 'Domain Models', 'Service Layer'] },
-  { id: 5, name: 'Agentic Refinement', status: 'Pending', desc: 'Compile-test-fix loops harden generated outputs.', activities: ['Compile-Test-Fix', 'Unit Tests', 'Optimization'] },
+  { id: 1, name: 'Environment Setup', status: 'Complete', indicator: 'green', desc: 'Prerequisites validated.', activities: ['AI Model Config', 'Token Budget', 'Source Lang Config'] },
+  { id: 2, name: 'Discovery & Analysis', status: 'Complete', indicator: 'green', desc: 'Structure analyzed.', activities: ['Adaptive Chunking', 'Dependency Mapping', 'Complexity Analysis'] },
+  { id: 3, name: 'Knowledge Extraction', status: 'In Progress', indicator: 'amber', desc: 'Business understanding construction.', activities: [{ name: 'Rule Extraction', progress: 80 }, { name: 'DDD Discovery', progress: 45 }, { name: 'HITL Validation', progress: 20 }] },
+  { id: 4, name: 'Modern Code Generation', status: 'Pending', indicator: 'gray', desc: 'Components generation.', activities: ['DTO Generation', 'Domain Models', 'Service Layer'] },
+  { id: 5, name: 'Agentic Refinement', status: 'Pending', indicator: 'gray', desc: 'Production hardening.', activities: ['Compile-Test-Fix', 'Unit Tests', 'Optimization'] },
 ];
 
 const JOURNEY_STEPS = [
-  { name: 'Upload COBOL', path: '/source-files', icon: FileText, desc: 'Ingest COBOL, JCL, copybooks, SQL, and archive folders.' },
-  { name: 'Discover Graph', path: '/discovery', icon: Network, desc: 'Find CALLs, COPY statements, tables, and missing dependencies.' },
-  { name: 'Extract Rules', path: '/business-logic', icon: BrainCircuit, desc: 'Translate legacy behavior into business-readable rules.' },
-  { name: 'Generate APIs', path: '/code-generation', icon: Braces, desc: 'Create modernization-ready service and API outputs.' },
-  { name: 'Refine', path: '/mission-control', icon: ShieldCheck, desc: 'Run validation and repair loops before export.' },
-];
-
-const PIPELINE_STEPS = [
-  { title: 'Upload COBOL/JCL/copybooks', body: 'Bring ZIP archives, local folders, GitHub repos, COBOL programs, JCL, SQL, and copybooks into one controlled run.', icon: FolderOpen },
-  { title: 'AI discovers dependencies', body: 'ModernizerAI scans CALLs, COPY statements, table references, and unresolved external dependencies.', icon: Share2 },
-  { title: 'Business rules are extracted', body: 'Procedural paragraphs become reviewable business rules with traceable source context.', icon: BrainCircuit },
-  { title: 'Code is converted and validated', body: 'Generate service layers, API-ready outputs, and run validation loops before export.', icon: Code2 },
-];
-
-const TRUST_BADGES = ['COBOL', 'JCL', 'Copybooks', 'SQL', 'Business Rules', 'Dependency Graph'];
-const LOGO_STRIP = ['COBOL', 'JCL', 'DB2', 'VSAM', 'CICS', 'Copybooks', 'Java', '.NET'];
-
-const PREVIEW_STEPS = [
-  { label: 'Reading COBOL programs', state: 'done' },
-  { label: 'Matching copybook references', state: 'done' },
-  { label: 'Building dependency graph', state: 'done' },
-  { label: 'Extracting business rules', state: 'active' },
-  { label: 'Preparing Java services', state: 'pending' },
-];
-
-
-const START_OPTIONS = [
-  { title: 'Start from COBOL', desc: 'Upload COBOL, JCL, SQL, text, and copybook files directly.', icon: Code2, path: '/source-files' },
-  { title: 'Start from System Folder', desc: 'Preserve folder structure while ModernizerAI inventories every source file.', icon: FolderOpen, path: '/source-files' },
-  { title: 'Start from Documentation', desc: 'Use rules, notes, and specs to guide modernization review.', icon: BookOpen, path: '/business-logic' },
-  { title: 'Start from Dependency Graph', desc: 'Open discovered dependencies and resolve missing graph edges.', icon: Network, path: '/discovery' },
+  { name: 'Select Project', path: '/projects', icon: Database, desc: 'Create a new migration run or resume a previous project.' },
+  { name: 'Upload Source', path: '/source-files', icon: FileText, desc: 'Ingest ZIP archives or GitHub repos and perform language detection.' },
+  { name: 'Discovery', path: '/discovery', icon: BrainCircuit, desc: 'Scan for CALLs, COPY-books, and SQL tables to build the dependency graph.' },
+  { name: 'Knowledge Extraction', path: '/business-logic', icon: Layers, desc: 'Convert technical COBOL logic into human-readable business rules.' },
+  { name: 'Plan Migration', path: '/dashboard', icon: Target, desc: 'Define target architecture and map legacy paragraphs to modern methods.' },
+  { name: 'Generate Code', path: '/code-generation', icon: Code2, desc: 'Run the AI Factory to generate production-ready Java/C# code.' },
+  { name: 'Refinement', path: '/mission-control', icon: ShieldCheck, desc: 'Run compile-test-fix loops to ensure syntactical health.' },
+  { name: 'Deploy', path: '/code-generation', icon: Rocket, desc: 'Export the final codebase and generate the modernization audit report.' },
 ];
 
 const KPICard = ({ label, value, icon: Icon, status, featured = false, description }: KPICardProps) => (
-  <motion.div whileHover={{ y: -4 }} className={`rocket-card ${featured ? 'kpi-featured p-7' : 'p-5'} flex flex-col`}>
+  <div className={`glass-card ${featured ? 'kpi-featured p-7' : 'p-5'} flex flex-col border border-slate-800 bg-slate-900/50`}>
     <div className="flex items-start justify-between gap-4">
-      <span className="rocket-label">{label}</span>
-      <span className="rocket-icon"><Icon size={featured ? 24 : 18} /></span>
+      <span className="label">{label}</span>
+      <span className="rounded-lg border border-slate-800 bg-slate-950/50 p-2 text-[var(--corporate-accent)]">
+        <Icon size={featured ? 24 : 18} />
+      </span>
     </div>
-    <div className={featured ? 'rocket-stat mt-8' : 'mt-5 text-3xl font-black tracking-tight text-[var(--corporate-text)]'}>{value}</div>
-    <p className="rocket-muted mt-2">{description || 'Modernization signal tracked by the pipeline.'}</p>
-    <div className="mt-auto pt-5"><StatusBadge status={status} /></div>
-  </motion.div>
+    <div className={featured ? 'text-display mt-8' : 'mt-5 text-3xl font-black tracking-tight text-[var(--corporate-text)]'}>{value}</div>
+    <p className="text-body-sm mt-2">{description || 'Modernization signal tracked by the pipeline.'}</p>
+    <div className="mt-auto pt-5">
+      <StatusBadge status={status} />
+    </div>
+  </div>
 );
 
 const stageProgress = (stage: BlueprintStage) => {
@@ -161,9 +90,11 @@ const Dashboard = () => {
   const [sourceMetaLang, setSourceMetaLang] = useState('en');
   const [aiMode, setAiMode] = useState<'api' | 'local'>('api');
   const [aiConfig, setAiConfig] = useState({ key: '', url: 'http://localhost:11434', model: 'gpt-4o' });
-  const [isConfigDrawerOpen, setIsConfigDrawerOpen] = useState(false);
 
-  const activeProject = useMemo(() => projects.find((p) => p.run_id === runId), [projects, runId]);
+  const activeProject = useMemo(() =>
+    projects.find((p) => p.run_id === runId),
+    [projects, runId]
+  );
 
   const applySavedAIConfig = (savedAiConfig = localStorage.getItem('ai_config')) => {
     if (!savedAiConfig) {
@@ -179,7 +110,9 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
-    if (searchParams.get('new') !== 'true') void fetchProjectHistory();
+    if (searchParams.get('new') !== 'true') {
+      void fetchProjectHistory();
+    }
     const savedLang = localStorage.getItem('modernizer_source_lang');
     if (savedLang) setSourceMetaLang(savedLang);
     applySavedAIConfig();
@@ -206,7 +139,7 @@ const Dashboard = () => {
       const data = await ProjectAPI.list();
       setProjects(data);
       return data;
-    } catch {
+    } catch (e) {
       toast.error('Failed to load project history');
       return [] as ProjectSummary[];
     }
@@ -249,7 +182,7 @@ const Dashboard = () => {
       try {
         await ProjectAPI.updateConfig(runId, { lang });
         toast.success('Language updated in project');
-      } catch {
+      } catch (e) {
         toast.error('Failed to sync language to server');
       }
     }
@@ -258,9 +191,13 @@ const Dashboard = () => {
   const getNextRunName = (projectList: ProjectSummary[] = projects) => {
     const runRegex = /^Run_(\d+)$/;
     const usedNumbers = projectList
-      .map((project) => project.name.match(runRegex)?.[1] || null)
+      .map((project) => {
+        const match = project.name.match(runRegex);
+        return match ? match[1] : null;
+      })
       .filter((val): val is string => val !== null)
       .map(Number);
+
     const nextNumber = usedNumbers.length > 0 ? Math.max(...usedNumbers) + 1 : projectList.length + 1;
     return `Run_${nextNumber}`;
   };
@@ -282,6 +219,7 @@ const Dashboard = () => {
     try {
       const response = await ProjectAPI.create(config);
       const newRunId = response.run_id;
+
       if (!newRunId) throw new Error('Backend did not return a run_id');
 
       localStorage.setItem('active_run_id', newRunId);
@@ -318,318 +256,250 @@ const Dashboard = () => {
   };
 
   const progress = calculateOverallProgress();
-  const hasActiveProject = Boolean(runId);
-  const projectName = activeProject?.name || 'your project';
-  const nextAction = getNextAction(activeProject?.status || (hasActiveProject ? 'CONFIGURING' : undefined));
-  const NextActionIcon = nextAction.icon;
-
-  const HeroProcessCard = () => (
-    <motion.div
-      className="rocket-preview-wrap"
-      initial={{ opacity: 0, y: 18 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.55 }}
-    >
-      <motion.div className="rocket-ai-process-card" animate={{ y: [0, -8, 0] }} transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}>
-        <div className="rocket-ai-card-header">
-          <span className="rocket-ai-dot" />
-          <strong>ModernizerAI is analyzing your system</strong>
-        </div>
-        <div className="rocket-ai-checklist">
-          {PREVIEW_STEPS.map((step) => (
-            <div key={step.label} className={`rocket-ai-row rocket-ai-${step.state}`}>
-              {step.state === 'done' && <Check size={15} />}
-              {step.state === 'active' && <span className="rocket-live-dot" />}
-              {step.state === 'pending' && <span className="rocket-empty-dot" />}
-              <span>{step.label}</span>
-            </div>
-          ))}
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-
-  const WorkspaceSection = () => (
-    <section className="rocket-control-panel" id="workspace">
-      <div className="rocket-panel-header">
-        <div>
-          <SectionLabel>Workspace</SectionLabel>
-          <h2>Project setup and run control</h2>
-        </div>
-        <div className="rocket-project-actions">
-          <button onClick={() => navigate('/projects')} className="rocket-secondary-btn">Open projects</button>
-          <button onClick={handleDeleteAllRuns} disabled={isDeletingRuns || projects.length === 0} className="rocket-danger-btn">
-            {isDeletingRuns ? <Loader2 className="animate-spin" size={16} /> : <Trash2 size={16} />}
-            Delete runs
-          </button>
-        </div>
-      </div>
-
-      <div className="rocket-workspace-grid">
-        <div className="rocket-card p-6">
-          <div className="flex items-center gap-3 mb-5">
-            <Database size={20} className="text-[var(--corporate-accent)]" />
-            <div><h3 className="text-heading">Active project</h3><p className="rocket-muted">Resume an existing run or create a new migration.</p></div>
-          </div>
-          <select value={runId || ''} onChange={(e) => handleProjectChange(e.target.value)} className="rocket-input">
-            <option value="" disabled>Select a Project</option>
-            {projects.map((proj) => <option key={proj.run_id} value={proj.run_id}>{proj.name || proj.run_id} ({proj.status})</option>)}
-          </select>
-          <div className="mt-5 flex items-center justify-between gap-4">
-            {activeProject ? <StatusBadge status={activeProject.status} /> : <span className="rocket-muted">No active run</span>}
-            <div className="flex min-w-[160px] items-center gap-3">
-              <span className="font-black text-[var(--corporate-text)]">{progress}%</span>
-              <div className="rocket-progress"><span style={{ width: `${progress}%` }} /></div>
-            </div>
-          </div>
-          <button onClick={handleStartNewProject} disabled={isCreatingProject} className="rocket-primary-btn mt-6 w-full">
-            {isCreatingProject ? <Loader2 className="animate-spin" size={18} /> : <PlusCircle size={18} />} Start new project
-          </button>
-        </div>
-
-        <div className="rocket-card p-6">
-          <div className="flex items-center gap-3 mb-5">
-            <Languages size={20} className="text-[var(--corporate-accent)]" />
-            <div><h3 className="text-heading">Regional language</h3><p className="rocket-muted">Sets prompts, comments, and review language.</p></div>
-          </div>
-          <select value={sourceMetaLang} onChange={(e) => saveLang(e.target.value)} className="rocket-input">
-            <option value="en">English</option><option value="hi">Hindi</option><option value="jp">Japanese</option><option value="de">German</option><option value="fr">French</option><option value="es">Spanish</option>
-          </select>
-        </div>
-
-        <div className="rocket-card p-6 lg:col-span-2">
-          <div className="flex items-start justify-between gap-5">
-            <div className="flex items-center gap-3">
-              <ServerCog size={20} className="text-[var(--corporate-accent)]" />
-              <div>
-                <h3 className="text-heading">AI configuration</h3>
-                <p className="rocket-muted">Current Model: {aiConfig.model || 'Not selected'} | Provider: {aiMode === 'api' ? 'API' : 'Local'}</p>
-              </div>
-            </div>
-            <button onClick={() => setIsConfigDrawerOpen(true)} className="rocket-secondary-btn">Configure</button>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-
-  const ProjectHealthSection = () => (
-    <section className="grid grid-cols-1 gap-8 lg:grid-cols-12">
-      <div className="space-y-6 lg:col-span-8">
-        <SectionLabel>Project Health Snapshot</SectionLabel>
-        <div className="kpi-bento">
-          <KPICard featured label="Total legacy files" value={activeProject?.files_count || 0} icon={FileText} status="Healthy" description="Files loaded into the active modernization pipeline." />
-          <KPICard label="Complex modules" value="14" icon={AlertCircle} status="Review" />
-          <KPICard label="Pending chunks" value="35" icon={Layers} status="Review" />
-          <KPICard label="Verified rules" value="16" icon={CheckCircle2} status="Healthy" />
-          <KPICard label="Critical paths" value="8" icon={Workflow} status="Action" />
-        </div>
-      </div>
-      <div className="lg:col-span-4">
-        <SectionLabel>Actionable Task List</SectionLabel>
-        <div className="rocket-card flex h-full flex-col gap-5 p-6 rocket-task-card">
-          <div className="flex items-center gap-3 text-[var(--corporate-accent)]">
-            <NextActionIcon size={20} className={nextAction.color} />
-            <h3 className="text-heading">{nextAction.title}</h3>
-          </div>
-          <p className="rocket-body">{nextAction.desc}</p>
-          <div className="mt-auto grid grid-cols-1 gap-3">
-            <button onClick={() => navigate(nextAction.path)} className="rocket-primary-btn w-full">Continue task <ChevronRight size={14} /></button>
-            <button onClick={() => navigate('/mission-control')} className="rocket-secondary-btn w-full">Open mission control</button>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-
-  const BlueprintSection = () => (
-    <section className="space-y-6">
-      <div><SectionLabel>Modernization Blueprint</SectionLabel><h2 className="rocket-section-title">Execution roadmap</h2><p className="rocket-muted mt-2 max-w-2xl">Real-time pipeline state from environment setup through production hardening.</p></div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-        {BLUEPRINT_STAGES.map((stage, i) => {
-          const progressValue = stageProgress(stage);
-          const isActive = stage.status === 'In Progress';
-          return (
-            <motion.div whileHover={{ y: -4 }} key={stage.id} className={`rocket-card flex min-h-[230px] flex-col gap-4 p-5 ${isActive ? 'rocket-card-active' : ''}`}>
-              <div className="flex items-start justify-between gap-3"><span className="rocket-label">Stage {String(i + 1).padStart(2, '0')}</span><StatusBadge status={stage.status} /></div>
-              <div><h3 className="text-card-title">{stage.name}</h3><p className="rocket-muted mt-2">{stage.desc}</p></div>
-              <div className="space-y-2">
-                {stage.activities.slice(0, 3).map((act, index) => {
-                  const label = typeof act === 'object' ? act.name : act;
-                  const value = typeof act === 'object' ? `${act.progress}%` : 'Done';
-                  return <div key={`${label}-${index}`} className="flex items-center justify-between gap-3 text-[11px] font-bold text-[var(--corporate-muted)]"><span className="truncate">{label}</span><span className="font-mono">{value}</span></div>;
-                })}
-              </div>
-              <div className="rocket-progress mt-auto"><span style={{ width: `${progressValue}%` }} /></div>
-            </motion.div>
-          );
-        })}
-      </div>
-    </section>
-  );
 
   return (
-    <motion.div className="rocket-home pb-24" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.45 }}>
-      {hasActiveProject ? (
-        <>
-          <section className="rocket-hero-section rocket-active-hero bg-grid">
-            <div className="rocket-hero-copy">
-              <div className="rocket-eyebrow"><Sparkles size={15} /> Active migration</div>
-              <h1>Welcome back to {projectName}</h1>
-              <p>
-                Your project is currently in <strong>{activeProject?.status || 'CONFIGURING'}</strong>. Resume the next task, review project health, or adjust run settings without scrolling through onboarding content.
-              </p>
-              <div className="rocket-actions">
-                <motion.button whileTap={{ scale: 0.96 }} onClick={() => navigate(nextAction.path)} className="rocket-primary-btn">
-                  <Play size={18} fill="currentColor" /> Jump back into {nextAction.title}
-                </motion.button>
-                <motion.button whileTap={{ scale: 0.96 }} onClick={() => navigate('/mission-control')} className="rocket-secondary-btn">
-                  Mission control <ArrowRight size={17} />
-                </motion.button>
+    <div className="space-y-12 pb-24 animate-in fade-in duration-700">
+      <section className="premium-hero relative overflow-hidden rounded-3xl p-8 lg:p-10 shadow-2xl">
+        <div className="premium-hero-watermark">Modernize</div>
+        <div className="relative z-10 grid gap-10 lg:grid-cols-[minmax(0,1fr)_240px] lg:items-center">
+          <div>
+            <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/20 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-indigo-400">
+              <Rocket size={14} /> Executive Command Center
+            </div>
+            <h1 className="text-hero max-w-5xl">Modernizer<span className="text-[var(--corporate-accent)]">AI</span></h1>
+            <p className="text-body mt-5 max-w-2xl text-[var(--corporate-muted)]">
+              A governed command center for converting legacy COBOL estates into reviewed, traceable, modern application code.
+            </p>
+
+            <div className="mt-8 grid gap-6 md:grid-cols-[minmax(0,270px)_minmax(0,260px)_auto] md:items-end">
+              <div className="space-y-2">
+                <p className="label">Active Project</p>
+                <div className="relative group">
+                  <select
+                    value={runId || ''}
+                    onChange={(e) => handleProjectChange(e.target.value)}
+                    className="w-full appearance-none rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 pr-10 text-sm font-bold text-white outline-none transition-all focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="" disabled>Select a Project</option>
+                    {projects.map((proj) => (
+                      <option key={proj.run_id} value={proj.run_id}>
+                        {proj.name || proj.run_id} ({proj.status})
+                      </option>
+                    ))}
+                  </select>
+                  <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
+                    <ChevronDown size={14} className="text-slate-500" />
+                  </div>
+                </div>
+                {activeProject && <StatusBadge status={activeProject.status} />}
               </div>
-              <div className="rocket-hero-progress">
-                <div className="flex items-center justify-between gap-4"><span>Overall progress</span><strong>{progress}%</strong></div>
-                <div className="rocket-progress"><span style={{ width: `${progress}%` }} /></div>
+
+              <div className="space-y-2">
+                <p className="label">Overall Progress</p>
+                <div className="flex items-center gap-3">
+                  <p className="text-2xl font-black tracking-tight text-white">{progress}%</p>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-800">
+                    <div className="h-full rounded-full bg-indigo-500 transition-all duration-700" style={{ width: `${progress}%` }} />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={handleDeleteAllRuns}
+                disabled={isDeletingRuns || projects.length === 0}
+                className="btn-glow disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isDeletingRuns ? <Loader2 className="animate-spin" size={16} /> : <Trash2 size={16} />}
+                Delete Runs
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <button onClick={() => navigate('/projects')} className="btn-glow min-h-[5rem] text-center">
+              Continue Current Project <ChevronRight size={18} />
+            </button>
+            <button onClick={handleStartNewProject} disabled={isCreatingProject} className="rounded-xl border border-slate-700 bg-slate-800 px-6 py-4 font-black text-white transition-all hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60">
+              <span className="flex items-center justify-center gap-2">
+                {isCreatingProject ? <Loader2 className="animate-spin" size={18} /> : <PlusCircle size={18} />}
+                Start New Project
+              </span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <SectionLabel>System & AI Configuration</SectionLabel>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="glass-card space-y-5 border border-slate-800 bg-slate-900/50 p-6">
+            <div className="flex items-center gap-3">
+              <Languages size={20} className="text-indigo-400" />
+              <div>
+                <h3 className="text-heading">Regional Language</h3>
+                <p className="text-body-sm">Sets the language for prompts and source comments.</p>
               </div>
             </div>
-            <div className="rocket-active-summary rocket-card">
-              <SectionLabel>Next best action</SectionLabel>
-              <NextActionIcon size={24} className={nextAction.color} />
-              <h3>{nextAction.title}</h3>
-              <p>{nextAction.desc}</p>
-              <button onClick={() => navigate(nextAction.path)} className="rocket-primary-btn w-full">Continue</button>
+            <select
+              value={sourceMetaLang}
+              onChange={(e) => saveLang(e.target.value)}
+              className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="en">English</option>
+              <option value="hi">Hindi</option>
+              <option value="jp">Japanese</option>
+              <option value="de">German</option>
+              <option value="fr">French</option>
+              <option value="es">Spanish</option>
+            </select>
+          </div>
+          <div className="glass-card border border-slate-800 bg-slate-900/50 p-6 lg:col-span-2">
+            <ConfigPanel runId={runId} onSave={(saved) => applySavedAIConfig(JSON.stringify(saved))} />
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <SectionLabel>Modernization Journey</SectionLabel>
+        <div className="timeline-scroll flex items-start overflow-x-auto pb-3">
+          {JOURNEY_STEPS.map((step, i) => {
+            const isDone = i < 3;
+            const isActive = i === 3;
+            return (
+              <Tooltip key={step.name} text={step.desc} position="top">
+                <div className="flex min-w-[148px] items-start">
+                  <button
+                    type="button"
+                    onClick={() => navigate(step.path)}
+                    className="group flex w-[128px] flex-col items-center text-center"
+                  >
+                    <span className={`mb-3 flex h-11 w-11 items-center justify-center rounded-full border transition-all group-hover:scale-110 ${isDone || isActive ? 'border-indigo-500/40 bg-indigo-500/20 text-indigo-400 shadow-lg shadow-indigo-500/20' : 'border-slate-800 bg-slate-900/50 text-slate-500'}`}>
+                      <step.icon size={18} />
+                    </span>
+                    <span className="label mb-1">{String(i + 1).padStart(2, '0')}</span>
+                    <span className={`text-xs font-extrabold ${isDone || isActive ? 'text-white' : 'text-slate-500'}`}>{step.name}</span>
+                  </button>
+                  {i < JOURNEY_STEPS.length - 1 && (
+                    <span className={`mt-[22px] h-0.5 min-w-[34px] flex-1 ${i < 2 ? 'bg-indigo-500' : 'bg-slate-800'}`} />
+                  )}
+                </div>
+              </Tooltip>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 gap-8 lg:grid-cols-12">
+        <div className="space-y-6 lg:col-span-8">
+          <SectionLabel>Project Health Snapshot</SectionLabel>
+          <div className="kpi-bento">
+            <KPICard featured label="Total COBOL Files" value={activeProject?.files_count || 0} icon={FileText} status="Healthy" description="Files loaded into the active modernization pipeline." />
+            <KPICard label="Complex Modules" value="14" icon={AlertCircle} status="Review" />
+            <KPICard label="Pending Chunks" value="35" icon={Layers} status="Review" />
+            <KPICard label="Verified Rules" value="16" icon={CheckCircle2} status="Healthy" />
+            <KPICard label="Critical Paths" value="8" icon={GitBranch} status="Action" />
+          </div>
+        </div>
+        <div className="lg:col-span-4">
+          <SectionLabel>AI Recommendations</SectionLabel>
+          <div className="glass-card flex h-full flex-col gap-5 border border-indigo-500/30 bg-indigo-500/5 p-6">
+            <div className="flex items-center gap-3 text-indigo-400">
+              <Lightbulb size={20} />
+              <h3 className="text-heading">Recommended Next Move</h3>
             </div>
-          </section>
-
-          <Reveal><WorkspaceSection /></Reveal>
-          <Reveal><ProjectHealthSection /></Reveal>
-          <Reveal><BlueprintSection /></Reveal>
-        </>
-      ) : (
-        <>
-          <section className="rocket-hero-section bg-grid">
-            <div className="rocket-hero-copy">
-              <div className="rocket-eyebrow"><Sparkles size={15} /> ModernizerAI for legacy modernization</div>
-              <h1>Convert COBOL systems into business logic, APIs, and modern code.</h1>
-              <p>
-                ModernizerAI reverse-engineers COBOL, JCL, copybooks, and legacy files to discover dependencies, extract business rules, and generate modernization-ready outputs.
-              </p>
-              <div className="rocket-actions">
-                <motion.button whileTap={{ scale: 0.96 }} onClick={handleStartNewProject} disabled={isCreatingProject} className="rocket-primary-btn">
-                  {isCreatingProject ? <Loader2 className="animate-spin" size={18} /> : <Rocket size={18} />}
-                  Start migration
-                </motion.button>
-                <motion.button whileTap={{ scale: 0.96 }} onClick={() => navigate('/discovery')} className="rocket-secondary-btn">
-                  View demo <ArrowRight size={17} />
-                </motion.button>
-              </div>
-              <div className="rocket-trust-row">
-                {TRUST_BADGES.map((badge) => <span key={badge}>{badge}</span>)}
-              </div>
+            <p className="text-body text-slate-300">
+              Extract business rules before migration because <span className="font-bold text-amber-400">14 complex modules</span> remain undocumented.
+            </p>
+            <div className="mt-auto grid grid-cols-1 gap-3">
+              <button onClick={() => navigate('/business-logic')} className="btn-glow w-full">
+                Start Rule Extraction <ChevronRight size={14} />
+              </button>
+              <button onClick={() => navigate('/mission-control')} className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-xs font-black text-white transition-all hover:bg-slate-700">
+                Resume Processing
+              </button>
             </div>
-            <HeroProcessCard />
-          </section>
+          </div>
+        </div>
+      </section>
 
-          <Reveal><WorkspaceSection /></Reveal>
-
-          <section className="rocket-logo-strip" aria-label="Supported legacy inputs">
-            {LOGO_STRIP.map((item) => <span key={item}>{item}</span>)}
-          </section>
-
-          <Reveal>
-            <section id="solutions" className="rocket-split-section">
-              <div className="rocket-start-list">
-                {START_OPTIONS.map((item) => (
-                  <motion.button whileHover={{ x: 4 }} key={item.title} onClick={() => navigate(item.path)} className="rocket-start-item">
-                    <span className="rocket-start-icon"><item.icon size={20} /></span>
-                    <span><strong>{item.title}</strong><small>{item.desc}</small></span>
-                  </motion.button>
-                ))}
-              </div>
-              <div className="rocket-grid-message bg-grid">
+      <section className="space-y-6">
+        <div>
+          <SectionLabel>Modernization Blueprint</SectionLabel>
+          <h2 className="text-page-title">Execution roadmap</h2>
+          <p className="text-body-sm mt-2 max-w-2xl">Real-time pipeline state from environment setup through production hardening.</p>
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+          {BLUEPRINT_STAGES.map((stage, i) => {
+            const progressValue = stageProgress(stage);
+            const isActive = stage.status === 'In Progress';
+            return (
+              <div key={stage.id} className={`glass-card flex min-h-[230px] flex-col gap-4 border p-5 ${isActive ? 'border-amber-500/50 bg-amber-500/5 shadow-lg shadow-amber-500/10' : 'border-slate-800 bg-slate-900/50'}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="label">Stage {String(i + 1).padStart(2, '0')}</span>
+                  <StatusBadge status={stage.status} />
+                </div>
                 <div>
-                  <h2>Not every migration starts with a clean inventory.</h2>
-                  <p>ModernizerAI turns what you already have into a dependency map, rule catalog, and production-ready modernization plan.</p>
+                  <h3 className="text-card-title">{stage.name}</h3>
+                  <p className="text-body-sm mt-2">{stage.desc}</p>
+                </div>
+                <div className="space-y-2">
+                  {stage.activities.slice(0, 3).map((act, index) => {
+                    const label = typeof act === 'object' ? act.name : act;
+                    const value = typeof act === 'object' ? `${act.progress}%` : 'Done';
+                    return (
+                      <div key={`${label}-${index}`} className="flex items-center justify-between gap-3 text-[11px] font-bold text-slate-400">
+                        <span className="truncate">{label}</span>
+                        <span className="font-mono text-slate-500">{value}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="pipeline-card-progress">
+                  <span style={{ width: `${progressValue}%` }} />
                 </div>
               </div>
-            </section>
-          </Reveal>
+            );
+          })}
+        </div>
+      </section>
 
-          <Reveal>
-            <section id="product" className="rocket-sticky-section">
-              <div className="rocket-sticky-copy">
-                <SectionLabel>How ModernizerAI works</SectionLabel>
-                <h2>One governed flow from source files to validated services.</h2>
-                <p>Upload legacy assets once, then let the AI pipeline discover, explain, convert, and validate the system with human review points.</p>
-              </div>
-              <div className="rocket-sticky-cards">
-                {PIPELINE_STEPS.map((step, index) => (
-                  <motion.div key={step.title} className="rocket-sticky-card" whileInView={{ opacity: 1, y: 0 }} initial={{ opacity: 0, y: 28 }} viewport={{ once: true, margin: '-120px' }} transition={{ duration: 0.5 }}>
-                    <span className="rocket-flow-index">{String(index + 1).padStart(2, '0')}</span>
-                    <span className="rocket-flow-icon"><step.icon size={23} /></span>
-                    <h3>{step.title}</h3>
-                    <p>{step.body}</p>
-                  </motion.div>
-                ))}
-              </div>
-            </section>
-          </Reveal>
+      <section className="space-y-6">
+        <SectionLabel>What's Next</SectionLabel>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <div className="glass-card space-y-4 border border-indigo-500/30 bg-indigo-500/5 p-6">
+            <div className="flex items-center gap-2 text-xs font-black uppercase text-indigo-400"><Zap size={14} /> Immediate Action</div>
+            <h4 className="text-card-title">Review HITL Validations</h4>
+            <p className="text-body-sm">Approving remaining validations will unlock code generation.</p>
+            <button onClick={() => navigate('/business-logic')} className="btn-glow w-full">Review HITL</button>
+          </div>
+          <div className="glass-card space-y-4 border border-slate-800 bg-slate-900/50 p-6">
+            <div className="flex items-center gap-2 text-xs font-black uppercase text-slate-500"><Clock size={14} /> Upcoming</div>
+            <h4 className="text-card-title">Generate Java Domain Models</h4>
+            <p className="text-body-sm">Transform extracted DDD entities into Spring Boot artifacts.</p>
+            <button onClick={() => navigate('/code-generation')} className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-xs font-black text-white transition-all hover:bg-slate-700 w-full">Prepare Generation</button>
+          </div>
+          <div className="glass-card space-y-4 border border-slate-800 bg-slate-900/50 p-6">
+            <div className="flex items-center gap-2 text-xs font-black uppercase text-slate-500"><ShieldCheck size={14} /> Final Stage</div>
+            <h4 className="text-card-title">Run Agentic Refinement</h4>
+            <p className="text-body-sm">Perform automated compile-test-fix loops for production readiness.</p>
+            <button onClick={() => navigate('/mission-control')} className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-xs font-black text-white transition-all hover:bg-slate-700 w-full">Start Refinement</button>
+          </div>
+        </div>
+      </section>
 
-          <Reveal>
-            <section className="rocket-product-preview-section bg-grid">
-              <div className="rocket-panel-header">
-                <div>
-                  <SectionLabel>Product Preview</SectionLabel>
-                  <h2>Project Management Hub, inside the same platform.</h2>
-                </div>
-                <button onClick={() => navigate('/projects')} className="rocket-secondary-btn">Open app dashboard</button>
-              </div>
-              <div className="rocket-browser-frame">
-                <div className="rocket-browser-bar"><span /><span /><span /><strong>modernizer.ai/projects</strong></div>
-                <div className="rocket-browser-content">
-                  <aside>
-                    <strong>ModernizerAI</strong>
-                    {['Dashboard', 'Projects', 'Source Files', 'Discovery', 'Business Logic'].map((item, i) => <span key={item} className={i === 1 ? 'active' : ''}>{item}</span>)}
-                  </aside>
-                  <main>
-                    <div className="rocket-browser-head">
-                      <div><small>Workspace</small><h3>Project Management Hub</h3></div>
-                      <button>Create New Run</button>
-                    </div>
-                    <div className="rocket-browser-grid">
-                      <div><small>Files</small><strong>0</strong></div>
-                      <div><small>Progress</small><strong>0%</strong></div>
-                      <div><small>Model</small><strong>{aiConfig.model}</strong></div>
-                    </div>
-                    <div className="rocket-browser-table">
-                      {['Run inventory', 'Dependency graph', 'Business rules'].map((row, i) => <span key={row}><strong>{row}</strong><em>{i === 0 ? 'Ready' : i === 1 ? 'Running' : 'Queued'}</em></span>)}
-                    </div>
-                  </main>
-                </div>
-              </div>
-            </section>
-          </Reveal>
-        </>
-      )}
-
-      <AnimatePresence>
-        {isConfigDrawerOpen && (
-          <motion.div className="rocket-drawer-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsConfigDrawerOpen(false)}>
-            <motion.aside className="rocket-config-drawer" initial={{ x: 420 }} animate={{ x: 0 }} exit={{ x: 420 }} transition={{ type: 'spring', stiffness: 320, damping: 34 }} onClick={(e) => e.stopPropagation()}>
-              <div className="rocket-drawer-header">
-                <div>
-                  <SectionLabel>AI Configuration</SectionLabel>
-                  <h2>Model settings</h2>
-                </div>
-                <button onClick={() => setIsConfigDrawerOpen(false)} className="rocket-secondary-btn">Close</button>
-              </div>
-              <ConfigPanel runId={runId} onSave={(saved) => applySavedAIConfig(JSON.stringify(saved))} />
-            </motion.aside>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+      <div className="fixed bottom-8 left-1/2 z-50 -translate-x-1/2">
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => navigate('/mission-control')}
+          className="btn-glow rounded-full px-10 py-4 font-black shadow-2xl"
+        >
+          <Play size={20} fill="currentColor" /> Launch Migration Pipeline
+        </motion.button>
+      </div>
+    </div>
   );
 };
 
 export default Dashboard;
+

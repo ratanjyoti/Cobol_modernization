@@ -49,7 +49,7 @@ const getDefaultApiBaseUrl = () => {
   }
 
   if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    return 'http://localhost:8000';
+    return import.meta.env.VITE_API_BASE_URL || 'http://localhost:8010';
   }
 
   return import.meta.env.VITE_API_BASE_URL || 'https://cobol-modernization.onrender.com';
@@ -181,6 +181,21 @@ export const ProjectAPI = {
     const response = await api.post('/discovery/launch', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
+    return response.data;
+  },
+
+  getBusinessRules: async (runId: string) => {
+    const response = await api.get(`/business-rules/${runId}`);
+    return response.data;
+  },
+
+  extractBusinessRules: async (runId: string) => {
+    const response = await api.post(`/business-rules/${runId}/extract`);
+    return response.data;
+  },
+
+  verifyRule: async (ruleId: number, data: { status: string; text?: string }) => {
+    const response = await api.patch(`/business-rules/${ruleId}`, data);
     return response.data;
   },
 };

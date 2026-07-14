@@ -1,53 +1,93 @@
+﻿from pathlib import Path
+
 from sqlalchemy.orm import Session
-from Persistence.sqlite.models import FileChunk, ChunkAnalysis
+
 from Agents.implementations.cobol_analyzer_agent import CobolAnalyzerAgent
-from Chunking.context.chunk_context_manager import ChunkContextManager
+from Agents.implementations.technical_analyzer import TechnicalAnalyzerAgent
 from Agents.infrastructure.chat_client_factory import ChatClientFactory
+from Chunking.context.chunk_context_manager import ChunkContextManager
+from Persistence.sqlite.models import ChunkAnalysis, FileChunk, ProjectFile, TechnicalAnalysis
+from paths import UPLOADS_DIR
+
 
 class AnalysisProcess:
-    def __init__(self, db_session: Session, llm_provider: str):
+    def __init__(self, db_session: Session, llm_provider: str, api_key: str = None):
         self.db = db_session
         self.context_mgr = ChunkContextManager(db_session)
-        # Get the correct LLM client (Azure or Ollama)
-        self.llm_client = ChatClientFactory.get_client(llm_provider)
+        self.llm_client = ChatClientFactory.get_client(llm_provider, api_key)
         self.agent = CobolAnalyzerAgent(self.llm_client)
+        self.deep_agent = TechnicalAnalyzerAgent(self.llm_client)
 
     async def analyze_project(self, run_id: str):
-        # 1. Get all chunks for the project
-        chunks = self.db.query(FileChunk).filter_by(run_id=run_id).order_by(FileChunk.chunk_index).all()
+        chunks = (
+            self.db.query(FileChunk)
+            .filter_by(run_id=run_id)
+            .order_by(FileChunk.file_id, FileChunk.chunk_index)
+            .all()
+        )
+
+        self.db.query(ChunkAnalysis).filter_by(run_id=run_id).delete()
+        self.db.flush()
 
         for chunk in chunks:
-            # 2. Build the "Context Packet" (The Memory)
-            # This pulls the Global Locks and the Sliding Window of previous chunks
             context = self.context_mgr.build_context_for_chunk(
                 run_id, chunk.file_id, chunk.chunk_index
             )
 
-            # 3. Execute the Analysis
             try:
                 technical_yaml = self.agent.generate_technical_yaml(
                     chunk_content=chunk.content,
-                    global_types=context["global_types"],
-                    signatures=context["global_signatures"],
-                    context_summary=context["summary_history"]
+                    global_types=context.get("global_types", ""),
+                    signatures=context.get("global_signatures", ""),
+                    context_summary=context.get("summary_history", ""),
                 )
-
-                # 4. Store the result in SQLite
-                analysis = ChunkAnalysis(
+                self.db.add(ChunkAnalysis(
                     chunk_id=chunk.id,
                     run_id=run_id,
-                    technical_yaml=technical_yaml,
-                    analysis_status="COMPLETED"
-                )
-                self.db.add(analysis)
-                self.db.commit()
-                
-            except Exception as e:
-                print(f"Error analyzing chunk {chunk.chunk_index}: {e}")
-                self.db.add(ChunkAnalysis(
-                    chunk_id=chunk.id, run_id=run_id, 
-                    technical_yaml="", analysis_status="FAILED"
+                    technical_yaml=technical_yaml or "",
+                    analysis_status="COMPLETED",
                 ))
-                self.db.commit()
+            except Exception as exc:
+                print(f"Error analyzing chunk {chunk.chunk_index}: {exc}")
+                self.db.add(ChunkAnalysis(
+                    chunk_id=chunk.id,
+                    run_id=run_id,
+                    technical_yaml="",
+                    analysis_status="FAILED",
+                ))
+
+            self.db.commit()
 
         return True
+
+    async def run_deep_analysis(self, run_id: str):
+        files = self.db.query(ProjectFile).filter_by(run_id=run_id).all()
+        for project_file in files:
+            path = self._resolve_project_file_path(project_file)
+            if not path or not path.exists():
+                continue
+            content = path.read_text(errors="ignore")
+            report = await self.deep_agent.analyze_deep(content, project_file.detected_lang or "unknown")
+            self.db.add(TechnicalAnalysis(
+                run_id=run_id,
+                file_id=project_file.id,
+                filename=project_file.filename,
+                report_json=report.model_dump_json(),
+            ))
+
+        self.db.commit()
+        return True
+
+    def _resolve_project_file_path(self, project_file: ProjectFile) -> Path | None:
+        rel = (project_file.filepath or project_file.filename or "").replace("\\", "/").strip("/")
+        if not rel or ".." in rel.split("/"):
+            return None
+        candidates = [
+            UPLOADS_DIR / project_file.run_id / rel,
+            UPLOADS_DIR / project_file.run_id / "local_repo" / rel,
+            UPLOADS_DIR / project_file.run_id / (project_file.filename or ""),
+        ]
+        for candidate in candidates:
+            if candidate.exists() and candidate.is_file():
+                return candidate
+        return None

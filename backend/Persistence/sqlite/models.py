@@ -45,6 +45,26 @@ class ProjectFile(Base):
     detected_lang = Column(String)
     status = Column(Enum(FileStatus), default=FileStatus.PENDING_CONFIRMATION)
 
+class BusinessRule(Base):
+    __tablename__ = "business_rules"
+
+    id = Column(Integer, primary_key=True)
+    run_id = Column(String, ForeignKey("projects.run_id"), nullable=False)
+
+    # Current UI-facing extraction fields.
+    chunk_id = Column(Integer, ForeignKey("file_chunks.id"), nullable=True)
+    rule_id = Column(String)
+    rule_text = Column(Text, nullable=True)
+    technical_ref = Column(Text)
+    status = Column(String, default="PENDING")
+
+    # Compatibility fields used by older analysis routes and databases.
+    file_id = Column(Integer, ForeignKey("project_files.id"), nullable=True)
+    chunk_index = Column(Integer)
+    technical_yaml = Column(Text)
+    business_logic = Column(Text)
+
+
 class ChunkAnalysis(Base):
     __tablename__ = "chunk_analysis"
     
@@ -147,3 +167,11 @@ class FileRelation(Base):
     source_file = Column(String, nullable=False)
     target_item = Column(String, nullable=False)
     relation_type = Column(String, nullable=False)
+
+class TechnicalAnalysis(Base):
+    __tablename__ = "technical_analysis"
+    id = Column(Integer, primary_key=True)
+    run_id = Column(String, ForeignKey("projects.run_id"))
+    file_id = Column(Integer, ForeignKey("project_files.id"))
+    filename = Column(String)
+    report_json = Column(Text) # Stores the TechnicalAnalysisReport as JSON
