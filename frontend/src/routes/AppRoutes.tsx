@@ -41,7 +41,7 @@ const AnimatedRoutes = () => {
 
   return (
     <AnimatePresence mode="wait">
-      <Routes location={location} key={location.pathname}>
+      <Routes location={location}>
         <Route path="/" element={<MainLayout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
 
@@ -73,3 +73,4 @@ const AppRoutes = () => (
 );
 
 export default AppRoutes;
+

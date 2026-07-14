@@ -7,7 +7,15 @@ const MainLayout = () => {
   const [theme, setTheme] = useState(
     localStorage.getItem('theme') || 'light'
   );
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem('sidebarOpen') !== 'false');
+
+  const toggleSidebar = () => {
+    setSidebarOpen((open) => {
+      const nextOpen = !open;
+      localStorage.setItem('sidebarOpen', String(nextOpen));
+      return nextOpen;
+    });
+  };
 
   const [hitlOpen, setHitlOpen] = useState(false);
   const [hitlData, setHitlData] = useState({
@@ -44,7 +52,7 @@ const MainLayout = () => {
     <div className="app-shell h-screen w-full flex overflow-hidden" style={{ background: 'var(--corporate-bg)' }}>
       <Sidebar
         isOpen={sidebarOpen}
-        toggleSidebar={() => setSidebarOpen((open) => !open)}
+        toggleSidebar={toggleSidebar}
         theme={theme}
         toggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
       />
@@ -66,6 +74,8 @@ const MainLayout = () => {
 };
 
 export default MainLayout;
+
+
 
 
 
