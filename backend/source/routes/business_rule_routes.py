@@ -1,8 +1,8 @@
-﻿from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from Config.llm_config import settings
-from Persistence.sqlite.models import BusinessRule, ProjectFile
+from Persistence.sqlite.models import BusinessRule, Project, ProjectFile
 from Persistence.sqlite.session import get_db
 from Processes.logic_extraction_process import LogicExtractionProcess
 
@@ -16,6 +16,8 @@ def serialize_rule(rule: BusinessRule, filename: str = ""):
         "id": rule.id,
         "rule_id": rule.rule_id,
         "rule_text": rule.rule_text or rule.business_logic or "",
+        "business_purpose": rule.business_purpose or "",
+        "functional_logic": rule.functional_logic or rule.business_logic or "",
         "technical_ref": technical_ref,
         "technical_yaml": technical_yaml or technical_ref,
         "filename": filename,
@@ -34,10 +36,24 @@ def serialize_rules(db: Session, rules: list[BusinessRule]):
     return [serialize_rule(rule, files.get(rule.file_id, "")) for rule in rules]
 
 
+def project_ai_config(project: Project | None):
+    if not project:
+        return {"mode": "openrouter" if settings.OPENROUTER_API_KEY else "local"}
+    mode = project.ai_mode or project.llm_provider or "openrouter"
+    return {
+        "mode": mode,
+        "provider": mode,
+        "key": project.custom_api_key or settings.OPENROUTER_API_KEY,
+        "url": project.custom_api_base_url or settings.OPENROUTER_BASE_URL,
+        "model": project.llm_model or settings.OPENROUTER_MODEL,
+    }
+
+
 @router.post("/{run_id}/extract")
 async def extract_rules(run_id: str, db: Session = Depends(get_db)):
-    provider = "openrouter" if settings.OPENROUTER_API_KEY else "local"
-    process = LogicExtractionProcess(db, llm_provider=provider)
+    project = db.query(Project).filter_by(run_id=run_id).first()
+    config = project_ai_config(project)
+    process = LogicExtractionProcess(db, llm_provider=config)
     await process.extract_all_rules(run_id)
     rules = db.query(BusinessRule).filter_by(run_id=run_id).order_by(BusinessRule.id).all()
     return serialize_rules(db, rules)

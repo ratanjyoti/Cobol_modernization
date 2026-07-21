@@ -16,33 +16,48 @@ class LogicStep(BaseModel):
     description: str
     technical_trigger: str
 
-
 class TechnicalAnalyzerAgent(AgentBase):
     def __init__(self, llm_client):
         self.llm_client = llm_client
 
-    async def analyze_deep(self, content: str, lang: str):
+    async def analyze_skeleton(self, content: str, global_types: str):
         prompt = f"""
-        You are an expert Mainframe Modernization Architect.
-        Analyze the following {lang} code and produce a comprehensive Technical Analysis Report.
-
+        You are a Mainframe Technical Architect. Analyze the following COBOL code.
+        
+        CONTEXT:
+        Global Type Mappings: {global_types}
+        
         CODE:
         {content}
-
-        REQUIREMENTS:
-        1. BUSINESS PURPOSE: Provide a 3-5 sentence summary of the program's goal.
-        2. DATA STRUCTURES: Extract all record layouts. For each field, provide the name, PIC clause, and a business description.
-        3. LOGIC FLOW: Break down the PROCEDURE DIVISION into a step-by-step narrative.
-        4. DEPENDENCIES: Identify all external files, programs, and copybooks.
-        5. RECOMMENDATIONS: Provide 3-5 specific modernization tips.
-
-        OUTPUT:
-        You must return a JSON object matching the TechnicalAnalysisReport schema.
+        
+        TASK:
+        Create a Technical YAML map of this chunk. Identify:
+        1. Logic Flow: (e.g., Paragraph A -> calls Paragraph B)
+        2. Data Mutations: (e.g., Variable X is updated based on Condition Y)
+        3. External Hits: (SQL Tables or CICS calls)
+        
+        OUTPUT FORMAT:
+        Return ONLY a valid YAML block. Do not include conversational text.
         """
-        if hasattr(self.llm_client, "generate_json"):
-            return await self.llm_client.generate_json(prompt, response_model=TechnicalAnalysisReport)
-        response = self.llm_client.generate(
-            "Return only JSON matching the requested technical analysis schema.",
-            prompt,
-        )
-        return TechnicalAnalysisReport.model_validate_json(response)
+        # Use the generate method from your agent_base
+        response = await self.llm_client.generate(prompt)
+        return response
+
+    async def analyze_deep(self, content: str, lang: str):
+        prompt = f"""
+        You are a Mainframe Modernization Architect. Produce a professional Reverse Engineering Report for this {lang} code.
+        
+        CODE:
+        {content}
+        
+        You MUST produce the following sections exactly:
+        1. BUSINESS PURPOSE: A detailed 3-5 sentence paragraph describing the program's goal.
+        2. DATA STRUCTURES: A detailed list of every record layout, including field names, PIC clauses, and business descriptions.
+        3. PROCESSING LOGIC FLOW: A numbered step-by-step narrative of the entire program execution.
+        4. EXTERNAL DEPENDENCIES: List all files, copybooks, and external programs called.
+        5. COMPLEXITY & MODERNIZATION: Provide a Complexity Rating (Low/Medium/High) and 3 specific tips for migrating this to Java/Quarkus.
+        
+        OUTPUT: Return ONLY a JSON object.
+        """
+        response = await self.llm_client.generate(prompt)
+        return json.loads(response) # Ensure this maps to your TechnicalAnalysisReport model

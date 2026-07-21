@@ -19,6 +19,7 @@ const menuGroups = [
     group: 'Core',
     items: [
       { name: 'Dashboard',      path: '/dashboard',          icon: LayoutDashboard, desc: 'View project health, progress, and next modernization actions.' },
+      { name: 'Initial Setup', path: '/initial-setup',      icon: Settings,       desc: 'Configure AI models, project runs, and regional settings.' }, // ADD THIS
       { name: 'Projects',       path: '/projects',           icon: Database,        desc: 'Create a new migration run or resume an existing project.' },
     ],
   },

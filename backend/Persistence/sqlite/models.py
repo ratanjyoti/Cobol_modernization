@@ -1,4 +1,4 @@
-﻿from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enum, Text
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enum, Text
 from sqlalchemy.ext.declarative import declarative_base
 import enum
 import datetime
@@ -26,6 +26,9 @@ class Project(Base):
     project_name = Column(String)
 
     llm_provider = Column(String)
+    ai_mode = Column(String)
+    custom_api_key = Column(String, nullable=True)
+    custom_api_base_url = Column(String, nullable=True)
     llm_model = Column(String)
     interaction_lang = Column(String)
 
@@ -45,35 +48,35 @@ class ProjectFile(Base):
     detected_lang = Column(String)
     status = Column(Enum(FileStatus), default=FileStatus.PENDING_CONFIRMATION)
 
-class BusinessRule(Base):
-    __tablename__ = "business_rules"
-
-    id = Column(Integer, primary_key=True)
-    run_id = Column(String, ForeignKey("projects.run_id"), nullable=False)
-
-    # Current UI-facing extraction fields.
-    chunk_id = Column(Integer, ForeignKey("file_chunks.id"), nullable=True)
-    rule_id = Column(String)
-    rule_text = Column(Text, nullable=True)
-    technical_ref = Column(Text)
-    status = Column(String, default="PENDING")
-
-    # Compatibility fields used by older analysis routes and databases.
-    file_id = Column(Integer, ForeignKey("project_files.id"), nullable=True)
-    chunk_index = Column(Integer)
-    technical_yaml = Column(Text)
-    business_logic = Column(Text)
-
-
 class ChunkAnalysis(Base):
     __tablename__ = "chunk_analysis"
     
     id = Column(Integer, primary_key=True)
     chunk_id = Column(Integer, ForeignKey("file_chunks.id"), nullable=False)
     run_id = Column(String, nullable=False)
-    technical_yaml = Column(Text, nullable=False) # The structured blueprint
+    technical_yaml = Column(Text, nullable=False) # The structured blueprint (The "How")
     analysis_status = Column(String, default="COMPLETED") # COMPLETED, FAILED
     tokens_used = Column(Integer)
+
+class BusinessRule(Base):
+    __tablename__ = "business_rules"
+    id = Column(Integer, primary_key=True)
+    run_id = Column(String, ForeignKey("projects.run_id"), nullable=False)
+    
+    # New Fields for the "Report" style
+    business_purpose = Column(Text)  # The high-level purpose
+    functional_logic = Column(Text) # The detailed breakdown
+    business_logic = Column(Text) # Backward-compatible storage for the detailed flow
+    
+    chunk_id = Column(Integer, ForeignKey("file_chunks.id"), nullable=True)
+    file_id = Column(Integer, ForeignKey("project_files.id"), nullable=True)
+    chunk_index = Column(Integer)
+    rule_id = Column(String) 
+    rule_text = Column(Text, nullable=True) 
+    technical_ref = Column(Text)
+    status = Column(String, default="PENDING")
+    technical_yaml = Column(Text)
+
     
 class ProjectComplexity(Base):
     __tablename__ = "project_complexity"
@@ -175,3 +178,23 @@ class TechnicalAnalysis(Base):
     file_id = Column(Integer, ForeignKey("project_files.id"))
     filename = Column(String)
     report_json = Column(Text) # Stores the TechnicalAnalysisReport as JSON
+
+class FileAnalysis(Base):
+    __tablename__ = "file_analysis"
+    id = Column(Integer, primary_key=True)
+    run_id = Column(String, ForeignKey("projects.run_id"), nullable=False)
+    file_id = Column(Integer, ForeignKey("project_files.id"), nullable=False)
+    
+    # --- Business Section ---
+    business_purpose = Column(Text) # e.g., "The program serves as a payroll application..."
+    functional_summary = Column(Text) # Detailed flow narrative
+    
+    # --- Technical Section (Stored as JSON for flexibility) ---
+    # Stores: Data Structures, Logic Flow, External Dependencies, Complexity
+    technical_report_json = Column(Text) 
+    
+    # --- Metrics ---
+    complexity_rating = Column(String) # Medium, High, Low
+    modernization_tips = Column(Text)
+    
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)

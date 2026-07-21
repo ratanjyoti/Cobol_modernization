@@ -11,75 +11,124 @@ class BusinessLogicExtractorAgent(AgentBase):
     def __init__(self, llm_client=None):
         self.llm = llm_client
 
-    def extract_rules(self, technical_yaml, raw_code, context_packet=None, use_llm=True):
+    def extract_rules(self, technical_yaml, raw_code, context_packet=None, use_llm=True, source_name=None):
         system_prompt = """
-You are a Senior Business Analyst specializing in legacy modernization.
-Perform the semantic leap from HOW the COBOL works to WHY the business needs it.
+You are a Senior Business Analyst. Your task is to create a professional "Functional Specification" for a legacy COBOL program.
 
-Thought process to follow:
-1. Identify Trigger: what business event starts this behavior?
-2. Trace Path: what business path follows from the technical flow?
-3. Identify Actor: who benefits or performs this work?
-4. Synthesize Story: write a user story.
+### OUTPUT STRUCTURE REQUIRED:
+For each file, you must provide:
+1. BUSINESS PURPOSE: A detailed 3-5 sentence paragraph explaining exactly what this program does for the business. Who uses it? What is the end goal?
+2. DETAILED FUNCTIONAL LOGIC: A comprehensive breakdown of the business process. Describe the flow of data and the decisions made. (e.g., "The system first validates the account status; if the account is 'Frozen', it rejects the transaction and logs an error...").
+3. ATOMIC BUSINESS RULES: A list of specific, granular rules (IF/THEN) derived from the code.
 
-Rules:
-- Do not mention variables, paragraphs, loops, IF statements, or implementation mechanics.
-- Write business intent only.
-- Every rule must be a user story: "As a [Role], I want to [Action] so that [Value]."
-- Return only valid JSON in this shape:
-{"rules":[{"rule_text":"...","technical_ref":"..."}]}
+### RULES FOR WRITING:
+- NO TECHNICAL JARGON: No 'variables', 'paragraphs', 'IF statements', or 'MOVE'.
+- BE EXHAUSTIVE: Do not summarize. If the code has 10 different logic paths, describe all 10.
+- USE DOMAIN TERMS: Use 'Account Balance' instead of 'WS-BAL'.
+- STYLE: Write it as a professional business requirement document.
+
+### OUTPUT FORMAT:
+Return ONLY a JSON object:
+{
+  "business_purpose": "Detailed paragraph about the program's goal...",
+  "functional_logic": "A deep-dive explanation of the process flow...",
+  "rules": [
+    {"rule_text": "Detailed rule 1...", "technical_ref": "Line 100"},
+    {"rule_text": "Detailed rule 2...", "technical_ref": "Line 120"}
+  ]
+}
 """
+
         packet = context_packet or {}
         user_prompt = "\n\n".join([
-            "[Symbol Lock - Type Mappings]\n" + (packet.get("global_types") or "None"),
-            "[Symbol Lock - Paragraph Signatures]\n" + (packet.get("global_signatures") or "None"),
-            "[Technical YAML]\n" + (technical_yaml or "None"),
-            "[Raw COBOL]\n" + (raw_code or ""),
+            f"[Source File]\n{source_name or 'Unknown'}",
+            f"[Symbol Lock]\n{packet.get('global_types') or 'None'}",
+            f"[Technical YAML]\n{technical_yaml or 'None'}",
+            f"[Raw COBOL]\n{raw_code or ''}",
         ])
 
         response = ""
-        if use_llm and self.llm is not None and hasattr(self.llm, "generate"):
+        if use_llm and self.llm is not None:
             try:
                 response = self.llm.generate(system_prompt, user_prompt) or ""
             except Exception as exc:
-                print(f"Business rule LLM call failed; using local fallback: {exc}")
+                print(f"LLM call failed: {exc}")
 
-        parsed_rules = self._parse_json_rules(response)
-        if parsed_rules:
-            return parsed_rules
+        parsed = self._parse_json_rules(response)
+        if parsed:
+            return parsed
 
-        return self._extract_rules_locally(technical_yaml, raw_code)
+        return self._extract_report_locally(technical_yaml, raw_code, source_name)
 
     def _parse_json_rules(self, response):
-        if not (response or "").strip():
-            return []
+        if not response:
+            return None
 
-        candidates = [response.strip()]
-        fenced = re.search(r"```(?:json)?\s*(.*?)```", response, flags=re.IGNORECASE | re.DOTALL)
-        if fenced:
-            candidates.insert(0, fenced.group(1).strip())
+        cleaned = re.sub(r"```(?:json)?\s*(.*?)\s*```", r"\1", response, flags=re.DOTALL).strip()
 
-        object_start = response.find("{")
-        object_end = response.rfind("}")
-        if object_start != -1 and object_end != -1 and object_end > object_start:
-            candidates.append(response[object_start:object_end + 1])
+        try:
+            data = json.loads(cleaned)
+        except Exception:
+            return None
 
-        list_start = response.find("[")
-        list_end = response.rfind("]")
-        if list_start != -1 and list_end != -1 and list_end > list_start:
-            candidates.append(response[list_start:list_end + 1])
+        if isinstance(data, dict):
+            rules = data.get("rules") or []
+            return {
+                "business_purpose": self._clean_paragraph(data.get("business_purpose") or ""),
+                "functional_logic": self._clean_paragraph(data.get("functional_logic") or ""),
+                "rules": self._normalize_rule_items(rules),
+            }
 
-        for candidate in candidates:
-            try:
-                decoded = json.loads(candidate)
-            except json.JSONDecodeError:
+        if isinstance(data, list):
+            return {
+                "business_purpose": "",
+                "functional_logic": "",
+                "rules": self._normalize_rule_items(data),
+            }
+
+        return None
+
+    def _normalize_rule_items(self, decoded):
+        normalized = []
+        seen = set()
+        if not isinstance(decoded, list):
+            return normalized
+
+        for item in decoded:
+            if isinstance(item, str):
+                rule_text = item
+                technical_ref = ""
+            elif isinstance(item, dict):
+                rule_text = item.get("rule_text") or item.get("text") or item.get("rule") or ""
+                technical_ref = item.get("technical_ref") or item.get("source") or item.get("reference") or ""
+            else:
                 continue
 
-            validated = validate_rule_payload(decoded)
-            if validated:
-                return self._normalize_rules(validated)
+            rule_text = self._clean_paragraph(rule_text)
+            key = rule_text.lower()
+            if rule_text and key not in seen:
+                seen.add(key)
+                normalized.append({"rule_text": rule_text, "technical_ref": str(technical_ref or "")})
+        return normalized
 
-        return []
+    def _extract_report_locally(self, technical_yaml, raw_code, source_name=None):
+        program_name = self._program_name(raw_code, source_name)
+        domain = self._infer_domain(raw_code, program_name)
+        purpose = self._business_purpose(program_name, domain, raw_code)
+        functional_logic = self._functional_logic(domain, raw_code)
+        rules = self._normalize_rule_items(self._extract_rules_locally(technical_yaml, raw_code))
+
+        if not rules:
+            rules = [{
+                "rule_text": f"The {program_name} program must preserve its {domain['process']} business behavior during modernization.",
+                "technical_ref": "Derived from uploaded source file",
+            }]
+
+        return {
+            "business_purpose": purpose,
+            "functional_logic": functional_logic,
+            "rules": rules,
+        }
 
     def _normalize_rules(self, decoded):
         if not isinstance(decoded, list):
@@ -186,6 +235,114 @@ Rules:
                 })
         return rules
 
+    def _program_name(self, raw_code, source_name=None):
+        match = re.search(r"\bPROGRAM-ID\.?\s+([A-Z0-9_-]+)", raw_code or "", re.IGNORECASE)
+        if match:
+            return match.group(1).strip().upper()
+        return source_name or "uploaded source file"
+
+    def _infer_domain(self, raw_code, program_name):
+        text = f"{program_name}\n{raw_code or ''}".lower()
+        program_lower = program_name.lower()
+        if program_lower.endswith(".cpy") or "copybook" in text or "01 " in text:
+            if any(word in text for word in ["customer", "cust", "client"]):
+                return {
+                    "entity": "customer",
+                    "process": "customer data definition",
+                    "action": "storing customer information including identifiers, names, addresses, balances, and statuses",
+                    "outcome": "customer programs share a consistent structure for reading, displaying, and updating customer details",
+                }
+            return {
+                "entity": "business record",
+                "process": "shared data definition",
+                "action": "storing the shared business data structure used by related programs",
+                "outcome": "all related programs interpret the same business fields consistently",
+            }
+        if any(word in text for word in ["folha", "payroll", "salary", "salario", "employee", "empregado"]):
+            return {
+                "entity": "employee",
+                "process": "payroll management",
+                "action": "managing employee data, calculating salaries, and supporting payroll maintenance operations",
+                "outcome": "payroll records remain accurate and ready for business processing",
+            }
+        if any(word in text for word in ["customer", "cust", "client"]):
+            program_lower = program_name.lower()
+            if "display" in program_lower or ("display" in text and "inquiry" not in program_lower and "read" not in text):
+                action = "displaying customer information including identifiers, names, addresses, balances, and statuses"
+            elif "inquiry" in program_lower or any(word in text for word in ["read", "search", "id"]):
+                action = "retrieving customer information based on a provided customer identifier"
+            else:
+                action = "maintaining and presenting customer information for business users"
+            return {
+                "entity": "customer",
+                "process": "customer information handling",
+                "action": action,
+                "outcome": "staff can access the customer details needed for service and account decisions",
+            }
+        if any(word in text for word in ["account", "acct", "balance"]):
+            return {
+                "entity": "account",
+                "process": "account processing",
+                "action": "validating account information, evaluating balances, and applying account-related business decisions",
+                "outcome": "account activity follows the organization's operational policies",
+            }
+        if any(word in text for word in ["order", "invoice", "payment"]):
+            return {
+                "entity": "transaction",
+                "process": "transaction processing",
+                "action": "processing business transactions, calculating required values, and producing the expected operational outcome",
+                "outcome": "transactions are completed consistently and recorded for downstream use",
+            }
+        return {
+            "entity": "business record",
+            "process": "legacy business processing",
+            "action": "validating input data, executing the required business decisions, and producing the expected output",
+            "outcome": "the migrated system preserves the behavior of the original legacy process",
+        }
+
+    def _business_purpose(self, program_name, domain, raw_code):
+        operations = []
+        upper = raw_code.upper() if raw_code else ""
+        if "ACCEPT" in upper:
+            operations.append("captures user or batch input")
+        if "READ" in upper or "SELECT" in upper or "EXEC SQL" in upper:
+            operations.append(f"retrieves {domain['entity']} data")
+        if "DISPLAY" in upper or "WRITE" in upper:
+            operations.append("presents business information to users or reports")
+        if "COMPUTE" in upper or "ADD " in upper or "SUBTRACT" in upper or "MULTIPLY" in upper:
+            operations.append("calculates business values")
+        if "DELETE" in upper or "REWRITE" in upper or "WRITE" in upper:
+            operations.append("updates stored business records")
+
+        operation_text = ", ".join(dict.fromkeys(operations)) or "coordinates the required business steps"
+        return (
+            f"The {program_name} program serves the business function of {domain['action']}. "
+            f"It {operation_text} as part of the {domain['process']} workflow. "
+            f"The end goal is to ensure that {domain['outcome']}."
+        )
+
+    def _functional_logic(self, domain, raw_code):
+        steps = []
+        upper = raw_code.upper() if raw_code else ""
+        if "ACCEPT" in upper:
+            steps.append(f"The process begins by accepting the required {domain['entity']} input from the user or calling process.")
+        if "READ" in upper or "SELECT" in upper or "EXEC SQL" in upper:
+            steps.append(f"The program then retrieves the matching {domain['entity']} details from the available file or data source.")
+        if "IF" in upper or "EVALUATE" in upper:
+            steps.append("Business conditions are evaluated to decide which action, message, calculation, or exception path should be applied.")
+        if "COMPUTE" in upper or "ADD " in upper or "SUBTRACT" in upper or "MULTIPLY" in upper:
+            steps.append("When numeric values are present, the program calculates the required business totals or derived amounts before output is produced.")
+        if "DISPLAY" in upper or "WRITE" in upper:
+            steps.append("The resulting information is formatted and presented or written so the business user can act on the outcome.")
+        if "DELETE" in upper or "REWRITE" in upper:
+            steps.append("Where maintenance actions are requested, the existing business record is changed or removed according to the selected operation.")
+        if not steps:
+            steps.append(f"The program executes the required {domain['process']} steps from input through final output while preserving legacy behavior.")
+        return " ".join(steps)
+
+    @staticmethod
+    def _clean_paragraph(text):
+        return re.sub(r"\s+", " ", str(text or "").strip())
     @staticmethod
     def _strip_sequence_number(line):
         return re.sub(r"^\d{5,6}\s+", "", str(line or "").strip())
@@ -193,14 +350,27 @@ Rules:
         line = self._strip_sequence_number(line)
         condition = re.sub(r"^\s*IF\s+", "", line, flags=re.IGNORECASE)
         condition = re.sub(r"^\s*EVALUATE\s+", "", condition, flags=re.IGNORECASE)
+        # Remove the action part to keep only the condition
         condition = re.split(r"\bTHEN\b|\bPERFORM\b|\bMOVE\b|\bCOMPUTE\b|\.", condition, maxsplit=1, flags=re.IGNORECASE)[0]
+        
+        # Make it read like a business requirement
         condition = condition.replace("<=", " is less than or equal to ")
         condition = condition.replace(">=", " is greater than or equal to ")
         condition = condition.replace("=", " is equal to ")
         condition = condition.replace("<", " is less than ")
         condition = condition.replace(">", " is greater than ")
-        condition = re.sub(r"\bNOT\s+=\b", " is not equal to ", condition, flags=re.IGNORECASE)
-        return self._business_phrase(condition).strip() or "the qualifying business condition is met"
+        
+        return f"whenever the condition '{self._business_phrase(condition)}' is met"
+
+    def _as_user_story(self, text):
+        text = re.sub(r"\s+", " ", str(text or "").strip())
+        if not text: return ""
+        
+        # If it's already a detailed rule, don't force it into a short "As a..." format
+        if len(text) > 100 or "whenever" in text.lower():
+            return f"Business Rule: {text}"
+            
+        return f"As a business user, I want to {text[0].lower() + text[1:]} to ensure operational consistency."
 
     def _business_phrase(self, text):
         phrase = str(text or "").replace("-", " ").replace("_", " ")
@@ -235,10 +405,11 @@ Rules:
                 return replacement + cleaned[len(prefix):]
         return cleaned
 
-    def _as_user_story(self, text):
-        text = re.sub(r"\s+", " ", str(text or "").strip())
-        if not text:
-            return ""
-        if text.lower().startswith("as a ") or text.lower().startswith("as an "):
-            return text
-        return f"As an operations user, I want to {text[0].lower() + text[1:]} so that the business process remains consistent."
+
+
+
+
+
+
+
+

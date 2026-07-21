@@ -7,6 +7,8 @@ import MainLayout from '../layouts/MainLayout';
 import Dashboard          from '../pages/Dashboard';
 import Projects           from '../pages/Projects';
 
+import InitialSetup from '../pages/InitialSetup';
+
 // Reverse Engineering
 import SourceFiles        from '../pages/SourceFiles';
 import SystemDiscovery    from '../pages/SystemDiscovery';
@@ -46,6 +48,8 @@ const AnimatedRoutes = () => {
           <Route index element={<Navigate to="/dashboard" replace />} />
 
           <Route path="dashboard"            element={<PageWrapper><Dashboard /></PageWrapper>} />
+          <Route path="/initial-setup" element={<InitialSetup />} />
+
           <Route path="projects"             element={<PageWrapper><Projects /></PageWrapper>} />
           <Route path="discovery"            element={<PageWrapper><SystemDiscovery /></PageWrapper>} />
           <Route path="source-files"         element={<PageWrapper><SourceFiles /></PageWrapper>} />

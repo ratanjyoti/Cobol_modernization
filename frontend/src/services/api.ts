@@ -1,13 +1,16 @@
 import axios from 'axios';
 
 export interface ProjectConfig {
-  project_name: string;
-  provider: string;
-  model: string;
-  lang: string;
-  speed_profile: 'Turbo' | 'Fast' | 'Balanced' | 'Thorough';
+  project_name?: string;
+  mode?: string;
+  provider?: string;
+  key?: string;
+  url?: string;
+  model?: string;
+  lang?: string;
+  speed_profile?: 'Turbo' | 'Fast' | 'Balanced' | 'Thorough';
   reasoning_effort?: 'Low' | 'Medium' | 'High';
-  workers: number;
+  workers?: number;
 }
 
 export interface FileRecord {
@@ -34,6 +37,9 @@ export interface ProjectSummary {
   files_count: number;
   target?: string | null;
   llm_provider?: string | null;
+  ai_mode?: string | null;
+  custom_api_base_url?: string | null;
+  has_custom_api_key?: boolean;
   llm_model?: string | null;
   interaction_lang?: string | null;
   speed_profile?: string | null;
@@ -76,6 +82,11 @@ api.interceptors.request.use((config) => {
 export const ProjectAPI = {
   create: async (config: ProjectConfig): Promise<{ run_id: string; name: string; status: string }> => {
     const response = await api.post('/projects', config);
+    return response.data;
+  },
+
+  getConfig: async (runId: string): Promise<ProjectConfig> => {
+    const response = await api.get(`/projects/${runId}/config`);
     return response.data;
   },
 

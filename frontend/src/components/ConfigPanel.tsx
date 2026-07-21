@@ -1,235 +1,288 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom'; // FIXED: Added these
-import { Globe, Cpu, CheckCircle2, ArrowRight, LayoutDashboard, Settings, FileText, Activity } from 'lucide-react'; // Added missing icons
+import { motion, AnimatePresence } from 'framer-motion';
+import { Globe, Cpu, CheckCircle2, ArrowRight, Lock, Server } from 'lucide-react';
 import toast from 'react-hot-toast';
-import Tooltip from './Tooltip';
+import { ProjectAPI } from '../services/api';
 
-// --- CONSTANTS ---
 const LOCAL_MODELS = ['llama3', 'mistral', 'phi3', 'codellama'];
-const CLOUD_MODELS = ['gpt-4o', 'gpt-4-turbo', 'claude-3-5-sonnet'];
-const DEFAULT_CONFIG = { key: '', url: 'http://localhost:11434', model: 'gpt-4o' };
-
-// FIXED: Defined NAV_ITEMS so the map function actually works
-const NAV_ITEMS = [
-  { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, desc: 'Project Overview' },
-  { name: 'Source Files', path: '/source-files', icon: FileText, desc: 'Manage Code' },
-  { name: 'Mission Control', path: '/mission-control', icon: Activity, desc: 'Pipeline Status' },
-  { name: 'Settings', path: '/settings', icon: Settings, desc: 'AI Configuration' },
+const OPENROUTER_MODELS = [
+  'openai/gpt-4o-mini',
+  'google/gemini-2.0-flash-exp:free',
+  'meta-llama/llama-3.1-8b-instruct:free',
+  'mistralai/mistral-7b-instruct:free',
 ];
 
-type ConfigMode = 'api' | 'local' | null;
+type AiMode = 'openrouter' | 'local' | 'custom';
 
-interface AIConfigForm {
-  key: string;
-  url: string;
-  model: string;
-}
-
-// --- COMPONENT 1: SIDEBAR (Moved OUTSIDE ConfigPanel) ---
-const Sidebar = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  return (
-    <div className="w-64 h-screen bg-slate-950 border-r border-slate-800 flex flex-col p-4">
-      <div className="mb-10 px-4">
-        <h1 className="text-indigo-500 font-black text-xl tracking-tighter">ModernizerAI</h1>
-      </div>
-
-      <nav className="flex-1 space-y-2">
-        {NAV_ITEMS.map((item) => (
-          <Tooltip key={item.path} text={item.desc} position="right">
-            <button 
-              onClick={() => navigate(item.path)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm font-medium ${
-                location.pathname === item.path 
-                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
-                : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-              }`}
-            >
-              <item.icon size={18} />
-              {item.name}
-            </button>
-          </Tooltip>
-        ))}
-      </nav>
-    </div>
-  );
-};
-
-// --- COMPONENT 2: CONFIG PANEL ---
 interface ConfigPanelProps {
   runId: string | null;
-  onSave?: (config: { mode: ConfigMode; key: string; url: string; model: string }) => void;
+  onSave?: (config: any) => void;
 }
+
+const defaultsForMode = (mode: AiMode) => {
+  if (mode === 'local') {
+    return { key: '', url: 'http://localhost:11434', model: 'llama3' };
+  }
+  return { key: '', url: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o-mini' };
+};
+
+const normalizeMode = (value: unknown): AiMode => {
+  return value === 'local' || value === 'custom' || value === 'openrouter' ? value : 'openrouter';
+};
+
+const storageKeyForRun = (runId: string | null) => runId ? `ai_config_${runId}` : 'ai_config';
 
 const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
   const [step, setStep] = useState(1);
-  const [mode, setMode] = useState<ConfigMode>(null);
-  const [config, setConfig] = useState<AIConfigForm>(DEFAULT_CONFIG);
+  const [mode, setMode] = useState<AiMode | null>(null);
+  const [config, setConfig] = useState(defaultsForMode('openrouter'));
   const [customModel, setCustomModel] = useState('');
 
   useEffect(() => {
-    const savedConfig = localStorage.getItem('ai_config');
-    if (savedConfig) {
-      try {
-        const parsed = JSON.parse(savedConfig);
-        setMode(parsed.mode);
-        const savedModel = parsed.model || DEFAULT_CONFIG.model;
-        const knownModels = [...CLOUD_MODELS, ...LOCAL_MODELS];
-        setConfig({
-          key: parsed.key || '',
-          url: parsed.url || DEFAULT_CONFIG.url,
-          model: knownModels.includes(savedModel) ? savedModel : 'custom',
-        });
-        setCustomModel(knownModels.includes(savedModel) ? '' : savedModel);
-      } catch (e) { console.error("Config load error", e); }
-    }
-  }, []);
+    let cancelled = false;
 
-  const handleSave = () => {
+    const applySavedConfig = (saved: any) => {
+      const savedMode = normalizeMode(saved.mode || saved.provider);
+      const savedModel = saved.model || defaultsForMode(savedMode).model;
+      setMode(savedMode);
+      setConfig({
+        ...defaultsForMode(savedMode),
+        key: saved.key || '',
+        url: saved.url || defaultsForMode(savedMode).url,
+        model: [...OPENROUTER_MODELS, ...LOCAL_MODELS].includes(savedModel) ? savedModel : 'custom',
+      });
+      setCustomModel([...OPENROUTER_MODELS, ...LOCAL_MODELS].includes(savedModel) ? '' : savedModel);
+    };
+
+    const loadSavedConfig = async () => {
+      const runScopedKey = storageKeyForRun(runId);
+      const runScopedConfig = localStorage.getItem(runScopedKey);
+      if (runScopedConfig) {
+        try {
+          applySavedConfig(JSON.parse(runScopedConfig));
+          return;
+        } catch (e) {
+          console.error('Run config load error', e);
+        }
+      }
+
+      if (runId) {
+        try {
+          const serverConfig = await ProjectAPI.getConfig(runId);
+          if (!cancelled && (serverConfig.mode || serverConfig.provider || serverConfig.model)) {
+            applySavedConfig(serverConfig);
+            localStorage.setItem(runScopedKey, JSON.stringify(serverConfig));
+            localStorage.setItem('ai_config', JSON.stringify(serverConfig));
+            return;
+          }
+        } catch (e) {
+          console.error('Server config load error', e);
+        }
+      }
+
+      const globalConfig = localStorage.getItem('ai_config');
+      if (!globalConfig) return;
+      try {
+        applySavedConfig(JSON.parse(globalConfig));
+      } catch (e) {
+        console.error('Config load error', e);
+      }
+    };
+
+    void loadSavedConfig();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [runId]);
+
+  const chooseMode = (nextMode: AiMode) => {
+    setMode(nextMode);
+    setConfig(defaultsForMode(nextMode));
+    setCustomModel('');
+    setStep(2);
+  };
+
+  const handleSave = async () => {
     if (!mode) {
       toast.error('Please select a configuration mode');
       return;
     }
-    if (mode === 'api' && !config.key.trim()) {
-      toast.error('Please enter an API key');
+    if ((mode === 'openrouter' || mode === 'custom') && !config.key.trim()) {
+      toast.error(mode === 'openrouter' ? 'Enter your OpenRouter API key' : 'Custom API key is required');
       return;
     }
 
     const finalModel = config.model === 'custom' ? customModel.trim() : config.model;
     if (!finalModel) {
-      toast.error('Please provide a model name');
+      toast.error('Please choose or enter a model');
       return;
     }
 
-    const savedConfig = {
+    const finalConfig = {
       mode,
-      key: config.key,
-      url: config.url,
+      provider: mode,
+      key: config.key.trim(),
+      url: config.url.trim() || defaultsForMode(mode).url,
       model: finalModel,
     };
 
-    localStorage.setItem('ai_config', JSON.stringify(savedConfig));
-    window.dispatchEvent(new CustomEvent('ai-config-updated', { detail: savedConfig }));
-    onSave?.(savedConfig);
-
-    toast.success('Configuration saved successfully');
+    try {
+      localStorage.setItem(storageKeyForRun(runId), JSON.stringify(finalConfig));
+      localStorage.setItem('ai_config', JSON.stringify(finalConfig));
+      if (runId) {
+        await ProjectAPI.updateConfig(runId, finalConfig);
+      }
+      window.dispatchEvent(new CustomEvent('ai-config-updated', { detail: finalConfig }));
+      onSave?.(finalConfig);
+      toast.success('AI configuration saved');
+      setStep(1);
+    } catch (e) {
+      toast.error('Failed to sync configuration with server');
+    }
   };
+
+  const modelOptions = mode === 'local' ? LOCAL_MODELS : OPENROUTER_MODELS;
 
   return (
     <div className="w-full h-full">
-      {step === 1 ? (
-        <div className="space-y-4">
-          <div className="text-center mb-4">
-            <h3 className="text-lg font-bold text-white">AI Configuration</h3>
-            <p className="text-xs text-slate-400">Choose your preferred AI engine</p>
-          </div>
-          <div className="space-y-3">
-            <div
-              onClick={() => { setMode('api'); setStep(2); }}
-              className="cursor-pointer rounded-2xl border border-slate-700 bg-slate-800 p-4 hover:border-indigo-500 transition-all"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex gap-3 items-center">
-                  <Globe className="text-indigo-400" size={20} />
+      <AnimatePresence mode="wait">
+        {step === 1 ? (
+          <motion.div
+            key="step1"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="space-y-6"
+          >
+            <div className="text-center mb-6">
+              <h3 className="text-xl font-bold text-white">AI Engine Configuration</h3>
+              <p className="text-xs text-slate-400">Add your free API key and choose the model used by extraction</p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4">
+              <div
+                onClick={() => chooseMode('openrouter')}
+                className={`cursor-pointer rounded-2xl border p-4 transition-all flex items-center justify-between ${mode === 'openrouter' ? 'border-indigo-500 bg-indigo-500/10' : 'border-slate-700 bg-slate-800 hover:border-slate-600'}`}
+              >
+                <div className="flex items-center gap-4">
+                  <div className="p-3 rounded-xl bg-indigo-500/20 text-indigo-400"><Globe size={20} /></div>
                   <div>
-                    <p className="text-sm font-semibold text-white">Cloud API</p>
-                    <p className="text-[10px] text-slate-400">OpenAI, Azure, Anthropic</p>
+                    <p className="text-sm font-semibold text-white">OpenRouter API</p>
+                    <p className="text-[10px] text-slate-400">Use your OpenRouter free key for business-rule extraction</p>
                   </div>
                 </div>
                 <ArrowRight size={16} className="text-slate-500" />
               </div>
-            </div>
-            <div
-              onClick={() => { setMode('local'); setStep(2); }}
-              className="cursor-pointer rounded-2xl border border-slate-700 bg-slate-800 p-4 hover:border-emerald-500 transition-all"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex gap-3 items-center">
-                  <Cpu className="text-emerald-400" size={20} />
+
+              <div
+                onClick={() => chooseMode('local')}
+                className={`cursor-pointer rounded-2xl border p-4 transition-all flex items-center justify-between ${mode === 'local' ? 'border-emerald-500 bg-emerald-500/10' : 'border-slate-700 bg-slate-800 hover:border-slate-600'}`}
+              >
+                <div className="flex items-center gap-4">
+                  <div className="p-3 rounded-xl bg-emerald-500/20 text-emerald-400"><Cpu size={20} /></div>
                   <div>
                     <p className="text-sm font-semibold text-white">Local LLM</p>
-                    <p className="text-[10px] text-slate-400">Ollama, vLLM</p>
+                    <p className="text-[10px] text-slate-400">Ollama, LM Studio, or a local compatible server</p>
+                  </div>
+                </div>
+                <ArrowRight size={16} className="text-slate-500" />
+              </div>
+
+              <div
+                onClick={() => chooseMode('custom')}
+                className={`cursor-pointer rounded-2xl border p-4 transition-all flex items-center justify-between ${mode === 'custom' ? 'border-purple-500 bg-purple-500/10' : 'border-slate-700 bg-slate-800 hover:border-slate-600'}`}
+              >
+                <div className="flex items-center gap-4">
+                  <div className="p-3 rounded-xl bg-purple-500/20 text-purple-400"><Lock size={20} /></div>
+                  <div>
+                    <p className="text-sm font-semibold text-white">Custom Compatible API</p>
+                    <p className="text-[10px] text-slate-400">Use any OpenAI-compatible endpoint and key</p>
                   </div>
                 </div>
                 <ArrowRight size={16} className="text-slate-500" />
               </div>
             </div>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center mb-2">
-            <h3 className="text-md font-bold text-white">
-              {mode === 'api' ? 'Cloud Config' : 'Local Config'}
-            </h3>
-            <button onClick={() => setStep(1)} className="text-[10px] text-indigo-400 hover:underline">Back</button>
-          </div>
-
-          {mode === 'api' && (
-            <div className="space-y-3">
-              <input
-                type="password"
-                placeholder="API Key"
-                value={config.key}
-                onChange={(e) => setConfig({ ...config, key: e.target.value })}
-                className="w-full rounded-xl bg-slate-800 border border-slate-700 px-3 py-2 text-sm text-white outline-none focus:ring-1 focus:ring-indigo-500"
-              />
-              <select
-                value={config.model}
-                onChange={(e) => setConfig({ ...config, model: e.target.value })}
-                className="w-full rounded-xl bg-slate-800 border border-slate-700 px-3 py-2 text-sm text-white outline-none"
-              >
-                {CLOUD_MODELS.map(m => <option key={m} value={m}>{m}</option>)}
-                <option value="custom">Custom Model</option>
-              </select>
-            </div>
-          )}
-
-          {mode === 'local' && (
-            <div className="space-y-3">
-              <input
-                type="text"
-                value={config.url}
-                placeholder="Server URL"
-                onChange={(e) => setConfig({ ...config, url: e.target.value })}
-                className="w-full rounded-xl bg-slate-800 border border-slate-700 px-3 py-2 text-sm text-white outline-none focus:ring-1 focus:ring-indigo-500"
-              />
-              <select
-                value={config.model}
-                onChange={(e) => setConfig({ ...config, model: e.target.value })}
-                className="w-full rounded-xl bg-slate-800 border border-slate-700 px-3 py-2 text-sm text-white outline-none"
-              >
-                {LOCAL_MODELS.map(m => <option key={m} value={m}>{m}</option>)}
-                <option value="custom">Custom Model</option>
-              </select>
-            </div>
-          )}
-
-          {config.model === 'custom' && (
-            <input
-              type="text"
-              placeholder="Enter model name"
-              value={customModel}
-              onChange={(e) => setCustomModel(e.target.value)}
-              className="w-full rounded-xl bg-slate-950 border border-indigo-500 px-3 py-2 text-sm text-white"
-            />
-          )}
-
-          <button
-            onClick={handleSave}
-            className="w-full bg-indigo-600 hover:bg-indigo-500 rounded-xl py-2 text-white text-sm font-semibold flex items-center justify-center gap-2 transition-all"
+          </motion.div>
+        ) : (
+          <motion.div
+            key="step2"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            className="space-y-6"
           >
-            <CheckCircle2 size={16} /> Save Config
-          </button>
-        </div>
-      )}
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="text-lg font-bold text-white">
+                {mode === 'openrouter' ? 'OpenRouter Config' : mode === 'local' ? 'Local Server Config' : 'Custom API Config'}
+              </h3>
+              <button onClick={() => setStep(1)} className="text-xs text-indigo-400 hover:underline">Back to Modes</button>
+            </div>
+
+            <div className="space-y-4">
+              {(mode === 'openrouter' || mode === 'custom') && (
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase">API Key</label>
+                  <input
+                    type="password"
+                    placeholder={mode === 'openrouter' ? 'Paste your OpenRouter API key' : 'Enter your API key'}
+                    value={config.key}
+                    onChange={(e) => setConfig({ ...config, key: e.target.value })}
+                    className="w-full rounded-xl bg-slate-950 border border-slate-800 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                  />
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase">Endpoint URL</label>
+                <div className="relative">
+                  <Server className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" size={14} />
+                  <input
+                    type="text"
+                    value={config.url}
+                    onChange={(e) => setConfig({ ...config, url: e.target.value })}
+                    className="w-full pl-10 pr-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder={mode === 'local' ? 'http://localhost:11434' : 'https://openrouter.ai/api/v1'}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase">Model</label>
+                <select
+                  value={config.model}
+                  onChange={(e) => setConfig({ ...config, model: e.target.value })}
+                  className="w-full rounded-xl bg-slate-950 border border-slate-800 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
+                >
+                  {modelOptions.map((modelName) => <option key={modelName} value={modelName}>{modelName}</option>)}
+                  <option value="custom">Custom Model Name...</option>
+                </select>
+              </div>
+
+              {config.model === 'custom' && (
+                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="space-y-2">
+                  <input
+                    type="text"
+                    placeholder={mode === 'local' ? 'e.g. codellama-7b-instruct' : 'e.g. openrouter/provider-model:free'}
+                    value={customModel}
+                    onChange={(e) => setCustomModel(e.target.value)}
+                    className="w-full rounded-xl bg-slate-950 border border-indigo-500 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </motion.div>
+              )}
+
+              <button
+                onClick={handleSave}
+                className="w-full bg-indigo-600 hover:bg-indigo-500 rounded-xl py-3 text-white text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-500/20"
+              >
+                <CheckCircle2 size={18} /> Save & Sync Configuration
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
 
 export default ConfigPanel;
-
-
-

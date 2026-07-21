@@ -86,15 +86,15 @@ const STORAGE_KEYS = {
 } as const;
 
 const MIGRATION_SCOPES = [
-  { id: 'mapping', title: 'Dependency Mapping', tokens: '10k – 25k', cost: 'Low', color: 'text-emerald-400', bg: 'bg-emerald-500/10', desc: 'Visualize architecture & connections only.' },
-  { id: 'reverse', title: 'Reverse Engineering', tokens: '50k – 120k', cost: 'Medium', color: 'text-amber-400', bg: 'bg-amber-500/10', desc: 'Extract logic, complexity & rules.' },
-  { id: 'plain', title: 'Business Rules (Plain)', tokens: '80k – 150k', cost: 'Medium', color: 'text-blue-400', bg: 'bg-blue-500/10', desc: 'Simple functional rule extraction.' },
-  { id: 'ddd', title: 'Business Rules (DDD)', tokens: '150k – 300k', cost: 'High', color: 'text-purple-400', bg: 'bg-purple-500/10', desc: 'Domain-driven microservice decomposition.' },
-  { id: 'full', title: 'Full Migration', tokens: '250k – 600k', cost: 'Very High', color: 'text-red-400', bg: 'bg-red-500/10', desc: 'End-to-end agentic pipeline.' },
+  { id: 'mapping', title: 'Dependency Mapping', tokens: '10k Ã¢â‚¬â€œ 25k', cost: 'Low', color: 'text-emerald-400', bg: 'bg-emerald-500/10', desc: 'Visualize architecture & connections only.' },
+  { id: 'reverse', title: 'Reverse Engineering', tokens: '50k Ã¢â‚¬â€œ 120k', cost: 'Medium', color: 'text-amber-400', bg: 'bg-amber-500/10', desc: 'Extract logic, complexity & rules.' },
+  { id: 'plain', title: 'Business Rules (Plain)', tokens: '80k Ã¢â‚¬â€œ 150k', cost: 'Medium', color: 'text-blue-400', bg: 'bg-blue-500/10', desc: 'Simple functional rule extraction.' },
+  { id: 'ddd', title: 'Business Rules (DDD)', tokens: '150k Ã¢â‚¬â€œ 300k', cost: 'High', color: 'text-purple-400', bg: 'bg-purple-500/10', desc: 'Domain-driven microservice decomposition.' },
+  { id: 'full', title: 'Full Migration', tokens: '250k Ã¢â‚¬â€œ 600k', cost: 'Very High', color: 'text-red-400', bg: 'bg-red-500/10', desc: 'End-to-end agentic pipeline.' },
 ];
 
 const SOURCE_LANGUAGES = [
-  { id: 'auto', name: '✨ Auto-Detect Language' },
+  { id: 'auto', name: 'Ã¢Å“Â¨ Auto-Detect Language' },
   { id: 'cobol', name: 'COBOL (Pure)' },
   { id: 'cobol-sql', name: 'COBOL + SQL' },
   { id: 'cobol-cics', name: 'COBOL + CICS' },
@@ -146,7 +146,11 @@ const normalizeLanguageId = (lang?: string) => {
 
 const formatLanguageName = (lang?: string) => LANGUAGE_LABELS[normalizeLanguageId(lang)] || lang || 'Unknown';
 
-const SourceFiles = () => {
+interface SourceFilesProps {
+  embedded?: boolean;
+}
+
+const SourceFiles = ({ embedded = false }: SourceFilesProps) => {
   const navigate = useNavigate();
   
   // Input Refs
@@ -512,7 +516,8 @@ const SourceFiles = () => {
   };
 
   return (
-    <div className="enterprise-page">
+    <div className={embedded ? 'enterprise-page pt-0' : 'enterprise-page'}>
+      {!embedded && (
       <div className="enterprise-page-header">
         <PageHeader
         title="Source Files"
@@ -525,6 +530,7 @@ const SourceFiles = () => {
         )}
       />
       </div>
+      )}
 
       <div className="enterprise-split-pane source-files-split">
         <section className="enterprise-explorer-panel">

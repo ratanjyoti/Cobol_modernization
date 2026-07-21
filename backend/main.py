@@ -1,16 +1,21 @@
 import os
 import sys
 from pathlib import Path
+from sqlalchemy.orm import Session
+from Persistence.sqlite.session import get_db
+from Persistence.sqlite.models import BusinessRule, Project
+from Processes.logic_extraction_process import LogicExtractionProcess
 
 BACKEND_DIR = Path(__file__).resolve().parent
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from fastapi import FastAPI
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from Persistence.sqlite.session import init_db
+from fastapi.middleware.cors import CORSMiddleware
 
 # Initialize the database
 init_db()
@@ -89,9 +94,84 @@ async def root():
         "message": "ModernizerAI Backend is running",
         "documentation": "/docs"
     }
+analysis_router = APIRouter(prefix="/analysis", tags=["Analysis"])
+
+@analysis_router.post("/extract-rules/{run_id}")
+async def trigger_extraction(run_id: str, db: Session = Depends(get_db)):
+    """
+    Triggers the Two-Pass Business Logic Extraction process.
+    """
+    try:
+        # 1. Fetch project settings to know which LLM provider to use
+        project = db.query(Project).filter_by(run_id=run_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project run not found")
+        
+        llm_provider = project.llm_provider or "local"
+        # Pull API key from .env if using OpenRouter
+        api_key = os.getenv("OPENROUTER_API_KEY") 
+
+        # 2. Initialize the Process Orchestrator
+        process = LogicExtractionProcess(db, llm_provider, api_key)
+        
+        # 3. Execute the extraction pipeline
+        rules_count = await process.extract_all_rules(run_id)
+        
+        return {
+            "status": "success", 
+            "message": f"Extraction complete. {rules_count} rules generated.",
+            "rules_count": rules_count
+        }
+    except Exception as e:
+        print(f"Extraction Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@analysis_router.get("/business-rules/{run_id}")
+async def get_rules(run_id: str, db: Session = Depends(get_db)):
+    """
+    Fetches all extracted rules for the Evidence Panel in the UI.
+    """
+    rules = db.query(BusinessRule).filter_by(run_id=run_id).all()
+    
+    return [
+        {
+            "id": r.id,
+            "rule_id": r.rule_id,
+            "rule_text": r.rule_text,
+            "technical_ref": r.technical_ref,
+            "technical_yaml": r.technical_yaml,
+            "status": r.status,
+            "chunk_index": r.chunk_index
+        } for r in rules
+    ]
+
+@analysis_router.patch("/confirm-rule/{rule_id}")
+async def confirm_rule(rule_id: int, data: dict, db: Session = Depends(get_db)):
+    """
+    Updates a rule's status (PENDING -> VERIFIED) or updates the text.
+    """
+    rule = db.query(BusinessRule).filter_by(id=rule_id).first()
+    if not rule:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    
+    # Update status (e.g., 'VERIFIED' or 'REJECTED')
+    if "status" in data:
+        rule.status = data["status"]
+    
+    # Update text if the human expert edited the rule
+    if "text" in data:
+        rule.rule_text = data["text"]
+        rule.business_logic = data["text"]
+        
+    db.commit()
+    return {"status": "success", "message": "Rule updated successfully"}
+
+# IMPORTANT: Add this to your FastAPI app instance in main.py
+# app.include_router(analysis_router)
 
 if __name__ == "__main__":
     import uvicorn
     # Run the server on localhost:8000
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
 

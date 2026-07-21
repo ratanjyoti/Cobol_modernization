@@ -1,4 +1,4 @@
-﻿# Implementation for project.py
+# Implementation for project.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -82,6 +82,9 @@ def serialize_project(project, files=None):
         "files_count": len(files),
         "target": project.llm_model,
         "llm_provider": project.llm_provider,
+        "ai_mode": project.ai_mode,
+        "custom_api_base_url": project.custom_api_base_url,
+        "has_custom_api_key": bool(project.custom_api_key),
         "llm_model": project.llm_model,
         "interaction_lang": project.interaction_lang,
         "speed_profile": project.speed_profile,
@@ -112,6 +115,9 @@ def serialize_project_summary(project, files_count: int, file_status_counts: dic
         "files_count": files_count,
         "target": project.llm_model,
         "llm_provider": project.llm_provider,
+        "ai_mode": project.ai_mode,
+        "custom_api_base_url": project.custom_api_base_url,
+        "has_custom_api_key": bool(project.custom_api_key),
         "llm_model": project.llm_model,
         "interaction_lang": project.interaction_lang,
         "speed_profile": project.speed_profile,
@@ -276,6 +282,26 @@ async def get_project(run_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Project not found")
     return serialize_project(project, repo.get_files_by_run_id(run_id))
 
+
+
+@router.get("/{run_id}/config")
+async def get_project_config(run_id: str, db: Session = Depends(get_db)):
+    repo = ProjectRepository(db)
+    project = repo.get_by_run_id(run_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    mode = project.ai_mode or project.llm_provider or "openrouter"
+    return {
+        "mode": mode,
+        "provider": project.llm_provider or mode,
+        "key": project.custom_api_key or "",
+        "url": project.custom_api_base_url or ("http://localhost:11434" if mode == "local" else "https://openrouter.ai/api/v1"),
+        "model": project.llm_model or ("llama3" if mode == "local" else "openai/gpt-4o-mini"),
+        "lang": project.interaction_lang,
+        "speed_profile": project.speed_profile,
+        "reasoning_effort": project.reasoning_effort,
+        "workers": project.parallel_workers,
+    }
 
 @router.get("/{run_id}/files")
 async def list_project_files(run_id: str, db: Session = Depends(get_db)):

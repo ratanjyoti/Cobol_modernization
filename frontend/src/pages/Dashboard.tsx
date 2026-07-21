@@ -88,8 +88,8 @@ const Dashboard = () => {
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [hasTriggeredNewProject, setHasTriggeredNewProject] = useState(false);
   const [sourceMetaLang, setSourceMetaLang] = useState('en');
-  const [aiMode, setAiMode] = useState<'api' | 'local'>('api');
-  const [aiConfig, setAiConfig] = useState({ key: '', url: 'http://localhost:11434', model: 'gpt-4o' });
+  const [aiMode, setAiMode] = useState<'openrouter' | 'local' | 'custom'>('openrouter');
+  const [aiConfig, setAiConfig] = useState({ key: '', url: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o-mini' });
 
   const activeProject = useMemo(() =>
     projects.find((p) => p.run_id === runId),
@@ -98,14 +98,20 @@ const Dashboard = () => {
 
   const applySavedAIConfig = (savedAiConfig = localStorage.getItem('ai_config')) => {
     if (!savedAiConfig) {
-      setAiMode('api');
-      setAiConfig({ key: '', url: 'http://localhost:11434', model: 'gpt-4o' });
+      setAiMode('openrouter');
+      setAiConfig({ key: '', url: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o-mini' });
       return;
     }
     try {
       const parsed = typeof savedAiConfig === 'string' ? JSON.parse(savedAiConfig) : savedAiConfig;
-      setAiMode(parsed.mode || 'api');
-      setAiConfig({ key: parsed.key || '', url: parsed.url || 'http://localhost:11434', model: parsed.model || 'gpt-4o' });
+      const parsedMode = parsed.mode || parsed.provider || 'openrouter';
+      const nextMode = (['openrouter', 'local', 'custom'].includes(parsedMode) ? parsedMode : 'openrouter') as 'openrouter' | 'local' | 'custom';
+      setAiMode(nextMode);
+      setAiConfig({
+        key: parsed.key || '',
+        url: parsed.url || (nextMode === 'local' ? 'http://localhost:11434' : 'https://openrouter.ai/api/v1'),
+        model: parsed.model || (nextMode === 'local' ? 'llama3' : 'openai/gpt-4o-mini'),
+      });
     } catch (e) { console.error('Config parse error', e); }
   };
 
@@ -130,7 +136,7 @@ const Dashboard = () => {
   useEffect(() => {
     if (searchParams.get('new') === 'true' && !hasTriggeredNewProject) {
       setHasTriggeredNewProject(true);
-      void handleStartNewProject();
+      // void handleStartNewProject();
     }
   }, [searchParams, hasTriggeredNewProject]);
 
@@ -208,7 +214,10 @@ const Dashboard = () => {
     const runName = getNextRunName();
     const config = {
       project_name: runName,
+      mode: aiMode,
       provider: aiMode,
+      key: aiConfig.key,
+      url: aiConfig.url,
       model: aiConfig.model,
       lang: sourceMetaLang,
       speed_profile: 'Balanced' as const,
@@ -223,6 +232,7 @@ const Dashboard = () => {
       if (!newRunId) throw new Error('Backend did not return a run_id');
 
       localStorage.setItem('active_run_id', newRunId);
+      localStorage.setItem(`ai_config_${newRunId}`, JSON.stringify({ mode: aiMode, provider: aiMode, key: aiConfig.key, url: aiConfig.url, model: aiConfig.model }));
       setRunId(newRunId);
       setProjects((current) => [{
         run_id: newRunId,
@@ -329,35 +339,7 @@ const Dashboard = () => {
         </div>
       </section>
 
-      <section>
-        <SectionLabel>System & AI Configuration</SectionLabel>
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="glass-card space-y-5 border border-slate-800 bg-slate-900/50 p-6">
-            <div className="flex items-center gap-3">
-              <Languages size={20} className="text-indigo-400" />
-              <div>
-                <h3 className="text-heading">Regional Language</h3>
-                <p className="text-body-sm">Sets the language for prompts and source comments.</p>
-              </div>
-            </div>
-            <select
-              value={sourceMetaLang}
-              onChange={(e) => saveLang(e.target.value)}
-              className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="en">English</option>
-              <option value="hi">Hindi</option>
-              <option value="jp">Japanese</option>
-              <option value="de">German</option>
-              <option value="fr">French</option>
-              <option value="es">Spanish</option>
-            </select>
-          </div>
-          <div className="glass-card border border-slate-800 bg-slate-900/50 p-6 lg:col-span-2">
-            <ConfigPanel runId={runId} onSave={(saved) => applySavedAIConfig(JSON.stringify(saved))} />
-          </div>
-        </div>
-      </section>
+      
 
       <section>
         <SectionLabel>Modernization Journey</SectionLabel>

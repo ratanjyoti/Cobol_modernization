@@ -43,6 +43,11 @@ def _add_missing_columns(connection, table_name: str, column_statements: dict[st
 
 def ensure_schema_columns():
     with engine.begin() as connection:
+        _add_missing_columns(connection, "projects", {
+            "ai_mode": "ALTER TABLE projects ADD COLUMN ai_mode VARCHAR",
+            "custom_api_key": "ALTER TABLE projects ADD COLUMN custom_api_key VARCHAR",
+            "custom_api_base_url": "ALTER TABLE projects ADD COLUMN custom_api_base_url VARCHAR",
+        })
         _add_missing_columns(connection, "file_complexity", {
             "mode": "ALTER TABLE file_complexity ADD COLUMN mode VARCHAR",
             "multiplier": "ALTER TABLE file_complexity ADD COLUMN multiplier FLOAT",
@@ -65,6 +70,8 @@ def ensure_schema_columns():
             "file_id": "ALTER TABLE business_rules ADD COLUMN file_id INTEGER",
             "chunk_index": "ALTER TABLE business_rules ADD COLUMN chunk_index INTEGER",
             "technical_yaml": "ALTER TABLE business_rules ADD COLUMN technical_yaml TEXT",
+            "business_purpose": "ALTER TABLE business_rules ADD COLUMN business_purpose TEXT",
+            "functional_logic": "ALTER TABLE business_rules ADD COLUMN functional_logic TEXT",
             "business_logic": "ALTER TABLE business_rules ADD COLUMN business_logic TEXT",
         })
         _add_missing_columns(connection, "type_mapping_table", {
@@ -102,6 +109,11 @@ def ensure_indexes():
     ]
 
     with engine.begin() as connection:
+        _add_missing_columns(connection, "projects", {
+            "ai_mode": "ALTER TABLE projects ADD COLUMN ai_mode VARCHAR",
+            "custom_api_key": "ALTER TABLE projects ADD COLUMN custom_api_key VARCHAR",
+            "custom_api_base_url": "ALTER TABLE projects ADD COLUMN custom_api_base_url VARCHAR",
+        })
         for statement in index_statements:
             connection.execute(text(statement))
 
@@ -112,6 +124,9 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+
 
 
 
