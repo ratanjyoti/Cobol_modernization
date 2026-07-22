@@ -74,8 +74,7 @@ const BusinessLogic = () => {
         const existingRules = await ProjectAPI.getBusinessRules(runId);
         if (cancelled) return;
 
-        const hasReportContent = existingRules.some((rule: BusinessRule) => rule.business_purpose || rule.functional_logic);
-        if (existingRules.length > 0 && hasReportContent) {
+        if (existingRules.length > 0) {
           applyRules(existingRules);
           return;
         }

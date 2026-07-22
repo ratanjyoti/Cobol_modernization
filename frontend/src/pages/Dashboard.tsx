@@ -333,7 +333,7 @@ const Dashboard = () => {
           </div>
 
           <div className="mt-6 grid gap-3 md:grid-cols-2">
-            <HealthIndicator label="AI API Key" status={serviceHealth.ai_api} loading={healthLoading} />
+            <HealthIndicator label="AI API Readiness" status={serviceHealth.ai_api} loading={healthLoading} />
             <HealthIndicator label="Neo4j" status={serviceHealth.neo4j} loading={healthLoading} />
           </div>
         </div>

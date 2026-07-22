@@ -28,6 +28,20 @@ def mask_api_key(api_key: str | None):
     return f"{api_key[:5]}****{api_key[-4:]}"
 
 
+def api_error_message(response: requests.Response) -> str:
+    try:
+        payload = response.json()
+    except ValueError:
+        return response.text[:500] or response.reason
+
+    error = payload.get("error") if isinstance(payload, dict) else None
+    if isinstance(error, dict):
+        return str(error.get("message") or error.get("code") or payload)[:500]
+    if error:
+        return str(error)[:500]
+    return str(payload)[:500]
+
+
 def remove_tree_sync(path: Path):
     def handle_remove_error(func, failed_path, _exc_info):
         try:
@@ -219,7 +233,8 @@ def check_ai_api_status(project):
             "active": False,
             "provider": mode,
             "model": model,
-            "detail": "API key is not configured.",
+            "detail": "Please add your OpenRouter API key in AI Configuration.",
+            "has_api_key": False,
         }
 
     try:
@@ -242,20 +257,30 @@ def check_ai_api_status(project):
             },
             timeout=20,
         )
-        response.raise_for_status()
-        content = response.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+        if response.status_code >= 400:
+            return {
+                "active": False,
+                "provider": mode,
+                "model": model,
+                "detail": f"OpenRouter rejected model '{model}': {api_error_message(response)}",
+                "has_api_key": True,
+            }
+
+        content = response.json().get("choices", [{}])[0].get("message", {}).get("content") or ""
         return {
             "active": bool(content.strip()),
             "provider": mode,
             "model": model,
-            "detail": "AI API returned a valid response." if content.strip() else "AI API responded without content.",
+            "detail": "OpenRouter key and selected model are working." if content.strip() else f"OpenRouter key is saved, but model '{model}' did not return chat text. Choose a text chat model.",
+            "has_api_key": True,
         }
     except Exception as exc:
         return {
             "active": False,
             "provider": mode,
             "model": model,
-            "detail": str(exc)[:180],
+            "detail": f"OpenRouter health check failed: {str(exc)[:180]}",
+            "has_api_key": True,
         }
 
 

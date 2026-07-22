@@ -19,6 +19,8 @@ const loadLastAIConfig = (): ProjectConfig => {
   try {
     const saved = JSON.parse(localStorage.getItem('ai_config') || '{}');
     delete saved.key;
+    delete saved.has_api_key;
+    delete saved.key_preview;
     return { ...defaultAIConfig, ...saved };
   } catch {
     return defaultAIConfig;

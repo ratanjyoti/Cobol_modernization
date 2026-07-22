@@ -58,16 +58,6 @@ const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
 
     const loadSavedConfig = async () => {
       const runScopedKey = storageKeyForRun(runId);
-      const runScopedConfig = localStorage.getItem(runScopedKey);
-      if (runScopedConfig) {
-        try {
-          applySavedConfig(JSON.parse(runScopedConfig));
-          return;
-        } catch (e) {
-          console.error('Run config load error', e);
-        }
-      }
-
       if (runId) {
         try {
           const serverConfig = await ProjectAPI.getConfig(runId);
@@ -80,6 +70,16 @@ const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
           }
         } catch (e) {
           console.error('Server config load error', e);
+        }
+      }
+
+      const runScopedConfig = localStorage.getItem(runScopedKey);
+      if (runScopedConfig) {
+        try {
+          applySavedConfig(JSON.parse(runScopedConfig));
+          return;
+        } catch (e) {
+          console.error('Run config load error', e);
         }
       }
 
