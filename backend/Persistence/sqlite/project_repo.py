@@ -35,6 +35,8 @@ class ProjectRepository:
             return False
 
         for key, value in updates.items():
+            if key in {"key", "custom_api_key"} and value == "":
+                continue
             attr = self.CONFIG_FIELD_MAP.get(key, key)
             if hasattr(project, attr):
                 setattr(project, attr, value)

@@ -94,10 +94,7 @@ def validate_cloud_chat_config(config: dict):
     if not api_key:
         raise HTTPException(
             status_code=400,
-            detail=(
-                "OpenRouter API key is missing on the backend. Save the key for this run, "
-                "or set OPENROUTER_API_KEY on the backend host."
-            ),
+            detail="Please add your OpenRouter API key in AI Configuration.",
         )
 
     try:

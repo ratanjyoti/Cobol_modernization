@@ -37,6 +37,7 @@ const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
   const [mode, setMode] = useState<AiMode | null>(null);
   const [config, setConfig] = useState(defaultsForMode('openrouter'));
   const [customModel, setCustomModel] = useState('');
+  const [savedKeyPreview, setSavedKeyPreview] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -47,10 +48,11 @@ const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
       setMode(savedMode);
       setConfig({
         ...defaultsForMode(savedMode),
-        key: saved.key || '',
+        key: '',
         url: saved.url || defaultsForMode(savedMode).url,
         model: [...OPENROUTER_MODELS, ...LOCAL_MODELS].includes(savedModel) ? savedModel : 'custom',
       });
+      setSavedKeyPreview(saved.has_api_key ? saved.key_preview || 'saved' : null);
       setCustomModel([...OPENROUTER_MODELS, ...LOCAL_MODELS].includes(savedModel) ? '' : savedModel);
     };
 
@@ -71,8 +73,9 @@ const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
           const serverConfig = await ProjectAPI.getConfig(runId);
           if (!cancelled && (serverConfig.mode || serverConfig.provider || serverConfig.model)) {
             applySavedConfig(serverConfig);
-            localStorage.setItem(runScopedKey, JSON.stringify(serverConfig));
-            localStorage.setItem('ai_config', JSON.stringify(serverConfig));
+            const safeServerConfig = { ...serverConfig, key: '' };
+            localStorage.setItem(runScopedKey, JSON.stringify(safeServerConfig));
+            localStorage.setItem('ai_config', JSON.stringify(safeServerConfig));
             return;
           }
         } catch (e) {
@@ -100,6 +103,7 @@ const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
     setMode(nextMode);
     setConfig(defaultsForMode(nextMode));
     setCustomModel('');
+    setSavedKeyPreview(null);
     setStep(2);
   };
 
@@ -108,7 +112,7 @@ const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
       toast.error('Please select a configuration mode');
       return;
     }
-    if ((mode === 'openrouter' || mode === 'custom') && !config.key.trim()) {
+    if ((mode === 'openrouter' || mode === 'custom') && !config.key.trim() && !savedKeyPreview) {
       toast.error(mode === 'openrouter' ? 'Enter your OpenRouter API key' : 'Custom API key is required');
       return;
     }
@@ -119,22 +123,32 @@ const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
       return;
     }
 
-    const finalConfig = {
+    const finalConfig: any = {
       mode,
       provider: mode,
-      key: config.key.trim(),
       url: config.url.trim() || defaultsForMode(mode).url,
       model: finalModel,
     };
+    if (config.key.trim()) {
+      finalConfig.key = config.key.trim();
+    }
 
     try {
-      localStorage.setItem(storageKeyForRun(runId), JSON.stringify(finalConfig));
-      localStorage.setItem('ai_config', JSON.stringify(finalConfig));
       if (runId) {
         await ProjectAPI.updateConfig(runId, finalConfig);
       }
-      window.dispatchEvent(new CustomEvent('ai-config-updated', { detail: finalConfig }));
-      onSave?.(finalConfig);
+      const safeConfig = {
+        ...finalConfig,
+        key: '',
+        has_api_key: Boolean(config.key.trim() || savedKeyPreview),
+        key_preview: config.key.trim() ? `${config.key.trim().slice(0, 5)}****${config.key.trim().slice(-4)}` : savedKeyPreview,
+      };
+      localStorage.setItem(storageKeyForRun(runId), JSON.stringify(safeConfig));
+      localStorage.setItem('ai_config', JSON.stringify(safeConfig));
+      setSavedKeyPreview(safeConfig.key_preview);
+      setConfig({ ...config, key: '' });
+      window.dispatchEvent(new CustomEvent('ai-config-updated', { detail: safeConfig }));
+      onSave?.(safeConfig);
       toast.success('AI configuration saved');
       setStep(1);
     } catch (e) {
@@ -225,7 +239,7 @@ const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
                   <label className="text-xs font-bold text-slate-500 uppercase">API Key</label>
                   <input
                     type="password"
-                    placeholder={mode === 'openrouter' ? 'Paste your OpenRouter API key' : 'Enter your API key'}
+                    placeholder={savedKeyPreview ? `Saved key: ${savedKeyPreview}` : mode === 'openrouter' ? 'Paste your OpenRouter API key' : 'Enter your API key'}
                     value={config.key}
                     onChange={(e) => setConfig({ ...config, key: e.target.value })}
                     className="w-full rounded-xl bg-slate-950 border border-slate-800 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all"

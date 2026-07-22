@@ -20,6 +20,14 @@ from paths import UPLOADS_DIR
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
 
+def mask_api_key(api_key: str | None):
+    if not api_key:
+        return None
+    if len(api_key) <= 8:
+        return "****"
+    return f"{api_key[:5]}****{api_key[-4:]}"
+
+
 def remove_tree_sync(path: Path):
     def handle_remove_error(func, failed_path, _exc_info):
         try:
@@ -379,7 +387,9 @@ async def get_project_config(run_id: str, db: Session = Depends(get_db)):
     return {
         "mode": mode,
         "provider": project.llm_provider or mode,
-        "key": project.custom_api_key or "",
+        "key": "",
+        "has_api_key": bool(project.custom_api_key),
+        "key_preview": mask_api_key(project.custom_api_key),
         "url": project.custom_api_base_url or ("http://localhost:11434" if mode == "local" else "https://openrouter.ai/api/v1"),
         "model": project.llm_model or ("llama3" if mode == "local" else settings.OPENROUTER_MODEL),
         "lang": project.interaction_lang,

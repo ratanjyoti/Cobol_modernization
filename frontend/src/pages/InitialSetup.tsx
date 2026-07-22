@@ -12,12 +12,14 @@ const defaultAIConfig: ProjectConfig = {
   provider: 'openrouter',
   key: '',
   url: 'https://openrouter.ai/api/v1',
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-oss-20b:free',
 };
 
 const loadLastAIConfig = (): ProjectConfig => {
   try {
-    return { ...defaultAIConfig, ...JSON.parse(localStorage.getItem('ai_config') || '{}') };
+    const saved = JSON.parse(localStorage.getItem('ai_config') || '{}');
+    delete saved.key;
+    return { ...defaultAIConfig, ...saved };
   } catch {
     return defaultAIConfig;
   }
@@ -85,7 +87,7 @@ const InitialSetup = () => {
       });
       const newRunId = response.run_id;
       localStorage.setItem('active_run_id', newRunId);
-      localStorage.setItem(`ai_config_${newRunId}`, JSON.stringify(aiConfig));
+      localStorage.setItem(`ai_config_${newRunId}`, JSON.stringify({ ...aiConfig, key: '' }));
       setRunId(newRunId);
       setProjects([{ run_id: newRunId, name: response.name, status: response.status, files_count: 0 }, ...projects]);
       toast.success(`Project ${runName} created. Upload source files below.`);

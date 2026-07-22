@@ -5,6 +5,8 @@ export interface ProjectConfig {
   mode?: string;
   provider?: string;
   key?: string;
+  has_api_key?: boolean;
+  key_preview?: string | null;
   url?: string;
   model?: string;
   lang?: string;
