@@ -29,6 +29,17 @@ export interface DependencyRelation {
   relation_type: string;
 }
 
+export interface ServiceStatus {
+  active: boolean;
+  provider?: string;
+  model?: string;
+  detail?: string;
+}
+
+export interface ServiceHealth {
+  ai_api: ServiceStatus;
+  neo4j: ServiceStatus;
+}
 export interface ProjectSummary {
   run_id: string;
   name: string;
@@ -100,6 +111,10 @@ export const ProjectAPI = {
     return response.data;
   },
 
+  getServiceHealth: async (runId: string): Promise<ServiceHealth> => {
+    const response = await api.get(`/projects/${runId}/service-health`);
+    return response.data;
+  },
   get: async (runId: string): Promise<ProjectSummary> => {
     const response = await api.get(`/projects/${runId}`);
     return response.data;
@@ -202,7 +217,7 @@ export const ProjectAPI = {
 
   extractBusinessRules: async (runId: string) => {
     const response = await api.post(`/business-rules/${runId}/extract`);
-    return response.data;
+    return Array.isArray(response.data) ? response.data : (response.data.rules || []);
   },
 
   verifyRule: async (ruleId: number, data: { status: string; text?: string }) => {

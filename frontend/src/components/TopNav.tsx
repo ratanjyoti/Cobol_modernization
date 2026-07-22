@@ -37,7 +37,6 @@ const MEGA_NAV = [
     id: 'reverse',
     label: 'Reverse Engineering',
     items: [
-      { title: 'Source Files', desc: 'Upload COBOL, JCL, copybooks, SQL, and folders', path: '/source-files', icon: FileText },
       { title: 'System Discovery', desc: 'Dependency graph, copybook links, and relationships', path: '/discovery', icon: Network },
       { title: 'Analysis', desc: 'Complexity, DDD discovery, and technical structure', path: '/reverse-engineering', icon: BrainCircuit },
       { title: 'Business Logic', desc: 'Extract, review, and approve business rules', path: '/business-logic', icon: Lightbulb },
@@ -98,7 +97,7 @@ const TopNav = ({ theme, toggleTheme }: TopNavProps) => {
           {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
         </button>
         <button type="button" onClick={() => navigate('/settings')}>Sign in</button>
-        <motion.button whileTap={{ scale: 0.96 }} onClick={() => navigate('/dashboard?new=true')} className="rocket-nav-primary">
+        <motion.button whileTap={{ scale: 0.96 }} onClick={() => navigate('/initial-setup')} className="rocket-nav-primary">
           Get started
         </motion.button>
       </div>

@@ -6,10 +6,12 @@ from pathlib import Path
 import os
 import shutil
 import stat
+import requests
 from Processes.graphing_process import GraphingProcess
 from Processes.onboarding_process import OnboardingProcess
 from Persistence.neo4j.graph_service import GraphService
 from Chunking.dependency_scanner.resolution_service import ResolutionService
+from Config.llm_config import settings
 from Persistence.sqlite.models import FileRelation, ProjectFile
 from Persistence.sqlite.project_repo import ProjectRepository
 from Persistence.sqlite.session import get_db
@@ -177,6 +179,89 @@ def get_neo4j_discovery_data(run_id: str):
     return None
 
 
+
+def check_ai_api_status(project):
+    mode = (project.ai_mode or project.llm_provider or "openrouter").lower()
+    model = project.llm_model or ("llama3" if mode == "local" else settings.OPENROUTER_MODEL)
+
+    if mode == "local":
+        base_url = (project.custom_api_base_url or "http://localhost:11434").rstrip("/")
+        try:
+            response = requests.get(f"{base_url}/api/tags", timeout=8)
+            response.raise_for_status()
+            return {
+                "active": True,
+                "provider": "local",
+                "model": model,
+                "detail": "Local model server responded.",
+            }
+        except Exception as exc:
+            return {
+                "active": False,
+                "provider": "local",
+                "model": model,
+                "detail": str(exc)[:180],
+            }
+
+    api_key = project.custom_api_key or settings.OPENROUTER_API_KEY
+    base_url = (project.custom_api_base_url or settings.OPENROUTER_BASE_URL).rstrip("/")
+
+    if not api_key:
+        return {
+            "active": False,
+            "provider": mode,
+            "model": model,
+            "detail": "API key is not configured.",
+        }
+
+    try:
+        response = requests.post(
+            f"{base_url}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "http://localhost:5173",
+                "X-Title": "ModernizerAI",
+            },
+            json={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": "Reply only with OK."},
+                    {"role": "user", "content": "health check"},
+                ],
+                "temperature": 0,
+                "max_tokens": 8,
+            },
+            timeout=20,
+        )
+        response.raise_for_status()
+        content = response.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+        return {
+            "active": bool(content.strip()),
+            "provider": mode,
+            "model": model,
+            "detail": "AI API returned a valid response." if content.strip() else "AI API responded without content.",
+        }
+    except Exception as exc:
+        return {
+            "active": False,
+            "provider": mode,
+            "model": model,
+            "detail": str(exc)[:180],
+        }
+
+
+def check_neo4j_status():
+    graph_service = None
+    try:
+        graph_service = GraphService()
+        graph_service.driver.verify_connectivity()
+        return {"active": True, "detail": "Neo4j connection verified."}
+    except Exception as exc:
+        return {"active": False, "detail": str(exc)[:180]}
+    finally:
+        if graph_service is not None:
+            graph_service.close()
 def clear_neo4j_run(run_id: str):
     graph_service = None
     try:
@@ -303,6 +388,18 @@ async def get_project_config(run_id: str, db: Session = Depends(get_db)):
         "workers": project.parallel_workers,
     }
 
+
+@router.get("/{run_id}/service-health")
+async def get_project_service_health(run_id: str, db: Session = Depends(get_db)):
+    repo = ProjectRepository(db)
+    project = repo.get_by_run_id(run_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    return {
+        "ai_api": check_ai_api_status(project),
+        "neo4j": check_neo4j_status(),
+    }
 @router.get("/{run_id}/files")
 async def list_project_files(run_id: str, db: Session = Depends(get_db)):
     repo = ProjectRepository(db)

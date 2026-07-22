@@ -1,84 +1,159 @@
 import json
 import re
+from typing import Any
 
 import yaml
 
-from Agents.implementations.business_rule_schema import validate_rule_payload
 from Agents.infrastructure.agent_base import AgentBase
+
+try:
+    from Agents.implementations.business_rule_schema import validate_rule_payload
+except Exception:
+    validate_rule_payload = None
 
 
 class BusinessLogicExtractorAgent(AgentBase):
+    """
+    Extracts business purpose, functional logic, and atomic business rules
+    from COBOL chunks using LLM first, then deterministic local fallback.
+    """
+
     def __init__(self, llm_client=None):
         self.llm = llm_client
 
-    def extract_rules(self, technical_yaml, raw_code, context_packet=None, use_llm=True, source_name=None):
+    def extract_rules(
+        self,
+        technical_yaml: str,
+        raw_code: str,
+        context_packet: dict | None = None,
+        use_llm: bool = True,
+        source_name: str | None = None,
+    ) -> dict:
         system_prompt = """
-You are a Senior Business Analyst. Your task is to create a professional "Functional Specification" for a legacy COBOL program.
+You are a Senior Business Analyst and Mainframe Modernization Expert.
 
-### OUTPUT STRUCTURE REQUIRED:
-For each file, you must provide:
-1. BUSINESS PURPOSE: A detailed 3-5 sentence paragraph explaining exactly what this program does for the business. Who uses it? What is the end goal?
-2. DETAILED FUNCTIONAL LOGIC: A comprehensive breakdown of the business process. Describe the flow of data and the decisions made. (e.g., "The system first validates the account status; if the account is 'Frozen', it rejects the transaction and logs an error...").
-3. ATOMIC BUSINESS RULES: A list of specific, granular rules (IF/THEN) derived from the code.
+Your task is to extract business logic from legacy COBOL code and write it as a professional Functional Specification.
 
-### RULES FOR WRITING:
-- NO TECHNICAL JARGON: No 'variables', 'paragraphs', 'IF statements', or 'MOVE'.
-- BE EXHAUSTIVE: Do not summarize. If the code has 10 different logic paths, describe all 10.
-- USE DOMAIN TERMS: Use 'Account Balance' instead of 'WS-BAL'.
-- STYLE: Write it as a professional business requirement document.
+IMPORTANT WRITING RULES:
+- Write in business language, not COBOL syntax.
+- Do not say "IF statement", "MOVE", "PERFORM", "paragraph", or "variable" unless required in technical_ref.
+- Convert technical names into business terms where possible.
+- Be specific and evidence-based. Do not invent business rules.
+- Every rule must be traceable to a technical_ref.
+- If the code contains validation, calculation, status change, file read/write, SQL, or external call behavior, extract it.
 
-### OUTPUT FORMAT:
-Return ONLY a JSON object:
+EXTRACT:
+1. business_purpose:
+   A 3-5 sentence explanation of what this program/chunk does for the business.
+
+2. functional_logic:
+   A detailed business process narrative explaining:
+   - inputs received
+   - validations performed
+   - decisions made
+   - calculations performed
+   - records read/written/updated/deleted
+   - outputs produced
+   - exception paths
+
+3. rules:
+   Atomic rules. Each rule must describe exactly one business rule, validation, calculation, data access rule, or state transition.
+
+OUTPUT FORMAT:
+Return ONLY valid JSON. No markdown. No explanation outside JSON.
+
+Schema:
 {
-  "business_purpose": "Detailed paragraph about the program's goal...",
-  "functional_logic": "A deep-dive explanation of the process flow...",
+  "business_purpose": "string",
+  "functional_logic": "string",
   "rules": [
-    {"rule_text": "Detailed rule 1...", "technical_ref": "Line 100"},
-    {"rule_text": "Detailed rule 2...", "technical_ref": "Line 120"}
+    {
+      "rule_text": "string",
+      "rule_type": "BUSINESS_DECISION | VALIDATION | CALCULATION | DATA_ACCESS | STATE_TRANSITION | EXTERNAL_SERVICE | WORKFLOW",
+      "technical_ref": "string",
+      "confidence": "HIGH | MEDIUM | LOW"
+    }
   ]
 }
 """
 
         packet = context_packet or {}
+
         user_prompt = "\n\n".join([
             f"[Source File]\n{source_name or 'Unknown'}",
-            f"[Symbol Lock]\n{packet.get('global_types') or 'None'}",
-            f"[Technical YAML]\n{technical_yaml or 'None'}",
-            f"[Raw COBOL]\n{raw_code or ''}",
+            f"[Global Type / Symbol Context]\n{packet.get('global_types') or 'None'}",
+            f"[Global Signatures]\n{packet.get('global_signatures') or 'None'}",
+            f"[Prior Chunk Summary]\n{packet.get('summary_history') or 'None'}",
+            f"[Technical YAML Evidence]\n{technical_yaml or 'None'}",
+            f"[Raw COBOL Code]\n{raw_code or ''}",
         ])
 
         response = ""
+
         if use_llm and self.llm is not None:
             try:
-                response = self.llm.generate(system_prompt, user_prompt) or ""
+                response = self._call_llm(system_prompt, user_prompt)
             except Exception as exc:
-                print(f"LLM call failed: {exc}")
+                print(f"LLM rule extraction failed, using local fallback: {exc}")
 
-        parsed = self._parse_json_rules(response)
-        if parsed:
+        parsed = self._parse_json_response(response)
+
+        if parsed and parsed.get("rules"):
+            parsed = self._validate_or_normalize_payload(parsed)
             return parsed
 
-        return self._extract_report_locally(technical_yaml, raw_code, source_name)
+        return self._extract_report_locally(
+            technical_yaml=technical_yaml,
+            raw_code=raw_code,
+            source_name=source_name,
+        )
 
-    def _parse_json_rules(self, response):
+    def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
+        """
+        Supports both clients:
+        - generate(system_prompt, user_prompt)
+        - generate(prompt)
+        """
+        if hasattr(self.llm, "generate"):
+            try:
+                return self.llm.generate(system_prompt, user_prompt) or ""
+            except TypeError:
+                return self.llm.generate(system_prompt + "\n\n" + user_prompt) or ""
+
+        raise RuntimeError("LLM client does not expose generate()")
+
+    def _parse_json_response(self, response: str) -> dict | None:
         if not response:
             return None
 
-        cleaned = re.sub(r"```(?:json)?\s*(.*?)\s*```", r"\1", response, flags=re.DOTALL).strip()
+        cleaned = self._strip_code_fence(response)
 
+        # Try direct JSON first.
         try:
             data = json.loads(cleaned)
+            return self._normalize_payload(data)
         except Exception:
-            return None
+            pass
 
-        if isinstance(data, dict):
-            rules = data.get("rules") or []
-            return {
-                "business_purpose": self._clean_paragraph(data.get("business_purpose") or ""),
-                "functional_logic": self._clean_paragraph(data.get("functional_logic") or ""),
-                "rules": self._normalize_rule_items(rules),
-            }
+        # Try extracting first JSON object from messy response.
+        match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
+        if match:
+            try:
+                data = json.loads(match.group(0))
+                return self._normalize_payload(data)
+            except Exception:
+                return None
 
+        return None
+
+    @staticmethod
+    def _strip_code_fence(text: str) -> str:
+        text = str(text or "").strip()
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s*```$", "", text)
+        return text.strip()
+
+    def _normalize_payload(self, data: Any) -> dict | None:
         if isinstance(data, list):
             return {
                 "business_purpose": "",
@@ -86,99 +161,147 @@ Return ONLY a JSON object:
                 "rules": self._normalize_rule_items(data),
             }
 
-        return None
-
-    def _normalize_rule_items(self, decoded):
-        normalized = []
-        seen = set()
-        if not isinstance(decoded, list):
-            return normalized
-
-        for item in decoded:
-            if isinstance(item, str):
-                rule_text = item
-                technical_ref = ""
-            elif isinstance(item, dict):
-                rule_text = item.get("rule_text") or item.get("text") or item.get("rule") or ""
-                technical_ref = item.get("technical_ref") or item.get("source") or item.get("reference") or ""
-            else:
-                continue
-
-            rule_text = self._clean_paragraph(rule_text)
-            key = rule_text.lower()
-            if rule_text and key not in seen:
-                seen.add(key)
-                normalized.append({"rule_text": rule_text, "technical_ref": str(technical_ref or "")})
-        return normalized
-
-    def _extract_report_locally(self, technical_yaml, raw_code, source_name=None):
-        program_name = self._program_name(raw_code, source_name)
-        domain = self._infer_domain(raw_code, program_name)
-        purpose = self._business_purpose(program_name, domain, raw_code)
-        functional_logic = self._functional_logic(domain, raw_code)
-        rules = self._normalize_rule_items(self._extract_rules_locally(technical_yaml, raw_code))
-
-        if not rules:
-            rules = [{
-                "rule_text": f"The {program_name} program must preserve its {domain['process']} business behavior during modernization.",
-                "technical_ref": "Derived from uploaded source file",
-            }]
+        if not isinstance(data, dict):
+            return None
 
         return {
-            "business_purpose": purpose,
-            "functional_logic": functional_logic,
-            "rules": rules,
+            "business_purpose": self._clean_text(data.get("business_purpose") or data.get("purpose") or ""),
+            "functional_logic": self._clean_text(data.get("functional_logic") or data.get("logic") or ""),
+            "rules": self._normalize_rule_items(data.get("rules") or data.get("business_rules") or []),
         }
 
-    def _normalize_rules(self, decoded):
+    def _normalize_rule_items(self, decoded: Any) -> list[dict]:
         if not isinstance(decoded, list):
             return []
 
         normalized = []
         seen = set()
-        for index, item in enumerate(decoded, start=1):
+
+        for item in decoded:
             if isinstance(item, str):
                 rule_text = item
+                rule_type = "BUSINESS_DECISION"
                 technical_ref = ""
+                confidence = "MEDIUM"
             elif isinstance(item, dict):
-                rule_text = item.get("rule_text") or item.get("text") or item.get("rule") or ""
+                rule_text = (
+                    item.get("rule_text")
+                    or item.get("text")
+                    or item.get("rule")
+                    or item.get("description")
+                    or ""
+                )
+                rule_type = item.get("rule_type") or item.get("type") or "BUSINESS_DECISION"
                 technical_ref = item.get("technical_ref") or item.get("source") or item.get("reference") or ""
+                confidence = item.get("confidence") or "MEDIUM"
             else:
                 continue
 
-            rule_text = self._as_user_story(rule_text)
-            key = rule_text.lower()
-            if rule_text and key not in seen:
+            rule_text = self._clean_text(rule_text)
+            technical_ref = self._clean_text(technical_ref)
+
+            if not rule_text:
+                continue
+
+            rule_type = str(rule_type).upper().strip()
+            allowed_types = {
+                "BUSINESS_DECISION",
+                "VALIDATION",
+                "CALCULATION",
+                "DATA_ACCESS",
+                "STATE_TRANSITION",
+                "EXTERNAL_SERVICE",
+                "WORKFLOW",
+            }
+            if rule_type not in allowed_types:
+                rule_type = "BUSINESS_DECISION"
+
+            confidence = str(confidence).upper().strip()
+            if confidence not in {"HIGH", "MEDIUM", "LOW"}:
+                confidence = "MEDIUM"
+
+            key = re.sub(r"\s+", " ", rule_text.lower())
+
+            if key not in seen:
                 seen.add(key)
                 normalized.append({
-                    "rule_id": f"BR-{index:03d}",
                     "rule_text": rule_text,
-                    "technical_ref": str(technical_ref),
+                    "rule_type": rule_type,
+                    "technical_ref": technical_ref,
+                    "confidence": confidence,
                 })
 
         return normalized
 
-    def _extract_rules_locally(self, technical_yaml, raw_code):
+    def _validate_or_normalize_payload(self, payload: dict) -> dict:
+        """
+        Uses schema validator if available. If validator fails, keep normalized payload.
+        """
+        if validate_rule_payload is None:
+            return payload
+
+        try:
+            return validate_rule_payload(payload)
+        except Exception:
+            return payload
+
+    def _extract_report_locally(
+        self,
+        technical_yaml: str,
+        raw_code: str,
+        source_name: str | None = None,
+    ) -> dict:
+        program_name = self._program_name(raw_code, source_name)
+        domain = self._infer_domain(raw_code, program_name)
+
+        purpose = self._business_purpose(program_name, domain, raw_code)
+        functional_logic = self._functional_logic(domain, raw_code)
+
         rules = []
         rules.extend(self._rules_from_yaml(technical_yaml))
-        rules.extend(self._rules_from_code(raw_code))
+        rules.extend(self._rules_from_code(raw_code, domain))
 
-        unique = []
+        unique_rules = []
         seen = set()
-        for index, rule in enumerate(rules, start=1):
-            text = self._as_user_story(rule.get("rule_text", ""))
-            key = text.lower()
-            if text and key not in seen:
-                seen.add(key)
-                unique.append({
-                    "rule_id": f"BR-{index:03d}",
-                    "rule_text": text,
-                    "technical_ref": rule.get("technical_ref", ""),
-                })
 
-        return unique[:8]
+        for rule in rules:
+            rule_text = self._clean_text(rule.get("rule_text", ""))
+            if not rule_text:
+                continue
 
-    def _rules_from_yaml(self, technical_yaml):
+            key = rule_text.lower()
+            if key in seen:
+                continue
+
+            seen.add(key)
+            unique_rules.append({
+                "rule_text": rule_text,
+                "rule_type": rule.get("rule_type", "BUSINESS_DECISION"),
+                "technical_ref": rule.get("technical_ref", ""),
+                "confidence": rule.get("confidence", "MEDIUM"),
+            })
+
+        if not unique_rules:
+            unique_rules.append({
+                "rule_text": (
+                    f"The {program_name} component must preserve its "
+                    f"{domain['process']} behavior during modernization."
+                ),
+                "rule_type": "WORKFLOW",
+                "technical_ref": "Derived from uploaded source file",
+                "confidence": "LOW",
+            })
+
+        return {
+            "business_purpose": purpose,
+            "functional_logic": functional_logic,
+            "rules": unique_rules[:20],
+        }
+
+    def _rules_from_yaml(self, technical_yaml: str) -> list[dict]:
+        if not technical_yaml:
+            return []
+
         try:
             data = yaml.safe_load(technical_yaml) or {}
         except yaml.YAMLError:
@@ -189,191 +312,373 @@ Return ONLY a JSON object:
 
         blocks = (((data.get("control_flow") or {}).get("logic_blocks")) or [])
         rules = []
+
         for block in blocks:
             if not isinstance(block, dict):
                 continue
-            description = (block.get("description") or "").strip()
+
+            description = self._clean_text(block.get("description") or "")
+            name = block.get("name", "unnamed")
+
             if not description:
                 continue
-            action = self._business_phrase(description)
-            rules.append({
-                "rule_text": f"As an operations user, I want to {action} so that the migrated system preserves the intended business behavior.",
-                "technical_ref": f"control_flow.logic_blocks.{block.get('name', 'unnamed')}",
-            })
+
+            rule_text, rule_type = self._line_to_business_rule(description)
+
+            if rule_text:
+                rules.append({
+                    "rule_text": rule_text,
+                    "rule_type": rule_type,
+                    "technical_ref": f"control_flow.logic_blocks.{name}",
+                    "confidence": "MEDIUM",
+                })
+
         return rules
 
-    def _rules_from_code(self, raw_code):
+    def _rules_from_code(self, raw_code: str, domain: dict) -> list[dict]:
         rules = []
+
         for line_no, raw_line in enumerate((raw_code or "").splitlines(), start=1):
-            line = self._strip_sequence_number(raw_line.strip())
+            line = self._strip_sequence_number(raw_line).strip()
             upper = line.upper()
-            if not line or upper.startswith(("*", "*>")):
+
+            if not line:
                 continue
 
-            if upper.startswith("IF ") or " IF " in upper or upper.startswith("EVALUATE "):
-                condition = self._condition_to_business_text(line)
+            if upper.startswith(("*", "*>")):
+                continue
+
+            rule_text, rule_type = self._line_to_business_rule(line, domain)
+
+            if rule_text:
                 rules.append({
-                    "rule_text": f"As an operations user, I want to apply the appropriate outcome when {condition} so that business policy is enforced consistently.",
-                    "technical_ref": f"COBOL line {line_no}: {line}",
+                    "rule_text": rule_text,
+                    "rule_type": rule_type,
+                    "technical_ref": f"COBOL line {line_no}: {line[:220]}",
+                    "confidence": "MEDIUM",
                 })
-            elif upper.startswith("COMPUTE "):
-                target = self._business_phrase(line.split()[1] if len(line.split()) > 1 else "result")
-                rules.append({
-                    "rule_text": f"As an operations user, I want to calculate {target} so that downstream decisions use the correct value.",
-                    "technical_ref": f"COBOL line {line_no}: {line}",
-                })
-            elif upper.startswith("CALL ") or " CALL " in upper:
-                service = self._business_phrase(re.sub(r".*\bCALL\b", "", line, flags=re.IGNORECASE).strip(" '.\""))
-                rules.append({
-                    "rule_text": f"As an operations user, I want to request {service} so that the required business service is completed.",
-                    "technical_ref": f"COBOL line {line_no}: {line}",
-                })
-            elif "EXEC SQL" in upper:
-                rules.append({
-                    "rule_text": "As an operations user, I want to access the required business data so that the transaction can be completed with current records.",
-                    "technical_ref": f"COBOL line {line_no}: {line}",
-                })
+
         return rules
 
-    def _program_name(self, raw_code, source_name=None):
+    def _line_to_business_rule(self, line: str, domain: dict | None = None) -> tuple[str, str]:
+        domain = domain or {
+            "entity": "business record",
+            "process": "legacy business processing",
+        }
+
+        stripped = self._strip_sequence_number(line).strip()
+        upper = stripped.upper()
+
+        if upper.startswith("IF ") or " IF " in upper or upper.startswith("EVALUATE "):
+            condition = self._condition_to_business_text(stripped)
+            return (
+                f"When {condition}, the system must apply the corresponding business outcome consistently.",
+                "BUSINESS_DECISION",
+            )
+
+        if upper.startswith("COMPUTE "):
+            target = self._extract_compute_target(stripped)
+            return (
+                f"The system must calculate {target} using the defined legacy formula before the result is used downstream.",
+                "CALCULATION",
+            )
+
+        if upper.startswith("ADD "):
+            return (
+                "The system must add the specified business amount into the target total to keep accumulated values accurate.",
+                "CALCULATION",
+            )
+
+        if upper.startswith("SUBTRACT "):
+            return (
+                "The system must subtract the specified business amount from the target value to keep the resulting balance accurate.",
+                "CALCULATION",
+            )
+
+        if upper.startswith("MULTIPLY "):
+            return (
+                "The system must multiply the specified business values according to the legacy calculation rule.",
+                "CALCULATION",
+            )
+
+        if upper.startswith("DIVIDE "):
+            return (
+                "The system must divide the specified business values according to the legacy calculation rule while preserving decimal precision.",
+                "CALCULATION",
+            )
+
+        if upper.startswith("READ ") or " READ " in upper:
+            return (
+                f"The system must retrieve the required {domain['entity']} record before continuing the business process.",
+                "DATA_ACCESS",
+            )
+
+        if upper.startswith("WRITE ") or " WRITE " in upper:
+            return (
+                f"The system must create or output the required {domain['entity']} record as part of the business process.",
+                "STATE_TRANSITION",
+            )
+
+        if upper.startswith("REWRITE ") or " REWRITE " in upper:
+            return (
+                f"The system must update the existing {domain['entity']} record while preserving the legacy maintenance behavior.",
+                "STATE_TRANSITION",
+            )
+
+        if upper.startswith("DELETE ") or " DELETE " in upper:
+            return (
+                f"The system must remove the selected {domain['entity']} record only when the legacy deletion condition is satisfied.",
+                "STATE_TRANSITION",
+            )
+
+        if "EXEC SQL" in upper:
+            sql_meaning = self._sql_to_business_text(stripped)
+            return (sql_meaning, "DATA_ACCESS")
+
+        if upper.startswith("CALL ") or " CALL " in upper:
+            service = self._extract_called_service(stripped)
+            return (
+                f"The system must invoke {service} to complete the required supporting business operation.",
+                "EXTERNAL_SERVICE",
+            )
+
+        if upper.startswith("PERFORM ") or " PERFORM " in upper:
+            target = self._extract_perform_target(stripped)
+            if self._is_business_perform_target(target):
+                phrase = self._business_phrase(target)
+                return (
+                    f"The system must perform {phrase} as part of the business workflow.",
+                    "WORKFLOW",
+                )
+
+        if upper.startswith("ACCEPT ") or " ACCEPT " in upper:
+            return (
+                f"The system must capture the required {domain['entity']} input before processing can continue.",
+                "VALIDATION",
+            )
+
+        return ("", "")
+
+    def _program_name(self, raw_code: str, source_name: str | None = None) -> str:
         match = re.search(r"\bPROGRAM-ID\.?\s+([A-Z0-9_-]+)", raw_code or "", re.IGNORECASE)
         if match:
             return match.group(1).strip().upper()
+
         return source_name or "uploaded source file"
 
-    def _infer_domain(self, raw_code, program_name):
+    def _infer_domain(self, raw_code: str, program_name: str) -> dict:
         text = f"{program_name}\n{raw_code or ''}".lower()
         program_lower = program_name.lower()
-        if program_lower.endswith(".cpy") or "copybook" in text or "01 " in text:
+
+        if program_lower.endswith(".cpy") or "copybook" in text or re.search(r"^\s*01\s+", raw_code or "", re.MULTILINE):
             if any(word in text for word in ["customer", "cust", "client"]):
                 return {
                     "entity": "customer",
                     "process": "customer data definition",
-                    "action": "storing customer information including identifiers, names, addresses, balances, and statuses",
-                    "outcome": "customer programs share a consistent structure for reading, displaying, and updating customer details",
+                    "action": "storing customer identifiers, names, addresses, balances, and statuses",
+                    "outcome": "all customer-facing programs use a consistent customer record structure",
                 }
+
             return {
                 "entity": "business record",
                 "process": "shared data definition",
-                "action": "storing the shared business data structure used by related programs",
-                "outcome": "all related programs interpret the same business fields consistently",
+                "action": "defining the shared business data structure used by related programs",
+                "outcome": "related programs interpret the same business fields consistently",
             }
-        if any(word in text for word in ["folha", "payroll", "salary", "salario", "employee", "empregado"]):
+
+        if any(word in text for word in ["folha", "payroll", "salary", "salario", "employee", "empregado", "colaborador"]):
             return {
                 "entity": "employee",
                 "process": "payroll management",
-                "action": "managing employee data, calculating salaries, and supporting payroll maintenance operations",
+                "action": "managing employee payroll data, salary calculations, absences, deductions, and maintenance operations",
                 "outcome": "payroll records remain accurate and ready for business processing",
             }
+
         if any(word in text for word in ["customer", "cust", "client"]):
-            program_lower = program_name.lower()
-            if "display" in program_lower or ("display" in text and "inquiry" not in program_lower and "read" not in text):
+            if "display" in program_lower:
                 action = "displaying customer information including identifiers, names, addresses, balances, and statuses"
             elif "inquiry" in program_lower or any(word in text for word in ["read", "search", "id"]):
-                action = "retrieving customer information based on a provided customer identifier"
+                action = "retrieving customer information based on a supplied customer identifier"
             else:
                 action = "maintaining and presenting customer information for business users"
+
             return {
                 "entity": "customer",
                 "process": "customer information handling",
                 "action": action,
-                "outcome": "staff can access the customer details needed for service and account decisions",
+                "outcome": "staff can access customer details needed for service and account decisions",
             }
+
         if any(word in text for word in ["account", "acct", "balance"]):
             return {
                 "entity": "account",
                 "process": "account processing",
                 "action": "validating account information, evaluating balances, and applying account-related business decisions",
-                "outcome": "account activity follows the organization's operational policies",
+                "outcome": "account activity follows operational policies",
             }
-        if any(word in text for word in ["order", "invoice", "payment"]):
+
+        if any(word in text for word in ["order", "invoice", "payment", "transaction", "txn"]):
             return {
                 "entity": "transaction",
                 "process": "transaction processing",
-                "action": "processing business transactions, calculating required values, and producing the expected operational outcome",
+                "action": "processing business transactions, calculating required values, and producing operational outcomes",
                 "outcome": "transactions are completed consistently and recorded for downstream use",
             }
+
         return {
             "entity": "business record",
             "process": "legacy business processing",
-            "action": "validating input data, executing the required business decisions, and producing the expected output",
-            "outcome": "the migrated system preserves the behavior of the original legacy process",
+            "action": "validating input data, executing business decisions, and producing the expected output",
+            "outcome": "the modernized system preserves the behavior of the original legacy process",
         }
 
-    def _business_purpose(self, program_name, domain, raw_code):
+    def _business_purpose(self, program_name: str, domain: dict, raw_code: str) -> str:
         operations = []
         upper = raw_code.upper() if raw_code else ""
+
         if "ACCEPT" in upper:
             operations.append("captures user or batch input")
-        if "READ" in upper or "SELECT" in upper or "EXEC SQL" in upper:
+        if any(k in upper for k in ["READ", "SELECT", "EXEC SQL", "START"]):
             operations.append(f"retrieves {domain['entity']} data")
-        if "DISPLAY" in upper or "WRITE" in upper:
-            operations.append("presents business information to users or reports")
-        if "COMPUTE" in upper or "ADD " in upper or "SUBTRACT" in upper or "MULTIPLY" in upper:
+        if any(k in upper for k in ["DISPLAY", "WRITE"]):
+            operations.append("presents or outputs business information")
+        if any(k in upper for k in ["COMPUTE", "ADD ", "SUBTRACT", "MULTIPLY", "DIVIDE"]):
             operations.append("calculates business values")
-        if "DELETE" in upper or "REWRITE" in upper or "WRITE" in upper:
-            operations.append("updates stored business records")
+        if any(k in upper for k in ["DELETE", "REWRITE", "WRITE"]):
+            operations.append("maintains stored business records")
+        if "CALL" in upper:
+            operations.append("coordinates with supporting business services")
 
-        operation_text = ", ".join(dict.fromkeys(operations)) or "coordinates the required business steps"
+        operation_text = ", ".join(dict.fromkeys(operations)) or "coordinates required business steps"
+
         return (
-            f"The {program_name} program serves the business function of {domain['action']}. "
+            f"The {program_name} component serves the business function of {domain['action']}. "
             f"It {operation_text} as part of the {domain['process']} workflow. "
             f"The end goal is to ensure that {domain['outcome']}."
         )
 
-    def _functional_logic(self, domain, raw_code):
+    def _functional_logic(self, domain: dict, raw_code: str) -> str:
         steps = []
         upper = raw_code.upper() if raw_code else ""
+
         if "ACCEPT" in upper:
-            steps.append(f"The process begins by accepting the required {domain['entity']} input from the user or calling process.")
-        if "READ" in upper or "SELECT" in upper or "EXEC SQL" in upper:
-            steps.append(f"The program then retrieves the matching {domain['entity']} details from the available file or data source.")
-        if "IF" in upper or "EVALUATE" in upper:
-            steps.append("Business conditions are evaluated to decide which action, message, calculation, or exception path should be applied.")
-        if "COMPUTE" in upper or "ADD " in upper or "SUBTRACT" in upper or "MULTIPLY" in upper:
-            steps.append("When numeric values are present, the program calculates the required business totals or derived amounts before output is produced.")
-        if "DISPLAY" in upper or "WRITE" in upper:
-            steps.append("The resulting information is formatted and presented or written so the business user can act on the outcome.")
-        if "DELETE" in upper or "REWRITE" in upper:
-            steps.append("Where maintenance actions are requested, the existing business record is changed or removed according to the selected operation.")
+            steps.append(f"The process begins by capturing the required {domain['entity']} input.")
+        if any(k in upper for k in ["READ", "SELECT", "EXEC SQL", "START"]):
+            steps.append(f"The system retrieves the matching {domain['entity']} details from the relevant file or data source.")
+        if any(k in upper for k in ["IF", "EVALUATE"]):
+            steps.append("Business conditions are evaluated to decide the correct action, message, calculation, or exception path.")
+        if any(k in upper for k in ["COMPUTE", "ADD ", "SUBTRACT", "MULTIPLY", "DIVIDE"]):
+            steps.append("The system calculates required totals, balances, deductions, or derived values before output is produced.")
+        if any(k in upper for k in ["DISPLAY", "WRITE"]):
+            steps.append("The final business information is displayed, written, or passed to the next process.")
+        if any(k in upper for k in ["DELETE", "REWRITE"]):
+            steps.append("Where maintenance is requested, the selected business record is updated or removed according to the legacy rule.")
+        if "CALL" in upper:
+            steps.append("Supporting programs or services are invoked when specialized formatting, lookup, or downstream processing is required.")
+
         if not steps:
-            steps.append(f"The program executes the required {domain['process']} steps from input through final output while preserving legacy behavior.")
+            steps.append(f"The component executes the required {domain['process']} steps while preserving legacy behavior.")
+
         return " ".join(steps)
 
-    @staticmethod
-    def _clean_paragraph(text):
-        return re.sub(r"\s+", " ", str(text or "").strip())
-    @staticmethod
-    def _strip_sequence_number(line):
-        return re.sub(r"^\d{5,6}\s+", "", str(line or "").strip())
-    def _condition_to_business_text(self, line):
-        line = self._strip_sequence_number(line)
-        condition = re.sub(r"^\s*IF\s+", "", line, flags=re.IGNORECASE)
+    def _condition_to_business_text(self, line: str) -> str:
+        condition = self._strip_sequence_number(line)
+        condition = re.sub(r"^\s*IF\s+", "", condition, flags=re.IGNORECASE)
         condition = re.sub(r"^\s*EVALUATE\s+", "", condition, flags=re.IGNORECASE)
-        # Remove the action part to keep only the condition
-        condition = re.split(r"\bTHEN\b|\bPERFORM\b|\bMOVE\b|\bCOMPUTE\b|\.", condition, maxsplit=1, flags=re.IGNORECASE)[0]
-        
-        # Make it read like a business requirement
+
+        condition = re.split(
+            r"\bTHEN\b|\bPERFORM\b|\bMOVE\b|\bCOMPUTE\b|\bDISPLAY\b|\bCALL\b|\.",
+            condition,
+            maxsplit=1,
+            flags=re.IGNORECASE,
+        )[0]
+
         condition = condition.replace("<=", " is less than or equal to ")
         condition = condition.replace(">=", " is greater than or equal to ")
+        condition = condition.replace(" NOT = ", " is not equal to ")
         condition = condition.replace("=", " is equal to ")
         condition = condition.replace("<", " is less than ")
         condition = condition.replace(">", " is greater than ")
-        
-        return f"whenever the condition '{self._business_phrase(condition)}' is met"
 
-    def _as_user_story(self, text):
-        text = re.sub(r"\s+", " ", str(text or "").strip())
-        if not text: return ""
-        
-        # If it's already a detailed rule, don't force it into a short "As a..." format
-        if len(text) > 100 or "whenever" in text.lower():
-            return f"Business Rule: {text}"
-            
-        return f"As a business user, I want to {text[0].lower() + text[1:]} to ensure operational consistency."
+        return self._business_phrase(condition)
 
-    def _business_phrase(self, text):
+    def _sql_to_business_text(self, line: str) -> str:
+        upper = line.upper()
+
+        if "SELECT" in upper:
+            return "The system must retrieve the required business data from the database before completing the transaction."
+        if "INSERT" in upper:
+            return "The system must create a new database record when the business process produces new persistent information."
+        if "UPDATE" in upper:
+            return "The system must update existing database information when the business process changes a record."
+        if "DELETE" in upper:
+            return "The system must remove database information only when the legacy business process permits deletion."
+
+        return "The system must access database information required to complete the business transaction."
+
+    def _extract_compute_target(self, line: str) -> str:
+        match = re.search(r"\bCOMPUTE\s+([A-Z0-9_-]+)", line, flags=re.IGNORECASE)
+        if match:
+            return self._business_phrase(match.group(1))
+
+        return "the required business value"
+
+    def _extract_called_service(self, line: str) -> str:
+        service = re.sub(r".*\bCALL\b", "", line, flags=re.IGNORECASE)
+        service = service.strip(" .'\"")
+        return self._business_phrase(service or "the supporting business service")
+
+    def _extract_perform_target(self, line: str) -> str:
+        match = re.search(r"\bPERFORM\s+([A-Z0-9_-]+)", line, flags=re.IGNORECASE)
+        if match:
+            return match.group(1)
+
+        return ""
+
+    @staticmethod
+    def _is_business_perform_target(target: str) -> bool:
+        if not target:
+            return False
+
+        business_words = [
+            "CALC",
+            "VALID",
+            "CHECK",
+            "UPDATE",
+            "DELETE",
+            "SEARCH",
+            "FIND",
+            "PAY",
+            "TAX",
+            "BAL",
+            "BALANCE",
+            "CUSTOMER",
+            "CUST",
+            "EMP",
+            "SAL",
+            "SALARY",
+            "INVOICE",
+            "ORDER",
+            "WRITE",
+            "READ",
+            "DISPLAY",
+            "FORMAT",
+        ]
+
+        upper = target.upper()
+        return any(word in upper for word in business_words)
+
+    @staticmethod
+    def _strip_sequence_number(line: str) -> str:
+        return re.sub(r"^\d{5,6}\s+", "", str(line or "").strip())
+
+    @staticmethod
+    def _clean_text(text: Any) -> str:
+        return re.sub(r"\s+", " ", str(text or "").strip())
+
+    def _business_phrase(self, text: str) -> str:
         phrase = str(text or "").replace("-", " ").replace("_", " ")
+
         replacements = {
             "acct": "account",
             "acc": "account",
@@ -386,30 +691,18 @@ Return ONLY a JSON object:
             "elig": "eligibility",
             "stat": "status",
             "id": "identifier",
+            "num": "number",
+            "qty": "quantity",
+            "sal": "salary",
+            "he": "overtime hours",
+            "irrf": "income tax withholding",
+            "inss": "social security contribution",
+            "vt": "transportation benefit",
         }
+
         words = []
         for word in re.findall(r"[A-Za-z0-9']+|\S", phrase.lower()):
             words.append(replacements.get(word, word))
+
         cleaned = re.sub(r"\s+", " ", " ".join(words)).strip()
-        cleaned = cleaned.replace(" and applies ", " and apply ")
-        leading_verbs = {
-            "checks ": "check ",
-            "applies ": "apply ",
-            "calculates ": "calculate ",
-            "validates ": "validate ",
-            "determines ": "determine ",
-            "updates ": "update ",
-        }
-        for prefix, replacement in leading_verbs.items():
-            if cleaned.startswith(prefix):
-                return replacement + cleaned[len(prefix):]
         return cleaned
-
-
-
-
-
-
-
-
-

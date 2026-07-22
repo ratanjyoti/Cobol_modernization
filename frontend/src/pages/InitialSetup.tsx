@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { PlusCircle, Trash2, ChevronDown, Loader2, Languages } from 'lucide-react';
 import toast from 'react-hot-toast';
 import ConfigPanel from '../components/ConfigPanel';
+import SourceFiles from './SourceFiles';
 import { ProjectAPI } from '../services/api';
 import type { ProjectConfig, ProjectSummary } from '../services/api';
 import SectionLabel from '../components/SectionLabel';
@@ -24,7 +24,6 @@ const loadLastAIConfig = (): ProjectConfig => {
 };
 
 const InitialSetup = () => {
-  const navigate = useNavigate();
   const [runId, setRunId] = useState<string | null>(localStorage.getItem('active_run_id'));
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [isDeletingRuns, setIsDeletingRuns] = useState(false);
@@ -89,8 +88,7 @@ const InitialSetup = () => {
       localStorage.setItem(`ai_config_${newRunId}`, JSON.stringify(aiConfig));
       setRunId(newRunId);
       setProjects([{ run_id: newRunId, name: response.name, status: response.status, files_count: 0 }, ...projects]);
-      toast.success(`Project ${runName} created!`);
-      navigate('/source-files');
+      toast.success(`Project ${runName} created. Upload source files below.`);
     } catch (e: any) {
       toast.error(e.response?.data?.detail || 'Error creating project');
     } finally {
@@ -107,7 +105,7 @@ const InitialSetup = () => {
   };
 
   return (
-    <div className="space-y-12 pb-24 animate-in fade-in duration-700">
+    <div className="space-y-12 pb-32 animate-in fade-in duration-700">
       <header className="flex flex-col gap-2">
         <h1 className="text-3xl font-extrabold text-white tracking-tight">Initial Setup</h1>
         <p className="text-slate-400">Configure your AI engine, project environment, and regional settings.</p>
@@ -158,7 +156,7 @@ const InitialSetup = () => {
 
       <section className="space-y-6">
         <SectionLabel>Regional Settings</SectionLabel>
-        <div className="glass-card p-6 border border-slate-800 bg-slate-900/50 max-w-md">
+        <div className="glass-card p-6 border border-slate-800 bg-slate-900/50 max-w-md">  
           <div className="flex items-center gap-3 mb-4">
             <Languages size={20} className="text-indigo-400" />
             <h3 className="text-sm font-bold text-white">Source Code Language</h3>
@@ -176,6 +174,15 @@ const InitialSetup = () => {
             <option value="es">Spanish</option>
           </select>
         </div>
+      </section>
+
+      <section className="space-y-6 border-t border-slate-800 pt-10">
+        <div>
+          <SectionLabel>Source Files</SectionLabel>
+          <h2 className="text-2xl font-extrabold text-white tracking-tight">Upload and review source code</h2>
+          <p className="mt-2 text-sm text-slate-400">Upload files for the active run, confirm detected languages, then launch the pipeline from the fixed action bar.</p>
+        </div>
+        <SourceFiles embedded />
       </section>
     </div>
   );

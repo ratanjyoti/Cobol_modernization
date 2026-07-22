@@ -262,27 +262,63 @@ async def get_graph_data(run_id: str, db: Session = Depends(get_db)):
     relations = db.query(FileRelation).filter(FileRelation.run_id == run_id).all()
 
     nodes_by_id = {}
+
+    def frontend_type(filename: str, detected_lang: str | None):
+        name = (filename or "").lower()
+        lang = (detected_lang or "").lower()
+
+        if "jcl" in lang or name.endswith(".jcl"):
+            return "job"
+        if "copy" in lang or name.endswith(".cpy"):
+            return "copybook"
+        if "cobol" in lang or name.endswith((".cbl", ".cob")):
+            return "program"
+        if name.endswith((".sql", ".ddl")):
+            return "table"
+        return "file"
+
     for file in files:
         node_id = file.filepath or file.filename
         nodes_by_id[node_id] = {
             "id": node_id,
             "label": file.filename,
-            "type": file.detected_lang or "file",
+            "type": frontend_type(file.filename, file.detected_lang),
             "filepath": file.filepath,
             "resolved": True,
         }
 
     edges = []
+
     for relation in relations:
-        if relation.source_file not in nodes_by_id or relation.target_item not in nodes_by_id:
+        source = relation.source_file
+        target = relation.target_item
+        rel_type = relation.relation_type or "REFERENCES"
+
+        if source not in nodes_by_id:
             continue
+
+        if target not in nodes_by_id:
+            nodes_by_id[target] = {
+                "id": target,
+                "label": target.split("/")[-1],
+                "type": "external",
+                "filepath": target,
+                "resolved": False,
+            }
+            rel_type = "UNRESOLVED"
+
         edges.append({
-            "from": relation.source_file,
-            "to": relation.target_item,
-            "type": relation.relation_type,
+            "id": str(relation.id),
+            "from": source,
+            "to": target,
+            "type": rel_type,
+            "relationType": rel_type,
         })
 
-    return {"nodes": list(nodes_by_id.values()), "edges": edges}
+    return {
+        "nodes": list(nodes_by_id.values()),
+        "edges": edges,
+    }
 
 # 3. THE DDD TAB DATA
 @router.get("/ddd/{run_id}")

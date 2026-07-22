@@ -96,7 +96,7 @@ const Projects = () => {
     localStorage.setItem('active_run_id', runId);
     setActiveRunId(runId); 
     toast.success(`Switched to ${projects.find((project) => project.run_id === runId)?.name || runId}`);
-    navigate('/source-files');
+    navigate('/initial-setup');
   };
 
   const handleDelete = async (runId: string) => {
@@ -141,8 +141,8 @@ const Projects = () => {
         description="Manage migration runs, backend status, active project context, and run history."
         meta={activeProject ? <StatusBadge status={activeProject.status} /> : undefined}
         action={(
-          <button onClick={() => navigate('/dashboard?new=true')} className="btn-glow">
-            <Plus size={20} /> Create New Run
+          <button onClick={() => navigate('/initial-setup')} className="btn-glow">
+            <Plus size={20} /> Select Project
           </button>
         )}
       />
@@ -168,7 +168,7 @@ const Projects = () => {
               onClick={() => handleActivate(activeProject.run_id)}
               className="px-6 py-3 bg-white text-indigo-900 rounded-xl font-bold hover:bg-indigo-50 transition-all flex items-center gap-2"
             >
-              Continue Project <ArrowRight size={18} />
+              Open Initial Setup <ArrowRight size={18} />
             </button>
           </div>
           <div className="mt-6 w-full bg-slate-800 h-2 rounded-full overflow-hidden">

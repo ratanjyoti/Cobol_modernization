@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import DependencyGraph, {
   type DependencyGraphStats,
   type DependencyLink,
@@ -98,13 +98,33 @@ const buildGraphData = (files: FileRecord[], relations: DependencyRelation[]) =>
 
   relations.forEach((relation) => {
     const resolvedSource = findFileForRelationName(files, relation.source_file);
+    if (!resolvedSource) return;
+
     const resolvedTarget = findFileForRelationName(files, relation.target_item);
-
-    if (!resolvedSource || !resolvedTarget) return;
-
     const sourceId = resolvedSource.id;
-    const targetId = resolvedTarget.id;
-    const key = `${sourceId}->${targetId}:${relation.relation_type}`;
+    let targetId = resolvedTarget?.id;
+
+    if (!resolvedTarget) {
+      const unresolvedLabel = relation.target_item || 'Unknown target';
+      targetId = `external:${normalizeName(unresolvedLabel)}`;
+      if (!nodesById.has(targetId)) {
+        nodesById.set(targetId, {
+          id: targetId,
+          label: unresolvedLabel,
+          type: 'external',
+          x: 0,
+          y: 0,
+          subtitle: 'external target - unresolved',
+          incoming: 0,
+          outgoing: 0,
+          isResolved: false,
+        });
+      }
+    }
+
+    if (!targetId) return;
+    const relationType = relation.relation_type || (resolvedTarget ? 'DEPENDS_ON' : 'UNRESOLVED');
+    const key = `${sourceId}->${targetId}:${relationType}`;
     if (seenLinks.has(key)) return;
     seenLinks.add(key);
 
@@ -112,7 +132,7 @@ const buildGraphData = (files: FileRecord[], relations: DependencyRelation[]) =>
       id: key,
       from: sourceId,
       to: targetId,
-      relationType: relation.relation_type,
+      relationType,
     });
   });
 
@@ -253,11 +273,17 @@ const SystemDiscovery = () => {
   const handleModeChange = (mode: GraphMode) => {
     setGraphMode(mode);
     if (mode === 'overview') setSelectedNode(null);
-    if (mode === 'isolated') setExplorerFilter('isolated');
-    if (mode === 'unresolved') setExplorerFilter('unresolved');
+    if (mode === 'isolated') {
+      setExplorerFilter('isolated');
+      setSelectedNode((current) => current && isolatedNodes.some((node) => node.id === current.id) ? current : null);
+    }
+    if (mode === 'unresolved') {
+      setExplorerFilter('unresolved');
+      setSelectedNode((current) => current && unresolvedNodes.some((node) => node.id === current.id) ? current : unresolvedNodes[0] ?? null);
+    }
     if (mode === 'connected') {
       setExplorerFilter('connected');
-      setSelectedNode((current) => current ?? connectedNodes[0] ?? null);
+      setSelectedNode((current) => current && connectedNodes.some((node) => node.id === current.id) ? current : connectedNodes[0] ?? null);
     }
   };
 

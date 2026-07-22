@@ -26,7 +26,6 @@ const menuGroups = [
   {
     group: 'Reverse Engineering',
     items: [
-      { name: 'Source Files',     path: '/source-files',       icon: FolderOpen,   desc: 'Upload, inspect, and manage legacy source files for analysis.' },
       { name: 'System Discovery', path: '/discovery',          icon: BrainCircuit, desc: 'Analyze calls, copybooks, SQL tables, and dependency relationships.' },
       { name: 'Analysis',         path: '/reverse-engineering',icon: Cpu,          desc: 'Review technical analysis, structure, and modernization insights.' },
       { name: 'Business Logic',   path: '/business-logic',     icon: FileText,     desc: 'Translate legacy code behavior into plain-English business rules.' },

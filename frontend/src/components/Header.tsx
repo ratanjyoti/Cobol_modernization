@@ -176,7 +176,7 @@ const Header = ({ theme, toggleTheme }: HeaderProps) => {
         <motion.button
           whileHover={{ scale: 1.04, translateY: -1 }}
           whileTap={{ scale: 0.96 }}
-          onClick={() => navigate('/dashboard?new=true')}
+          onClick={() => navigate('/initial-setup')}
           className="btn-glow flex items-center gap-1.5 text-xs"
           style={{ padding: '0.45rem 0.9rem', borderRadius: 8 }}
         >

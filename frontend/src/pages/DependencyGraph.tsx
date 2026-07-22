@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   Box,
@@ -97,7 +97,7 @@ const MODE_LABELS: Record<GraphMode, string> = {
   isolated: 'Isolated Files',
 };
 
-const REQUESTED_RELATION_ORDER = ['CALLS', 'EXECUTES', 'MAPS_TO', 'INCLUDES', 'ACCESSES', 'READS', 'WRITES', 'READS_WRITES', 'IMPORTS', 'REFERENCES', 'INHERITS'];
+const REQUESTED_RELATION_ORDER = ['CALLS', 'EXECUTES', 'MAPS_TO', 'INCLUDES', 'ACCESSES', 'READS', 'WRITES', 'READS_WRITES', 'UNRESOLVED', 'IMPORTS', 'REFERENCES', 'INHERITS'];
 
 const cloneNode = (node: DependencyNode): DependencyNode => ({ ...node });
 
@@ -159,6 +159,8 @@ const getLinkColor = (relationType: string) => {
       return 'var(--corporate-accent)';
     case 'WRITES':
       return '#ef4444';
+    case 'UNRESOLVED':
+      return '#fb923c';
     case 'IMPORTS':
       return '#8f6f4f';
     case 'REFERENCES':
@@ -438,14 +440,19 @@ const DependencyGraph = ({
   const [showTwoHop, setShowTwoHop] = useState(false);
 
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
+  const relationScopeLinks = useMemo(() => {
+    if (mode !== 'impact' || !selectedNodeId) return links;
+    return links.filter((link) => link.from === selectedNodeId || link.to === selectedNodeId);
+  }, [links, mode, selectedNodeId]);
+
   const availableRelations = useMemo(() => {
     const counts = new Map<string, number>();
-    links.forEach((link) => counts.set(link.relationType, (counts.get(link.relationType) || 0) + 1));
+    relationScopeLinks.forEach((link) => counts.set(link.relationType, (counts.get(link.relationType) || 0) + 1));
     return REQUESTED_RELATION_ORDER
       .filter((type) => counts.has(type))
       .concat([...counts.keys()].filter((type) => !REQUESTED_RELATION_ORDER.includes(type)).sort())
       .map((type) => ({ type, count: counts.get(type) || 0 }));
-  }, [links]);
+  }, [relationScopeLinks]);
 
   useEffect(() => {
     if (activeRelation !== 'ALL' && !availableRelations.some((relation) => relation.type === activeRelation)) {
@@ -576,6 +583,20 @@ const DependencyGraph = ({
     onModeChange?.('overview');
   };
 
+  const handleRelationChange = (relation: RelationFilter) => {
+    setActiveRelation(relation);
+    if (mode !== 'impact' || !selectedNodeId) return;
+
+    const selectedHasMatchingRelation = links.some((link) => {
+      const relationMatches = relation === 'ALL' || link.relationType === relation;
+      return relationMatches && (link.from === selectedNodeId || link.to === selectedNodeId);
+    });
+
+    if (!selectedHasMatchingRelation) {
+      onModeChange?.('connected');
+    }
+  };
+
   return (
     <div className={isFullscreen ? 'fixed inset-4 z-[100] rounded-2xl bg-slate-950 shadow-2xl shadow-black/60' : 'h-full w-full'}>
       <TransformWrapper
@@ -607,20 +628,20 @@ const DependencyGraph = ({
               <div className="flex flex-wrap gap-2 basis-full">
                 <button
                   type="button"
-                  onClick={() => setActiveRelation('ALL')}
+                  onClick={() => handleRelationChange('ALL')}
                   className={`rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${
                     activeRelation === 'ALL'
                       ? 'border-emerald-400 bg-emerald-500/20 text-emerald-300'
                       : 'border-slate-700 bg-slate-800/80 text-slate-300 hover:bg-slate-700'
                   }`}
                 >
-                  ALL <span className="text-slate-400">{links.length}</span>
+                  ALL <span className="text-slate-400">{relationScopeLinks.length}</span>
                 </button>
                 {availableRelations.map(({ type, count }) => (
                   <button
                     key={type}
                     type="button"
-                    onClick={() => setActiveRelation(type)}
+                    onClick={() => handleRelationChange(type)}
                     className={`rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${
                       activeRelation === type
                         ? 'border-emerald-400 bg-emerald-500/20 text-emerald-300'

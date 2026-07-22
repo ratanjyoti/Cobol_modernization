@@ -26,7 +26,7 @@ import SystemAdmin        from '../pages/SystemAdmin';
 import PromptStudio       from '../pages/PromptStudio';
 import Settings           from '../pages/Settings';
 
-// Page wrapper — smooth fade+slide on every route change
+// Page wrapper â€” smooth fade+slide on every route change
 const PageWrapper = ({ children }: { children: React.ReactNode }) => (
   <motion.div
     initial={{ opacity: 0, y: 14 }}
@@ -52,7 +52,7 @@ const AnimatedRoutes = () => {
 
           <Route path="projects"             element={<PageWrapper><Projects /></PageWrapper>} />
           <Route path="discovery"            element={<PageWrapper><SystemDiscovery /></PageWrapper>} />
-          <Route path="source-files"         element={<PageWrapper><SourceFiles /></PageWrapper>} />
+          <Route path="source-files"         element={<Navigate to="/initial-setup" replace />} />
           <Route path="reverse-engineering"  element={<PageWrapper><ReverseEngineering /></PageWrapper>} />
           <Route path="business-logic"       element={<PageWrapper><BusinessLogic /></PageWrapper>} />
           <Route path="modernization-plan"   element={<PageWrapper><ModernizationPlan /></PageWrapper>} />

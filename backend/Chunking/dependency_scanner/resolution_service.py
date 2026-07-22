@@ -1,4 +1,4 @@
-﻿import os
+import os
 import re
 
 
@@ -58,17 +58,21 @@ class ResolutionService:
             source = self.resolve(relation.source_file)
             target = self.resolve(relation.target_item)
 
-            if not source or not target:
+            if not source:
                 self.db.delete(relation)
                 continue
 
             relation.source_file = source["graph_name"]
-            relation.target_item = target["graph_name"]
-            relation.relation_type = self.relation_type_for_file(
-                source_ext=source["ext"],
-                target_ext=target["ext"],
-                suggested_type=relation.relation_type,
-            )
+            if target:
+                relation.target_item = target["graph_name"]
+                relation.relation_type = self.relation_type_for_file(
+                    source_ext=source["ext"],
+                    target_ext=target["ext"],
+                    suggested_type=relation.relation_type,
+                )
+            else:
+                relation.target_item = str(relation.target_item or "").strip().strip("'\"")
+                relation.relation_type = self.clean_relation_type(relation.relation_type) or "UNRESOLVED"
 
             key = (relation.source_file, relation.target_item, relation.relation_type)
             if key in seen:
