@@ -1,3 +1,5 @@
+import requests
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -66,11 +68,88 @@ def project_ai_config(project: Project | None):
     }
 
 
+def _openrouter_error_message(response: requests.Response) -> str:
+    try:
+        payload = response.json()
+    except ValueError:
+        return response.text[:500] or response.reason
+
+    error = payload.get("error") if isinstance(payload, dict) else None
+    if isinstance(error, dict):
+        return str(error.get("message") or error.get("code") or payload)[:500]
+    if error:
+        return str(error)[:500]
+    return str(payload)[:500]
+
+
+def validate_cloud_chat_config(config: dict):
+    mode = (config.get("mode") or config.get("provider") or "local").lower()
+    if mode not in {"openrouter", "api", "custom", "cloud"}:
+        return
+
+    api_key = config.get("key")
+    base_url = (config.get("url") or settings.OPENROUTER_BASE_URL).rstrip("/")
+    model = config.get("model") or settings.OPENROUTER_MODEL
+
+    if not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "OpenRouter API key is missing on the backend. Save the key for this run, "
+                "or set OPENROUTER_API_KEY on the backend host."
+            ),
+        )
+
+    try:
+        response = requests.post(
+            f"{base_url}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://cobol-modernization-green.vercel.app",
+                "X-Title": "ModernizerAI",
+            },
+            json={
+                "model": model,
+                "messages": [{"role": "user", "content": "Reply OK only."}],
+                "temperature": 0,
+                "max_tokens": 8,
+            },
+            timeout=30,
+        )
+    except requests.RequestException as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"OpenRouter validation request failed: {exc}",
+        ) from exc
+
+    if response.status_code >= 400:
+        raise HTTPException(
+            status_code=400,
+            detail=f"OpenRouter rejected model '{model}': {_openrouter_error_message(response)}",
+        )
+
+    try:
+        content = response.json().get("choices", [{}])[0].get("message", {}).get("content")
+    except Exception:
+        content = None
+
+    if not isinstance(content, str) or not content.strip():
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"OpenRouter model '{model}' responded without chat text. "
+                "Choose a text chat model, not an embedding, safety, or reasoning-only model."
+            ),
+        )
+
+
 @router.post("/{run_id}/extract")
 async def extract_rules(run_id: str, db: Session = Depends(get_db)):
     project = db.query(Project).filter_by(run_id=run_id).first()
 
     config = project_ai_config(project)
+    validate_cloud_chat_config(config)
 
     process = LogicExtractionProcess(
         db_session=db,

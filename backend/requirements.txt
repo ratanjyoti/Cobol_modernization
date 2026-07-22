@@ -7,3 +7,4 @@ GitPython==3.1.43
 neo4j==5.23.0
 pydantic==2.9.2
 requests==2.32.3
+openai==1.59.7

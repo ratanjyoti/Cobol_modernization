@@ -381,7 +381,7 @@ async def get_project_config(run_id: str, db: Session = Depends(get_db)):
         "provider": project.llm_provider or mode,
         "key": project.custom_api_key or "",
         "url": project.custom_api_base_url or ("http://localhost:11434" if mode == "local" else "https://openrouter.ai/api/v1"),
-        "model": project.llm_model or ("llama3" if mode == "local" else "openai/gpt-4o-mini"),
+        "model": project.llm_model or ("llama3" if mode == "local" else settings.OPENROUTER_MODEL),
         "lang": project.interaction_lang,
         "speed_profile": project.speed_profile,
         "reasoning_effort": project.reasoning_effort,

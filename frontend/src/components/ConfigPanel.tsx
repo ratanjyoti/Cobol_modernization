@@ -6,10 +6,10 @@ import { ProjectAPI } from '../services/api';
 
 const LOCAL_MODELS = ['llama3', 'mistral', 'phi3', 'codellama'];
 const OPENROUTER_MODELS = [
-  'openai/gpt-4o-mini',
-  'google/gemini-2.0-flash-exp:free',
-  'meta-llama/llama-3.1-8b-instruct:free',
-  'mistralai/mistral-7b-instruct:free',
+  'openai/gpt-oss-20b:free',
+  'nvidia/nemotron-3-nano-30b-a3b:free',
+  'nvidia/nemotron-3-super-120b-a12b:free',
+  'cohere/north-mini-code:free',
 ];
 
 type AiMode = 'openrouter' | 'local' | 'custom';
@@ -23,7 +23,7 @@ const defaultsForMode = (mode: AiMode) => {
   if (mode === 'local') {
     return { key: '', url: 'http://localhost:11434', model: 'llama3' };
   }
-  return { key: '', url: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o-mini' };
+  return { key: '', url: 'https://openrouter.ai/api/v1', model: 'openai/gpt-oss-20b:free' };
 };
 
 const normalizeMode = (value: unknown): AiMode => {

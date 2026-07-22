@@ -75,6 +75,17 @@ const getDefaultApiBaseUrl = () => {
 export const API_BASE_URL = getDefaultApiBaseUrl();
 export const WS_BASE_URL = API_BASE_URL.replace(/^http/, 'ws');
 
+export const getApiErrorDetail = (error: unknown, fallback = 'Request failed') => {
+  if (axios.isAxiosError(error)) {
+    const detail = error.response?.data?.detail;
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) return detail.map((item) => item?.msg || JSON.stringify(item)).join('; ');
+    if (detail) return JSON.stringify(detail);
+    return error.message || fallback;
+  }
+  return error instanceof Error ? error.message : fallback;
+};
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {

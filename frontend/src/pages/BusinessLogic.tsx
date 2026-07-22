@@ -19,7 +19,7 @@ import {
   X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { ProjectAPI } from '../services/api';
+import { getApiErrorDetail, ProjectAPI } from '../services/api';
 
 interface BusinessRule {
   id: number;
@@ -98,7 +98,7 @@ const BusinessLogic = () => {
         applyRules(extractedRules);
         if (extractedRules.length > 0) toast.success('Business logic loaded from uploaded files');
       } catch (e) {
-        if (!cancelled) toast.error('Failed to load business logic');
+        if (!cancelled) toast.error(getApiErrorDetail(e, 'Failed to load business logic'));
       } finally {
         if (!cancelled) {
           setAutoExtracting(false);
@@ -132,7 +132,7 @@ const BusinessLogic = () => {
       applyRules(extractedRules);
       toast.success('Deep analysis complete. Baseline approval is now available.');
     } catch (e) {
-      toast.error('Extraction failed');
+      toast.error(getApiErrorDetail(e, 'Extraction failed'));
     } finally {
       setAutoExtracting(false);
       setLoading(false);
