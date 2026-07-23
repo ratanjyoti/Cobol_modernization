@@ -7,11 +7,9 @@ from pydantic import BaseModel
 from Agents.infrastructure.agent_base import AgentBase
 from Agents.models.analysis_models import TechnicalAnalysisReport
 
-
 class DataStructure(BaseModel):
     name: str
     fields: List[Dict[str, str]]
-
 
 class LogicStep(BaseModel):
     step_number: int

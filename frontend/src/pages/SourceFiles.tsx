@@ -93,6 +93,20 @@ const MIGRATION_SCOPES = [
   { id: 'full', title: 'Full Migration', tokens: '250k Ã¢â‚¬â€œ 600k', cost: 'Very High', color: 'text-red-400', bg: 'bg-red-500/10', desc: 'End-to-end agentic pipeline.' },
 ];
 
+const DISPLAY_MIGRATION_SCOPES = [
+  { id: 'dependency_mapping', legacyId: 'mapping', title: 'Dependency Mapping', tokens: '10k - 25k', cost: 'Low', color: 'text-emerald-400', bg: 'bg-emerald-500/10', desc: 'Visualize architecture & connections only.' },
+  { id: 'reverse_engineering', legacyId: 'reverse', title: 'Reverse Engineering', tokens: '50k - 120k', cost: 'Medium', color: 'text-amber-400', bg: 'bg-amber-500/10', desc: 'Extract logic, complexity & rules.' },
+  { id: 'business_rules', legacyId: 'plain', title: 'Business Rules (Plain)', tokens: '80k - 150k', cost: 'Medium', color: 'text-blue-400', bg: 'bg-blue-500/10', desc: 'Simple functional rule extraction.' },
+  { id: 'business_rules_ddd', legacyId: 'ddd', title: 'Business Rules (DDD)', tokens: '150k - 300k', cost: 'High', color: 'text-purple-400', bg: 'bg-purple-500/10', desc: 'Domain-driven microservice decomposition.' },
+  { id: 'full_migration_ddd', legacyId: 'full', title: 'Full Migration', tokens: '250k - 600k', cost: 'Very High', color: 'text-red-400', bg: 'bg-red-500/10', desc: 'End-to-end agentic pipeline.' },
+];
+
+const normalizeScopeId = (scopeId: string | null) => {
+  const displayMatch = DISPLAY_MIGRATION_SCOPES.find((scope) => scope.id === scopeId || scope.legacyId === scopeId);
+  const legacyMatch = MIGRATION_SCOPES.find((scope) => scope.id === scopeId);
+  return displayMatch?.id || legacyMatch?.id || '';
+};
+
 const SOURCE_LANGUAGES = [
   { id: 'auto', name: 'Ã¢Å“Â¨ Auto-Detect Language' },
   { id: 'cobol', name: 'COBOL (Pure)' },
@@ -163,7 +177,7 @@ const SourceFiles = ({ embedded = false }: SourceFilesProps) => {
   const [githubUrl, setGithubUrl] = useState('');
   const [githubToken, setGithubToken] = useState('');
   const [files, setFiles] = useState<SourceFileRecord[]>([]);
-  const [selectedScope, setSelectedScope] = useState(localStorage.getItem(STORAGE_KEYS.selectedScope) || '');
+  const [selectedScope, setSelectedScope] = useState(() => normalizeScopeId(localStorage.getItem(STORAGE_KEYS.selectedScope)));
   const [sourceLang, setSourceLang] = useState(localStorage.getItem(STORAGE_KEYS.sourceLang) || 'auto');
   const [targetLang, setTargetLang] = useState(localStorage.getItem(STORAGE_KEYS.targetLang) || 'java');
   const [isLaunching, setIsLaunching] = useState(false);
@@ -573,17 +587,22 @@ const SourceFiles = ({ embedded = false }: SourceFilesProps) => {
           </div>
         </div>
 
+        {!embedded && (
         <div className="space-y-4">
           <div className="flex items-center gap-2 text-amber-400 text-sm font-bold uppercase tracking-widest">
             <Zap size={16} /> Select Migration Scope & Budget
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-            {MIGRATION_SCOPES.map((scope) => (
+            {DISPLAY_MIGRATION_SCOPES.map((scope) => (
               <div 
                 key={scope.id} 
                 onClick={() => {
                   if (pipelineActive) { toast.error("Scope is locked while pipeline is active."); } 
-                  else { setSelectedScope(scope.id); }
+                  else {
+                    setSelectedScope(scope.id);
+                    localStorage.setItem(STORAGE_KEYS.selectedScope, scope.id);
+                    localStorage.setItem('modernizer_migration_scope', scope.id);
+                  }
                 }}
                 className={`p-4 rounded-2xl border transition-all cursor-pointer ${!pipelineActive ? 'hover:border-slate-600' : 'opacity-60 cursor-not-allowed'} ${selectedScope === scope.id ? 'border-indigo-500 bg-indigo-500/10 shadow-lg' : 'border-slate-800 bg-slate-900/50'}`}
               >
@@ -598,6 +617,7 @@ const SourceFiles = ({ embedded = false }: SourceFilesProps) => {
             ))}
           </div>
         </div>
+        )}
       </motion.div>
 
       {files.length > 0 && (
