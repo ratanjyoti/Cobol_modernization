@@ -15,7 +15,7 @@ import toast from 'react-hot-toast';
 import ConfigPanel from '../components/ConfigPanel';
 import SourceFiles from './SourceFiles';
 import { ProjectAPI } from '../services/api';
-import type { ProjectConfig, ProjectSummary } from '../services/api';
+import type { ProjectConfig, ProjectSummary, ServiceHealth } from '../services/api';
 import SectionLabel from '../components/SectionLabel';
 
 const defaultAIConfig: ProjectConfig = {
@@ -93,6 +93,11 @@ const MIGRATION_SCOPES: MigrationScope[] = [
   },
 ];
 
+const emptyHealth: ServiceHealth = {
+  ai_api: { active: false, detail: 'No active project selected.' },
+  neo4j: { active: false, detail: 'No active project selected.' },
+};
+
 const scopeLevelClass: Record<MigrationScope['level'], string> = {
   Low: 'bg-emerald-500/10 text-emerald-300',
   Medium: 'bg-amber-500/10 text-amber-300',
@@ -128,6 +133,34 @@ const loadLastNeo4jConfig = (): ProjectConfig => {
   }
 };
 
+
+const StatusDot = ({ active, loading }: { active: boolean; loading: boolean }) => (
+  <span
+    className={`h-2.5 w-2.5 rounded-full ${
+      loading ? 'bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.75)]' : active ? 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.75)]' : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.75)]'
+    }`}
+  />
+);
+
+const ReadinessBadge = ({
+  label,
+  active,
+  loading,
+  detail,
+}: {
+  label: string;
+  active: boolean;
+  loading: boolean;
+  detail?: string;
+}) => (
+  <div
+    className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-950/70 px-3 py-1.5 text-[11px] font-black uppercase tracking-widest text-slate-300"
+    title={loading ? `Checking ${label}...` : detail || `${label} status unavailable.`}
+  >
+    <StatusDot active={active} loading={loading} />
+    {label}
+  </div>
+);
 interface Neo4jConfigPanelProps {
   runId: string | null;
   onSave?: (config: ProjectConfig) => void;
@@ -309,6 +342,8 @@ const InitialSetup = () => {
   const [sourceMetaLang, setSourceMetaLang] = useState('en');
   const [pendingAIConfig, setPendingAIConfig] = useState<ProjectConfig | null>(null);
   const [pendingNeo4jConfig, setPendingNeo4jConfig] = useState<ProjectConfig | null>(null);
+  const [serviceHealth, setServiceHealth] = useState<ServiceHealth>(emptyHealth);
+  const [healthLoading, setHealthLoading] = useState(false);
 
   useEffect(() => {
     void fetchProjectHistory();
@@ -316,6 +351,35 @@ const InitialSetup = () => {
     if (savedLang) setSourceMetaLang(savedLang);
   }, []);
 
+  useEffect(() => {
+    void loadServiceHealth(runId);
+  }, [runId]);
+
+  useEffect(() => {
+    if (!runId) return;
+    const refreshId = window.setInterval(() => {
+      void loadServiceHealth(runId, { silent: true });
+    }, 5000);
+    return () => window.clearInterval(refreshId);
+  }, [runId]);
+
+
+  const loadServiceHealth = async (currentRunId: string | null, options: { silent?: boolean } = {}) => {
+    if (!currentRunId) {
+      setServiceHealth(emptyHealth);
+      return;
+    }
+
+    if (!options.silent) setHealthLoading(true);
+    try {
+      const health = await ProjectAPI.getServiceHealth(currentRunId);
+      setServiceHealth(health || emptyHealth);
+    } catch (e) {
+      setServiceHealth(emptyHealth);
+    } finally {
+      if (!options.silent) setHealthLoading(false);
+    }
+  };
   const fetchProjectHistory = async () => {
     try {
       const data = await ProjectAPI.list();
@@ -384,6 +448,7 @@ const InitialSetup = () => {
         { run_id: newRunId, name: response.name, status: response.status, files_count: 0 },
         ...projects,
       ]);
+      void loadServiceHealth(newRunId);
 
       toast.success(`Project ${runName} created. Upload source files below.`);
     } catch (e: any) {
@@ -422,10 +487,18 @@ const InitialSetup = () => {
   return (
     <div className="space-y-12 pb-32 animate-in fade-in duration-700">
       <header className="flex flex-col gap-2">
-        <h1 className="text-3xl font-extrabold text-white tracking-tight">Initial Setup</h1>
-        <p className="text-slate-400">
-          Configure your AI engine, project environment, source language, and migration depth.
-        </p>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-2">
+            <h1 className="text-3xl font-extrabold text-white tracking-tight">Initial Setup</h1>
+            <p className="text-slate-400">
+              Configure your AI engine, project environment, source language, and migration depth.
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
+            <ReadinessBadge label="API Key" active={serviceHealth.ai_api.active} loading={healthLoading} detail={serviceHealth.ai_api.detail} />
+            <ReadinessBadge label="Neo4j" active={serviceHealth.neo4j.active} loading={healthLoading} detail={serviceHealth.neo4j.detail} />
+          </div>
+        </div>
       </header>
 
       <section className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -476,14 +549,14 @@ const InitialSetup = () => {
 
           <SectionLabel>Graph Database</SectionLabel>
           <div className="glass-card p-6 border border-slate-800 bg-slate-900/50">
-            <Neo4jConfigPanel runId={runId} onSave={(config) => setPendingNeo4jConfig(config)} />
+            <Neo4jConfigPanel runId={runId} onSave={(config) => { setPendingNeo4jConfig(config); void loadServiceHealth(runId); }} />
           </div>
         </div>
 
         <div className="lg:col-span-7 space-y-6">
           <SectionLabel>AI Engine Configuration</SectionLabel>
           <div className="glass-card p-6 border border-slate-800 bg-slate-900/50">
-            <ConfigPanel runId={runId} onSave={(config) => setPendingAIConfig(config)} />
+            <ConfigPanel runId={runId} onSave={(config) => { setPendingAIConfig(config); void loadServiceHealth(runId); }} />
           </div>
         </div>
       </section>
