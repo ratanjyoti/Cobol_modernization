@@ -227,7 +227,7 @@ const Dashboard = () => {
         setServiceHealth(health || emptyHealth);
       } catch (healthError: any) {
         setServiceHealth({
-          ai_api: { active: false, detail: healthError.response?.status === 404 ? 'Backend health check endpoint is not deployed yet. Redeploy the backend service.' : 'Unable to check AI readiness.' },
+          ai_api: { active: false, provider: activeProject?.llm_provider || activeProject?.ai_mode || 'AI API', model: activeProject?.llm_model || activeProject?.target || '', detail: healthError.response?.status === 404 ? 'Backend health check endpoint is not deployed yet. Render is still running an old backend. Re-save your key after backend redeploy.' : 'Unable to check AI readiness.' },
           neo4j: { active: false, detail: healthError.response?.status === 404 ? 'Backend health check endpoint is not deployed yet. Redeploy the backend service.' : 'Unable to check Neo4j readiness.' },
         });
       }

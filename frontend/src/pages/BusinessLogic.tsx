@@ -51,11 +51,19 @@ const BusinessLogic = () => {
   const [progress, setProgress] = useState(0);
 
   const applyRules = (nextRules: BusinessRule[]) => {
+    const normalizedRules = nextRules.map((rule) => {
+      const technicalRef = rule.technical_ref || rule.technical_yaml || 'Stored technical evidence';
+      return {
+        ...rule,
+        business_purpose: rule.business_purpose || `Stored business rules were extracted from ${rule.filename || 'the uploaded source file'}.`,
+        functional_logic: rule.functional_logic || rule.rule_text || `Review the stored rule text and technical evidence. ${technicalRef}`,
+      };
+    });
     setProgress(nextRules.length > 0 ? 100 : 0);
-    setRules(nextRules);
+    setRules(normalizedRules);
     setSelectedFile((current) => {
-      if (current && nextRules.some((rule) => rule.filename === current)) return current;
-      return nextRules[0]?.filename || null;
+      if (current && normalizedRules.some((rule) => rule.filename === current)) return current;
+      return normalizedRules[0]?.filename || null;
     });
   };
 
