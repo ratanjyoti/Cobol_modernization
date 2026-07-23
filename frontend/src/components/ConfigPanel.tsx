@@ -148,7 +148,7 @@ const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
       setSavedKeyPreview(safeConfig.key_preview);
       setConfig({ ...config, key: '' });
       window.dispatchEvent(new CustomEvent('ai-config-updated', { detail: safeConfig }));
-      onSave?.(safeConfig);
+      onSave?.(finalConfig);
       toast.success('AI configuration saved');
       setStep(1);
     } catch (e) {

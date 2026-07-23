@@ -14,13 +14,22 @@ router = APIRouter(prefix="/business-rules", tags=["Business Logic"])
 def serialize_rule(rule: BusinessRule, filename: str = ""):
     technical_yaml = rule.technical_yaml or ""
     technical_ref = rule.technical_ref or technical_yaml or ""
+    rule_text = rule.rule_text or rule.business_logic or ""
+    business_purpose = rule.business_purpose or (
+        f"Stored business rules were extracted from {filename or 'the uploaded source file'}."
+        if rule_text else ""
+    )
+    functional_logic = rule.functional_logic or rule.business_logic or (
+        f"Review the stored rule text and technical evidence for this extracted rule. {technical_ref}".strip()
+        if rule_text else ""
+    )
 
     return {
         "id": rule.id,
         "rule_id": rule.rule_id,
-        "rule_text": rule.rule_text or rule.business_logic or "",
-        "business_purpose": rule.business_purpose or "",
-        "functional_logic": rule.functional_logic or rule.business_logic or "",
+        "rule_text": rule_text,
+        "business_purpose": business_purpose,
+        "functional_logic": functional_logic,
         "technical_ref": technical_ref,
         "technical_yaml": technical_yaml or technical_ref,
         "filename": filename,

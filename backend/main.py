@@ -92,7 +92,8 @@ async def root():
     return {
         "status": "Online",
         "message": "ModernizerAI Backend is running",
-        "documentation": "/docs"
+        "documentation": "/docs",
+        "build": "byok-health-v2"
     }
 analysis_router = APIRouter(prefix="/analysis", tags=["Analysis"])
 
@@ -173,5 +174,4 @@ if __name__ == "__main__":
     import uvicorn
     # Run the server on localhost:8000
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
-
 

@@ -184,7 +184,7 @@ const Dashboard = () => {
     try {
       const data = await ProjectAPI.list();
       setProjects(data);
-      if (!runId && data[0]?.run_id) {
+      if ((!runId || !data.some((project) => project.run_id === runId)) && data[0]?.run_id) {
         setRunId(data[0].run_id);
         localStorage.setItem('active_run_id', data[0].run_id);
       }
@@ -205,12 +205,11 @@ const Dashboard = () => {
     setMetricsLoading(true);
     setHealthLoading(true);
     try {
-      const [projectDetail, discovery, complexity, rules, health] = await Promise.all([
+      const [projectDetail, discovery, complexity, rules] = await Promise.all([
         ProjectAPI.get(currentRunId),
         ProjectAPI.getDiscoveryData(currentRunId),
         ProjectAPI.getComplexity(currentRunId),
         ProjectAPI.getBusinessRules(currentRunId),
-        ProjectAPI.getServiceHealth(currentRunId),
       ]);
 
       setProjects((current) => {
@@ -223,7 +222,15 @@ const Dashboard = () => {
         complexityFiles: complexity.files || [],
         rules: rules || [],
       });
-      setServiceHealth(health || emptyHealth);
+      try {
+        const health = await ProjectAPI.getServiceHealth(currentRunId);
+        setServiceHealth(health || emptyHealth);
+      } catch (healthError: any) {
+        setServiceHealth({
+          ai_api: { active: false, detail: healthError.response?.status === 404 ? 'Backend health check endpoint is not deployed yet. Redeploy the backend service.' : 'Unable to check AI readiness.' },
+          neo4j: { active: false, detail: healthError.response?.status === 404 ? 'Backend health check endpoint is not deployed yet. Redeploy the backend service.' : 'Unable to check Neo4j readiness.' },
+        });
+      }
     } catch (error: any) {
       toast.error(error.response?.data?.detail || 'Failed to load dashboard metrics');
       setMetrics(emptyMetrics);

@@ -33,6 +33,7 @@ const InitialSetup = () => {
   const [isDeletingRuns, setIsDeletingRuns] = useState(false);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [sourceMetaLang, setSourceMetaLang] = useState('en');
+  const [pendingAIConfig, setPendingAIConfig] = useState<ProjectConfig | null>(null);
 
   useEffect(() => {
     void fetchProjectHistory();
@@ -44,6 +45,10 @@ const InitialSetup = () => {
     try {
       const data = await ProjectAPI.list();
       setProjects(data);
+      if ((!runId || !data.some((project) => project.run_id === runId)) && data[0]?.run_id) {
+        setRunId(data[0].run_id);
+        localStorage.setItem('active_run_id', data[0].run_id);
+      }
     } catch (e) {
       toast.error('Failed to load project history');
     }
@@ -77,7 +82,7 @@ const InitialSetup = () => {
     setIsCreatingProject(true);
 
     const runName = `Run_${projects.length + 1}`;
-    const aiConfig = loadLastAIConfig();
+    const aiConfig = { ...loadLastAIConfig(), ...(pendingAIConfig || {}) };
 
     try {
       const response = await ProjectAPI.create({
@@ -153,7 +158,7 @@ const InitialSetup = () => {
         <div className="lg:col-span-7 space-y-6">
           <SectionLabel>AI Engine Configuration</SectionLabel>
           <div className="glass-card p-6 border border-slate-800 bg-slate-900/50">
-            <ConfigPanel runId={runId} />
+            <ConfigPanel runId={runId} onSave={(config) => setPendingAIConfig(config)} />
           </div>
         </div>
       </section>
