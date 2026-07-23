@@ -6,13 +6,14 @@ from pathlib import Path
 import os
 import shutil
 import stat
+import datetime
 import requests
 from Processes.graphing_process import GraphingProcess
 from Processes.onboarding_process import OnboardingProcess
 from Persistence.neo4j.graph_service import GraphService
 from Chunking.dependency_scanner.resolution_service import ResolutionService
 from Config.llm_config import settings
-from Persistence.sqlite.models import FileRelation, Project, ProjectFile
+from Persistence.sqlite.models import BusinessRule, ChunkAnalysis, FileAnalysis, FileChunk, FileComplexity, FileRelation, Project, ProjectComplexity, ProjectFile
 from Persistence.sqlite.project_repo import ProjectRepository
 from Persistence.sqlite.session import get_db
 from paths import UPLOADS_DIR
@@ -426,6 +427,145 @@ async def get_project(run_id: str, db: Session = Depends(get_db)):
 
 
 
+
+
+def count_by_status(rows, default_status="PENDING"):
+    counts = {}
+    for status, count in rows:
+        key = status or default_status
+        counts[key] = count
+    return counts
+
+
+def status_from_counts(total: int, complete: int, started: int = 0):
+    if total <= 0 and started <= 0:
+        return "Pending"
+    if total > 0 and complete >= total:
+        return "Complete"
+    if started > 0 or complete > 0:
+        return "In Progress"
+    return "Pending"
+
+
+@router.get("/{run_id}/dashboard-status")
+async def get_project_dashboard_status(run_id: str, db: Session = Depends(get_db)):
+    repo = ProjectRepository(db)
+    project = repo.get_by_run_id(run_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    files = repo.get_files_by_run_id(run_id)
+    serialized_project = serialize_project(project, files)
+    files_total = len(files)
+    confirmed_files = serialized_project["file_status_counts"].get("CONFIRMED", 0)
+    rejected_files = serialized_project["file_status_counts"].get("REJECTED", 0)
+    pending_files = max(files_total - confirmed_files - rejected_files, 0)
+
+    relations_count = db.query(func.count(FileRelation.id)).filter(FileRelation.run_id == run_id).scalar() or 0
+    critical_paths = db.query(func.count(FileRelation.id)).filter(
+        FileRelation.run_id == run_id,
+        FileRelation.relation_type.in_(["CALLS", "EXECUTES", "MAPS_TO"]),
+    ).scalar() or 0
+    shared_assets = db.query(func.count(FileRelation.id)).filter(
+        FileRelation.run_id == run_id,
+        FileRelation.relation_type.in_(["INCLUDES", "ACCESSES", "READS", "WRITES"]),
+    ).scalar() or 0
+
+    complexity_rows = db.query(FileComplexity).filter(FileComplexity.run_id == run_id).all()
+    complexity_files = len(complexity_rows)
+    complex_modules = len([
+        row for row in complexity_rows
+        if (row.tier or "").lower() in {"high", "very high"} or (row.score or 0) >= 15
+    ])
+    project_complexity = db.query(ProjectComplexity).filter(ProjectComplexity.run_id == run_id).first()
+
+    chunk_total = db.query(func.count(FileChunk.id)).filter(FileChunk.run_id == run_id).scalar() or 0
+    chunk_status_rows = db.query(FileChunk.status, func.count(FileChunk.id)).filter(
+        FileChunk.run_id == run_id,
+    ).group_by(FileChunk.status).all()
+    chunk_status_counts = count_by_status(chunk_status_rows)
+    converted_chunks = db.query(func.count(FileChunk.id)).filter(
+        FileChunk.run_id == run_id,
+        FileChunk.converted_code.isnot(None),
+        FileChunk.converted_code != "",
+    ).scalar() or 0
+
+    technical_total = db.query(func.count(ChunkAnalysis.id)).filter(ChunkAnalysis.run_id == run_id).scalar() or 0
+    technical_completed = db.query(func.count(ChunkAnalysis.id)).filter(
+        ChunkAnalysis.run_id == run_id,
+        ChunkAnalysis.analysis_status == "COMPLETED",
+    ).scalar() or 0
+    file_analysis_count = db.query(func.count(FileAnalysis.id)).filter(FileAnalysis.run_id == run_id).scalar() or 0
+
+    rule_total = db.query(func.count(BusinessRule.id)).filter(BusinessRule.run_id == run_id).scalar() or 0
+    rule_status_rows = db.query(BusinessRule.status, func.count(BusinessRule.id)).filter(
+        BusinessRule.run_id == run_id,
+    ).group_by(BusinessRule.status).all()
+    rule_status_counts = count_by_status(rule_status_rows)
+    verified_rules = rule_status_counts.get("VERIFIED", 0)
+    pending_rules = rule_status_counts.get("PENDING", 0)
+    rejected_rules = rule_status_counts.get("REJECTED", 0)
+
+    environment_status = "Complete" if project else "Pending"
+    ingestion_status = status_from_counts(files_total, confirmed_files, files_total)
+    discovery_status = status_from_counts(files_total, min(files_total, complexity_files), relations_count + complexity_files)
+    analysis_status = status_from_counts(max(chunk_total, confirmed_files), technical_completed, chunk_total + technical_total + file_analysis_count)
+    rules_status = status_from_counts(rule_total, verified_rules, rule_total)
+    code_status = status_from_counts(chunk_total, converted_chunks, converted_chunks)
+
+    journey = [
+        {"id": "select_project", "name": "Select Project", "status": environment_status, "progress": 100 if project else 0, "detail": "Project run is selected." if project else "Create or select a project run."},
+        {"id": "upload_source", "name": "Upload Source", "status": ingestion_status, "progress": round((confirmed_files / files_total) * 100) if files_total else 0, "detail": f"{confirmed_files} of {files_total} files confirmed."},
+        {"id": "discovery", "name": "Discovery", "status": discovery_status, "progress": round((complexity_files / files_total) * 100) if files_total else 0, "detail": f"{relations_count} relations and {complexity_files} complexity profiles."},
+        {"id": "knowledge_extraction", "name": "Knowledge Extraction", "status": rules_status, "progress": round((verified_rules / rule_total) * 100) if rule_total else 0, "detail": f"{verified_rules} verified, {pending_rules} pending, {rejected_rules} rejected rules."},
+        {"id": "plan_migration", "name": "Plan Migration", "status": "Complete" if relations_count or rule_total or complexity_files else "Pending", "progress": 100 if relations_count or rule_total or complexity_files else 0, "detail": "Dashboard is backed by live project metrics."},
+        {"id": "generate_code", "name": "Generate Code", "status": code_status, "progress": round((converted_chunks / chunk_total) * 100) if chunk_total else 0, "detail": f"{converted_chunks} of {chunk_total} chunks have generated code."},
+        {"id": "refinement", "name": "Refinement", "status": "Pending", "progress": 0, "detail": "Compile-test-fix loops start after generated code is available."},
+        {"id": "deploy", "name": "Deploy", "status": "Pending", "progress": 0, "detail": "Export is available after generation and refinement."},
+    ]
+
+    return {
+        "project": serialized_project,
+        "files": {
+            "total": files_total,
+            "confirmed": confirmed_files,
+            "pending": pending_files,
+            "rejected": rejected_files,
+            "status_counts": serialized_project["file_status_counts"],
+            "language_counts": serialized_project["language_counts"],
+        },
+        "discovery": {
+            "relations": relations_count,
+            "critical_paths": critical_paths,
+            "shared_assets": shared_assets,
+        },
+        "complexity": {
+            "files": complexity_files,
+            "complex_modules": complex_modules,
+            "overall_tier": project_complexity.tier if project_complexity else "Unknown",
+            "overall_effort": project_complexity.reasoning_effort if project_complexity else "Balanced",
+        },
+        "analysis": {
+            "chunks": chunk_total,
+            "chunk_status_counts": chunk_status_counts,
+            "technical_reports": technical_total,
+            "technical_completed": technical_completed,
+            "file_reports": file_analysis_count,
+        },
+        "rules": {
+            "total": rule_total,
+            "verified": verified_rules,
+            "pending": pending_rules,
+            "rejected": rejected_rules,
+            "status_counts": rule_status_counts,
+        },
+        "code_generation": {
+            "converted_chunks": converted_chunks,
+            "total_chunks": chunk_total,
+        },
+        "journey": journey,
+        "updated_at": datetime.datetime.utcnow().isoformat() + "Z",
+    }
 @router.get("/{run_id}/config")
 async def get_project_config(run_id: str, db: Session = Depends(get_db)):
     repo = ProjectRepository(db)

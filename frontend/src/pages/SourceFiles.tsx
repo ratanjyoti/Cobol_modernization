@@ -108,7 +108,7 @@ const normalizeScopeId = (scopeId: string | null) => {
 };
 
 const SOURCE_LANGUAGES = [
-  { id: 'auto', name: 'Ã¢Å“Â¨ Auto-Detect Language' },
+  { id: 'auto', name: 'Auto-Detect Language' },
   { id: 'cobol', name: 'COBOL (Pure)' },
   { id: 'cobol-sql', name: 'COBOL + SQL' },
   { id: 'cobol-cics', name: 'COBOL + CICS' },
@@ -551,7 +551,7 @@ const SourceFiles = ({ embedded = false }: SourceFilesProps) => {
           <div className="space-y-8 pr-1">
       {/* SECTION 1: CONFIGURATION */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-        <SectionLabel>Step 1: Project Configuration</SectionLabel>
+        <SectionLabel>Project Configuration</SectionLabel>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="glass-card p-6 rounded-3xl border-slate-800 bg-slate-900/50 space-y-4">
@@ -587,37 +587,7 @@ const SourceFiles = ({ embedded = false }: SourceFilesProps) => {
           </div>
         </div>
 
-        {!embedded && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 text-amber-400 text-sm font-bold uppercase tracking-widest">
-            <Zap size={16} /> Select Migration Scope & Budget
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-            {DISPLAY_MIGRATION_SCOPES.map((scope) => (
-              <div 
-                key={scope.id} 
-                onClick={() => {
-                  if (pipelineActive) { toast.error("Scope is locked while pipeline is active."); } 
-                  else {
-                    setSelectedScope(scope.id);
-                    localStorage.setItem(STORAGE_KEYS.selectedScope, scope.id);
-                    localStorage.setItem('modernizer_migration_scope', scope.id);
-                  }
-                }}
-                className={`p-4 rounded-2xl border transition-all cursor-pointer ${!pipelineActive ? 'hover:border-slate-600' : 'opacity-60 cursor-not-allowed'} ${selectedScope === scope.id ? 'border-indigo-500 bg-indigo-500/10 shadow-lg' : 'border-slate-800 bg-slate-900/50'}`}
-              >
-                <div className="flex justify-between mb-2">
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${scope.bg} ${scope.color}`}>{scope.cost}</span>
-                  {selectedScope === scope.id && <CheckCircle2 size={14} className="text-indigo-400" />}
-                </div>
-                <h4 className="text-white font-bold text-xs mb-1">{scope.title}</h4>
-                <div className="text-xs font-mono text-indigo-400 mb-2">{scope.tokens} Tokens</div>
-                <p className="text-[10px] text-slate-500 line-clamp-2">{scope.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-        )}
+        {/* )} */}
       </motion.div>
 
       {files.length > 0 && (
@@ -671,7 +641,7 @@ const SourceFiles = ({ embedded = false }: SourceFilesProps) => {
       )}
       {/* SECTION 2: INGESTION */}
       <div className="space-y-6">
-        <SectionLabel>Step 2: Source Code Ingestion</SectionLabel>
+        <SectionLabel>Source Code Ingestion</SectionLabel>
 
         <div className="flex justify-center">
           <div className="flex p-1 bg-slate-950 rounded-xl border border-slate-800 w-full max-w-md">
@@ -792,7 +762,7 @@ const SourceFiles = ({ embedded = false }: SourceFilesProps) => {
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-indigo-400 text-sm font-bold uppercase tracking-widest">
-            <FileText size={16} /> Step 3: Review & Launch
+            <FileText size={16} /> Review & Launch
           </div>
           <button
             onClick={clearAllFiles}

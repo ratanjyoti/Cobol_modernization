@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ProjectAPI } from '../services/api';
-import type { DependencyRelation, FileRecord, ProjectSummary, ServiceHealth, ServiceStatus } from '../services/api';
+import type { DashboardStatus, DependencyRelation, FileRecord, JourneyStepStatus, ProjectSummary, ServiceHealth, ServiceStatus } from '../services/api';
 import Tooltip from '../components/Tooltip';
 import SectionLabel from '../components/SectionLabel';
 import StatusBadge from '../components/StatusBadge';
@@ -111,6 +111,7 @@ const Dashboard = () => {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [metrics, setMetrics] = useState<DashboardMetrics>(emptyMetrics);
   const [serviceHealth, setServiceHealth] = useState<ServiceHealth>(emptyHealth);
+  const [dashboardStatus, setDashboardStatus] = useState<DashboardStatus | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
   const [metricsLoading, setMetricsLoading] = useState(false);
   const [isDeletingRuns, setIsDeletingRuns] = useState(false);
@@ -118,6 +119,22 @@ const Dashboard = () => {
   const activeProject = useMemo(() => projects.find((p) => p.run_id === runId) || null, [projects, runId]);
 
   const derived = useMemo(() => {
+    if (dashboardStatus) {
+      const totalFiles = dashboardStatus.files.total;
+      const confirmedFiles = dashboardStatus.files.confirmed;
+      const progress = totalFiles === 0 ? 0 : Math.round((confirmedFiles / totalFiles) * 100);
+      return {
+        totalFiles,
+        confirmedFiles,
+        complexModules: dashboardStatus.complexity.complex_modules,
+        analysisChunks: dashboardStatus.analysis.chunks,
+        verifiedRules: dashboardStatus.rules.verified,
+        pendingRules: dashboardStatus.rules.pending,
+        criticalPaths: dashboardStatus.discovery.critical_paths,
+        sharedAssets: dashboardStatus.discovery.shared_assets,
+        progress,
+      };
+    }
     const confirmedFiles = metrics.files.filter((file) => file.status === 'CONFIRMED').length;
     const totalFiles = activeProject?.files_count ?? metrics.files.length;
     const complexModules = metrics.complexityFiles.filter((file) => {
@@ -132,7 +149,12 @@ const Dashboard = () => {
     const progress = totalFiles === 0 ? 0 : Math.round((confirmedFiles / totalFiles) * 100);
 
     return { totalFiles, confirmedFiles, complexModules, analysisChunks, verifiedRules, pendingRules, criticalPaths, sharedAssets, progress };
-  }, [activeProject?.files_count, metrics]);
+  }, [activeProject?.files_count, dashboardStatus, metrics]);
+
+  const backendJourneyByName = useMemo(() => {
+    const entries = dashboardStatus?.journey || [];
+    return new Map<string, JourneyStepStatus>(entries.map((step) => [step.name, step]));
+  }, [dashboardStatus]);
 
   const blueprintStages: BlueprintStage[] = useMemo(() => [
     {
@@ -180,6 +202,14 @@ const Dashboard = () => {
     void loadDashboardMetrics(runId);
   }, [runId]);
 
+  useEffect(() => {
+    if (!runId) return;
+    const refreshId = window.setInterval(() => {
+      void loadDashboardMetrics(runId, { silent: true, includeHealth: false });
+    }, 5000);
+    return () => window.clearInterval(refreshId);
+  }, [runId]);
+
   const fetchProjectHistory = async () => {
     try {
       const data = await ProjectAPI.list();
@@ -195,23 +225,27 @@ const Dashboard = () => {
     }
   };
 
-  const loadDashboardMetrics = async (currentRunId: string | null) => {
+  const loadDashboardMetrics = async (currentRunId: string | null, options: { silent?: boolean; includeHealth?: boolean } = {}) => {
     if (!currentRunId) {
       setMetrics(emptyMetrics);
+      setDashboardStatus(null);
       setServiceHealth(emptyHealth);
       return;
     }
 
-    setMetricsLoading(true);
-    setHealthLoading(true);
+    if (!options.silent) setMetricsLoading(true);
+    const includeHealth = options.includeHealth !== false;
+    if (includeHealth) setHealthLoading(true);
     try {
-      const [projectDetail, discovery, complexity, rules] = await Promise.all([
+      const [dashboard, projectDetail, discovery, complexity, rules] = await Promise.all([
+        ProjectAPI.getDashboardStatus(currentRunId),
         ProjectAPI.get(currentRunId),
         ProjectAPI.getDiscoveryData(currentRunId),
         ProjectAPI.getComplexity(currentRunId),
         ProjectAPI.getBusinessRules(currentRunId),
       ]);
 
+      setDashboardStatus(dashboard);
       setProjects((current) => {
         const exists = current.some((project) => project.run_id === projectDetail.run_id);
         return exists ? current.map((project) => project.run_id === projectDetail.run_id ? projectDetail : project) : [projectDetail, ...current];
@@ -223,6 +257,7 @@ const Dashboard = () => {
         rules: rules || [],
       });
       try {
+        if (!includeHealth) return;
         const health = await ProjectAPI.getServiceHealth(currentRunId);
         setServiceHealth(health || emptyHealth);
       } catch (healthError: any) {
@@ -232,12 +267,13 @@ const Dashboard = () => {
         });
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Failed to load dashboard metrics');
+      if (!options.silent) toast.error(error.response?.data?.detail || 'Failed to load dashboard metrics');
       setMetrics(emptyMetrics);
+      setDashboardStatus(null);
       setServiceHealth(emptyHealth);
     } finally {
-      setMetricsLoading(false);
-      setHealthLoading(false);
+      if (!options.silent) setMetricsLoading(false);
+      if (includeHealth) setHealthLoading(false);
     }
   };
 
@@ -262,6 +298,7 @@ const Dashboard = () => {
       setProjects([]);
       setRunId(null);
       setMetrics(emptyMetrics);
+      setDashboardStatus(null);
       setServiceHealth(emptyHealth);
       localStorage.removeItem('active_run_id');
       localStorage.removeItem('modernizer_files');
@@ -350,19 +387,25 @@ const Dashboard = () => {
         <SectionLabel>Modernization Journey</SectionLabel>
         <div className="timeline-scroll flex items-start overflow-x-auto pb-3">
           {JOURNEY_STEPS.map((step, i) => {
-            const isDone = i < 2 && derived.totalFiles > 0;
-            const isActive = step.path === '/dashboard';
+            const backendStep = backendJourneyByName.get(step.name);
+            const stepStatus = backendStep?.status || (step.path === '/dashboard' ? 'In Progress' : 'Pending');
+            const isDone = stepStatus === 'Complete';
+            const isActive = stepStatus === 'In Progress';
+            const progress = backendStep?.progress || 0;
+            const tooltip = backendStep ? `${backendStep.detail} Status: ${stepStatus}. Progress: ${progress}%.` : step.desc;
+
             return (
-              <Tooltip key={step.name} text={step.desc} position="top">
+              <Tooltip key={step.name} text={tooltip} position="top">
                 <div className="flex min-w-[148px] items-start">
                   <button type="button" onClick={() => navigate(step.path)} className="group flex w-[128px] flex-col items-center text-center">
-                    <span className={`mb-3 flex h-11 w-11 items-center justify-center rounded-full border transition-all group-hover:scale-110 ${isDone || isActive ? 'border-indigo-500/40 bg-indigo-500/20 text-indigo-400 shadow-lg shadow-indigo-500/20' : 'border-slate-800 bg-slate-900/50 text-slate-500'}`}>
+                    <span className={`mb-3 flex h-11 w-11 items-center justify-center rounded-full border transition-all group-hover:scale-110 ${isDone ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300 shadow-lg shadow-emerald-500/10' : isActive ? 'border-amber-500/50 bg-amber-500/15 text-amber-300 shadow-lg shadow-amber-500/10' : 'border-slate-800 bg-slate-900/50 text-slate-500'}`}>
                       <step.icon size={18} />
                     </span>
                     <span className="label mb-1">{String(i + 1).padStart(2, '0')}</span>
                     <span className={`text-xs font-extrabold ${isDone || isActive ? 'text-white' : 'text-slate-500'}`}>{step.name}</span>
+                    <span className={`mt-1 text-[10px] font-bold ${isDone ? 'text-emerald-300' : isActive ? 'text-amber-300' : 'text-slate-600'}`}>{stepStatus}</span>
                   </button>
-                  {i < JOURNEY_STEPS.length - 1 && <span className={`mt-[22px] h-0.5 min-w-[34px] flex-1 ${isDone ? 'bg-indigo-500' : 'bg-slate-800'}`} />}
+                  {i < JOURNEY_STEPS.length - 1 && <span className={`mt-[22px] h-0.5 min-w-[34px] flex-1 ${isDone ? 'bg-emerald-500' : progress > 0 ? 'bg-amber-500/70' : 'bg-slate-800'}`} />}
                 </div>
               </Tooltip>
             );

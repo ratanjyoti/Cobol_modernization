@@ -47,6 +47,57 @@ export interface ServiceHealth {
   ai_api: ServiceStatus;
   neo4j: ServiceStatus;
 }
+
+export interface JourneyStepStatus {
+  id: string;
+  name: string;
+  status: 'Complete' | 'In Progress' | 'Pending';
+  progress: number;
+  detail: string;
+}
+
+export interface DashboardStatus {
+  project: ProjectSummary;
+  files: {
+    total: number;
+    confirmed: number;
+    pending: number;
+    rejected: number;
+    status_counts: Record<string, number>;
+    language_counts: Record<string, number>;
+  };
+  discovery: {
+    relations: number;
+    critical_paths: number;
+    shared_assets: number;
+  };
+  complexity: {
+    files: number;
+    complex_modules: number;
+    overall_tier: string;
+    overall_effort: string;
+  };
+  analysis: {
+    chunks: number;
+    chunk_status_counts: Record<string, number>;
+    technical_reports: number;
+    technical_completed: number;
+    file_reports: number;
+  };
+  rules: {
+    total: number;
+    verified: number;
+    pending: number;
+    rejected: number;
+    status_counts: Record<string, number>;
+  };
+  code_generation: {
+    converted_chunks: number;
+    total_chunks: number;
+  };
+  journey: JourneyStepStatus[];
+  updated_at: string;
+}
 export interface ProjectSummary {
   run_id: string;
   name: string;
@@ -129,6 +180,11 @@ export const ProjectAPI = {
 
   list: async (): Promise<ProjectSummary[]> => {
     const response = await api.get('/projects');
+    return response.data;
+  },
+
+  getDashboardStatus: async (runId: string): Promise<DashboardStatus> => {
+    const response = await api.get(`/projects/${runId}/dashboard-status`);
     return response.data;
   },
 

@@ -564,14 +564,14 @@ const InitialSetup = () => {
         </div>
       </section>
 
-      <section className="space-y-6 border-t border-slate-800 pt-10">
-        <div>
+      <section className="space-y-8">
+        {/* <div>
           <SectionLabel>Source Files</SectionLabel>
           <h2 className="text-2xl font-extrabold text-white tracking-tight">Upload and review source code</h2>
           <p className="mt-2 text-sm text-slate-400">
             Upload files for the active run, confirm detected languages, then launch the pipeline from the fixed action bar.
           </p>
-        </div>
+        </div> */}
         <SourceFiles embedded />
       </section>
     </div>
