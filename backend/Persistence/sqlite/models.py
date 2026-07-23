@@ -30,6 +30,7 @@ class Project(Base):
     custom_api_key = Column(String, nullable=True)
     custom_api_base_url = Column(String, nullable=True)
     llm_model = Column(String)
+    local_provider = Column(String, nullable=True)
     interaction_lang = Column(String)
 
     neo4j_uri = Column(String, nullable=True)
@@ -202,3 +203,5 @@ class FileAnalysis(Base):
     modernization_tips = Column(Text)
     
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+

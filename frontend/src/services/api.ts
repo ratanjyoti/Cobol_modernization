@@ -9,6 +9,7 @@ export interface ProjectConfig {
   key_preview?: string | null;
   url?: string;
   model?: string;
+  local_provider?: string;
   neo4j_uri?: string;
   neo4j_user?: string;
   neo4j_password?: string;
@@ -19,6 +20,25 @@ export interface ProjectConfig {
   reasoning_effort?: 'Low' | 'Medium' | 'High';
   workers?: number;
 }
+
+export type LocalLLMHealthRequest = {
+  provider: string;
+  model: string;
+  base_url?: string;
+};
+
+export type LocalLLMHealthResponse = {
+  ok: boolean;
+  provider: string;
+  model: string;
+  status: string;
+  message: string;
+  model_installed: boolean;
+  server_reachable: boolean;
+  latency_ms?: number | null;
+  sample_output?: string | null;
+  error_detail?: string | null;
+};
 
 export interface FileRecord {
   id: string;
@@ -40,7 +60,11 @@ export interface ServiceStatus {
   active: boolean;
   provider?: string;
   model?: string;
+  local_provider?: string;
+  status?: string;
   detail?: string;
+  latency_ms?: number | null;
+  sample_output?: string | null;
 }
 
 export interface ServiceHealth {
@@ -111,6 +135,7 @@ export interface ProjectSummary {
   custom_api_base_url?: string | null;
   has_custom_api_key?: boolean;
   llm_model?: string | null;
+  local_provider?: string | null;
   interaction_lang?: string | null;
   neo4j_uri?: string | null;
   neo4j_user?: string | null;
@@ -155,6 +180,13 @@ const api = axios.create({
   },
 });
 
+
+export const LLMHealthAPI = {
+  checkLocal: async (payload: LocalLLMHealthRequest, signal?: AbortSignal): Promise<LocalLLMHealthResponse> => {
+    const response = await api.post('/llm-health/local/check', payload, { timeout: 60000, signal });
+    return response.data;
+  },
+};
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
@@ -303,6 +335,13 @@ export const ProjectAPI = {
     return response.data;
   },
 };
+
+
+
+
+
+
+
 
 
 

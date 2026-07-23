@@ -125,9 +125,7 @@ const loadLastNeo4jConfig = (): ProjectConfig => {
   try {
     const saved = JSON.parse(localStorage.getItem('neo4j_config') || '{}');
     delete saved.neo4j_password;
-    delete saved.has_neo4j_password;
-    delete saved.neo4j_password_preview;
-    return { ...defaultNeo4jConfig, ...saved };
+    return { ...defaultNeo4jConfig, ...saved, neo4j_password: '' };
   } catch {
     return defaultNeo4jConfig;
   }
@@ -207,8 +205,8 @@ const Neo4jConfigPanel = ({ runId, onSave }: Neo4jConfigPanelProps) => {
       }
 
       const saved = loadLastNeo4jConfig();
-      setConfig(saved);
-      setSavedPasswordPreview(null);
+      setConfig({ neo4j_uri: saved.neo4j_uri || '', neo4j_user: saved.neo4j_user || 'neo4j', neo4j_password: '' });
+      setSavedPasswordPreview(saved.has_neo4j_password ? saved.neo4j_password_preview || 'saved' : null);
     };
 
     void loadConfig();
@@ -558,13 +556,7 @@ const InitialSetup = () => {
           <div className="glass-card p-6 border border-slate-800 bg-slate-900/50">
             <ConfigPanel runId={runId} onSave={(config) => { setPendingAIConfig(config); void loadServiceHealth(runId); }} />
           </div>
-        </div>
-      </section>
-
-      <section className="space-y-8">
-        <div className="space-y-6">
           <SectionLabel>Regional Settings</SectionLabel>
-
           <div className="glass-card max-w-md border border-slate-800 bg-slate-900/50 p-5">
             <div className="mb-4 flex items-center gap-3">
               <div className="rounded-xl bg-indigo-500/15 p-3 text-indigo-300">
@@ -591,7 +583,9 @@ const InitialSetup = () => {
             </select>
           </div>
         </div>
+      </section>
 
+      <section className="space-y-8">
         <div className="space-y-4">
           <SectionLabel>Select Migration Scope & Budget</SectionLabel>
 
@@ -652,3 +646,4 @@ const InitialSetup = () => {
 };
 
 export default InitialSetup;
+

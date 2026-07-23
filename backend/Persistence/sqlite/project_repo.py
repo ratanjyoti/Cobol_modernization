@@ -1,4 +1,4 @@
-﻿# Implementation for project_repo.py
+# Implementation for project_repo.py
 from sqlalchemy.orm import Session
 from Persistence.sqlite.models import FileChunk, FileComplexity, FileRelation, Project, ProjectComplexity, ProjectFile
 
@@ -10,6 +10,7 @@ class ProjectRepository:
         "key": "custom_api_key",
         "url": "custom_api_base_url",
         "model": "llm_model",
+        "local_provider": "local_provider",
         "lang": "interaction_lang",
         "workers": "parallel_workers",
         "neo4j_uri": "neo4j_uri",
@@ -92,3 +93,5 @@ class ProjectRepository:
         project_count = self.session.query(Project).delete(synchronize_session=False)
         self.session.commit()
         return {"projects_deleted": project_count, "files_deleted": file_count}
+
+

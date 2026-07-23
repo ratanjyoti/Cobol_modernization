@@ -21,7 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 init_db()
 
 # Import the routers from your routes folder
-from source.routes import project, discovery, business_rule_routes
+from source.routes import project, discovery, business_rule_routes, llm_health
 
 app = FastAPI(
     title="ModernizerAI Backend",
@@ -73,6 +73,7 @@ app.include_router(project.router)
 # Discovery & Ingestion Routes (/discovery/upload-zip, /discovery/github, etc.)
 app.include_router(discovery.router)
 app.include_router(business_rule_routes.router)
+app.include_router(llm_health.router)
 
 # ==============================================================================
 # 3. GLOBAL ERROR HANDLING
@@ -174,4 +175,5 @@ if __name__ == "__main__":
     import uvicorn
     # Run the server on localhost:8000
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
 

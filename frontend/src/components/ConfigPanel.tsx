@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Globe, Cpu, CheckCircle2, ArrowRight, Lock, Server } from 'lucide-react';
+import { Globe, Cpu, CheckCircle2, ArrowRight, Lock, Server, Activity } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { ProjectAPI } from '../services/api';
+import { ProjectAPI, LLMHealthAPI, type LocalLLMHealthResponse, getApiErrorDetail } from '../services/api';
 
-const LOCAL_MODELS = ['llama3', 'mistral', 'phi3', 'codellama'];
+const LOCAL_MODELS = ['llama3.2:3b', 'llama-3.2-3b-instruct', 'llama3', 'mistral:7b', 'phi3', 'codellama:7b', 'deepseek-coder:6.7b', 'qwen2.5-coder:7b'];
 const OPENROUTER_MODELS = [
   'openai/gpt-oss-20b:free',
   'nvidia/nemotron-3-nano-30b-a3b:free',
@@ -13,6 +13,7 @@ const OPENROUTER_MODELS = [
 ];
 
 type AiMode = 'openrouter' | 'local' | 'custom';
+type LocalProvider = 'ollama' | 'openai-compatible';
 
 interface ConfigPanelProps {
   runId: string | null;
@@ -21,7 +22,7 @@ interface ConfigPanelProps {
 
 const defaultsForMode = (mode: AiMode) => {
   if (mode === 'local') {
-    return { key: '', url: 'http://localhost:11434', model: 'llama3' };
+    return { key: '', url: 'http://localhost:11434', model: 'llama3.2:3b' };
   }
   return { key: '', url: 'https://openrouter.ai/api/v1', model: 'openai/gpt-oss-20b:free' };
 };
@@ -38,6 +39,11 @@ const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
   const [config, setConfig] = useState(defaultsForMode('openrouter'));
   const [customModel, setCustomModel] = useState('');
   const [savedKeyPreview, setSavedKeyPreview] = useState<string | null>(null);
+  const [localProvider, setLocalProvider] = useState<LocalProvider>('ollama');
+  const [checkingLocalLLM, setCheckingLocalLLM] = useState(false);
+  const [localLLMStatus, setLocalLLMStatus] = useState<LocalLLMHealthResponse | null>(null);
+  const backendCheckControllerRef = useRef<AbortController | null>(null);
+  const browserCheckControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,7 +59,10 @@ const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
         model: [...OPENROUTER_MODELS, ...LOCAL_MODELS].includes(savedModel) ? savedModel : 'custom',
       });
       setSavedKeyPreview(saved.has_api_key ? saved.key_preview || 'saved' : null);
+      setLocalProvider(saved.local_provider === 'openai-compatible' || saved.local_provider === 'lmstudio' ? 'openai-compatible' : 'ollama');
       setCustomModel([...OPENROUTER_MODELS, ...LOCAL_MODELS].includes(savedModel) ? '' : savedModel);
+      setLocalLLMStatus(null);
+      setStep(2);
     };
 
     const loadSavedConfig = async () => {
@@ -100,11 +109,245 @@ const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
   }, [runId]);
 
   const chooseMode = (nextMode: AiMode) => {
+    if (mode !== nextMode) {
+      setConfig(defaultsForMode(nextMode));
+      setCustomModel('');
+      setSavedKeyPreview(null);
+    }
     setMode(nextMode);
-    setConfig(defaultsForMode(nextMode));
-    setCustomModel('');
-    setSavedKeyPreview(null);
+    setLocalLLMStatus(null);
     setStep(2);
+  };
+
+  const selectedModel = () => (config.model === 'custom' ? customModel.trim() : config.model);
+  const normalizeLocalBaseUrl = (url: string, provider: LocalProvider) => {
+    const trimmed = (url || '').trim().replace(/\/+$/, '');
+    if (provider === 'openai-compatible') {
+      const base = trimmed || 'http://localhost:1234';
+      return base.endsWith('/v1') ? base : `${base}/v1`;
+    }
+    return trimmed || 'http://localhost:11434';
+  };
+
+  const defaultEndpointForLocalProvider = (provider: LocalProvider) => {
+    return provider === 'openai-compatible' ? 'http://localhost:1234/v1' : 'http://localhost:11434';
+  };
+  const checkBrowserOpenAICompatible = async (model: string, endpoint: string, externalSignal?: AbortSignal): Promise<LocalLLMHealthResponse> => {
+    const started = performance.now();
+    const base = endpoint.replace(/\/+$/, '');
+    const apiBase = base.endsWith('/v1') ? base : `${base}/v1`;
+
+    const requestWithTimeout = async (url: string, init: RequestInit, timeoutMs: number) => {
+      const controller = new AbortController();
+      browserCheckControllerRef.current = controller;
+      const abortFromExternalSignal = () => controller.abort();
+      const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+      externalSignal?.addEventListener('abort', abortFromExternalSignal, { once: true });
+      try {
+        return await fetch(url, { ...init, signal: controller.signal });
+      } finally {
+        window.clearTimeout(timeoutId);
+        externalSignal?.removeEventListener('abort', abortFromExternalSignal);
+        if (browserCheckControllerRef.current === controller) {
+          browserCheckControllerRef.current = null;
+        }
+      }
+    };
+
+    try {
+      const modelsResponse = await requestWithTimeout(`${apiBase}/models`, {}, 8000);
+      if (!modelsResponse.ok) {
+        return {
+          ok: false,
+          provider: 'browser-openai-compatible',
+          model,
+          status: 'SERVER_ERROR',
+          message: 'Browser reached the local server, but the model list failed.',
+          model_installed: false,
+          server_reachable: true,
+          error_detail: `GET ${apiBase}/models returned HTTP ${modelsResponse.status}: ${(await modelsResponse.text()).slice(0, 1000)}`,
+        };
+      }
+
+      const modelsData = await modelsResponse.json();
+      const availableModels = (modelsData.data || [])
+        .map((item: any) => item.id || item.name)
+        .filter(Boolean);
+
+      if (!availableModels.includes(model)) {
+        return {
+          ok: false,
+          provider: 'browser-openai-compatible',
+          model,
+          status: 'MODEL_NOT_FOUND',
+          message: `Model '${model}' is not available from the local server.`,
+          model_installed: false,
+          server_reachable: true,
+          error_detail: `Available models: ${availableModels.length ? availableModels.join(', ') : 'none'}`,
+        };
+      }
+
+      const chatResponse = await requestWithTimeout(`${apiBase}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: 'user', content: 'Reply with exactly: OK' }],
+          temperature: 0,
+          max_tokens: 8,
+          stream: false,
+        }),
+      }, 45000);
+      const latencyMs = Math.round(performance.now() - started);
+
+      if (!chatResponse.ok) {
+        return {
+          ok: false,
+          provider: 'browser-openai-compatible',
+          model,
+          status: 'GENERATION_FAILED',
+          message: 'The model is available but failed to generate output.',
+          model_installed: true,
+          server_reachable: true,
+          latency_ms: latencyMs,
+          error_detail: await chatResponse.text(),
+        };
+      }
+
+      const chatData = await chatResponse.json();
+      const output = (chatData.choices?.[0]?.message?.content || chatData.choices?.[0]?.text || '').trim();
+
+      if (!output) {
+        return {
+          ok: false,
+          provider: 'browser-openai-compatible',
+          model,
+          status: 'EMPTY_OUTPUT',
+          message: 'The model responded, but the output was empty.',
+          model_installed: true,
+          server_reachable: true,
+          latency_ms: latencyMs,
+          sample_output: '',
+          error_detail: 'The local server returned no chat completion text.',
+        };
+      }
+
+      return {
+        ok: true,
+        provider: 'browser-openai-compatible',
+        model,
+        status: 'READY',
+        message: `Local model '${model}' is available and generated output successfully.`,
+        model_installed: true,
+        server_reachable: true,
+        latency_ms: latencyMs,
+        sample_output: output.slice(0, 500),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Browser request failed';
+      return {
+        ok: false,
+        provider: 'browser-openai-compatible',
+        model,
+        status: message.toLowerCase().includes('abort') ? 'TIMEOUT' : 'SERVER_NOT_RUNNING',
+        message: 'Browser could not reach the local OpenAI-compatible server.',
+        model_installed: false,
+        server_reachable: false,
+        error_detail: `${message}. If this is LM Studio, enable the local server and allow CORS/origins for this frontend.`,
+      };
+    }
+  };
+
+  const stopLocalLLMCheck = () => {
+    backendCheckControllerRef.current?.abort();
+    browserCheckControllerRef.current?.abort();
+    backendCheckControllerRef.current = null;
+    browserCheckControllerRef.current = null;
+    setCheckingLocalLLM(false);
+    setLocalLLMStatus((current) => current || {
+      ok: false,
+      provider: localProvider,
+      model: selectedModel(),
+      status: 'CANCELLED',
+      message: 'Local LLM check stopped by user.',
+      model_installed: false,
+      server_reachable: false,
+    });
+  };
+  const checkLocalLLM = async () => {
+    const model = selectedModel();
+    if (!model) {
+      toast.error('Please select or enter a local model name');
+      return;
+    }
+
+    const controller = new AbortController();
+    backendCheckControllerRef.current = controller;
+    setCheckingLocalLLM(true);
+    setLocalLLMStatus(null);
+
+    try {
+      let result = await LLMHealthAPI.checkLocal({
+        provider: localProvider,
+        model,
+        base_url: normalizeLocalBaseUrl(config.url || '', localProvider),
+      }, controller.signal);
+
+      if (!result.ok && ['SERVER_NOT_RUNNING', 'TIMEOUT', 'UNKNOWN_ERROR'].includes(result.status)) {
+        const browserResult = await checkBrowserOpenAICompatible(model, normalizeLocalBaseUrl(config.url || '', localProvider), controller.signal);
+        if (browserResult.ok || browserResult.server_reachable) {
+          result = browserResult;
+        } else {
+          result = {
+            ...result,
+            error_detail: `${result.error_detail || result.message}\n\nBrowser fallback: ${browserResult.error_detail || browserResult.message}`,
+          };
+        }
+      }
+
+      if (controller.signal.aborted) return;
+
+      setLocalLLMStatus(result);
+      if (result.ok) {
+        toast.success(result.message);
+      } else {
+        toast.error(result.message);
+      }
+    } catch (error) {
+      if (controller.signal.aborted) {
+        const cancelledStatus: LocalLLMHealthResponse = {
+          ok: false,
+          provider: localProvider,
+          model,
+          status: 'CANCELLED',
+          message: 'Local LLM check stopped by user.',
+          model_installed: false,
+          server_reachable: false,
+        };
+        setLocalLLMStatus(cancelledStatus);
+        toast.error(cancelledStatus.message);
+        return;
+      }
+
+      const message = getApiErrorDetail(error, 'Failed to check local LLM');
+      setLocalLLMStatus({
+        ok: false,
+        provider: localProvider,
+        model,
+        status: 'REQUEST_FAILED',
+        message,
+        model_installed: false,
+        server_reachable: false,
+        error_detail: message,
+      });
+      toast.error(message);
+    } finally {
+      if (backendCheckControllerRef.current === controller) {
+        backendCheckControllerRef.current = null;
+      }
+      browserCheckControllerRef.current = null;
+      setCheckingLocalLLM(false);
+    }
   };
 
   const handleSave = async () => {
@@ -117,7 +360,7 @@ const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
       return;
     }
 
-    const finalModel = config.model === 'custom' ? customModel.trim() : config.model;
+    const finalModel = selectedModel();
     if (!finalModel) {
       toast.error('Please choose or enter a model');
       return;
@@ -126,8 +369,9 @@ const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
     const finalConfig: any = {
       mode,
       provider: mode,
-      url: config.url.trim() || defaultsForMode(mode).url,
+      url: mode === 'local' ? normalizeLocalBaseUrl(config.url, localProvider) : config.url.trim() || defaultsForMode(mode).url,
       model: finalModel,
+      ...(mode === 'local' ? { local_provider: localProvider } : {}),
     };
     if (config.key.trim()) {
       finalConfig.key = config.key.trim();
@@ -152,7 +396,7 @@ const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
       toast.success('AI configuration saved');
       setStep(1);
     } catch (e) {
-      toast.error('Failed to sync configuration with server');
+      toast.error(getApiErrorDetail(e, 'Failed to sync configuration with server'));
     }
   };
 
@@ -197,7 +441,7 @@ const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
                   <div className="p-3 rounded-xl bg-emerald-500/20 text-emerald-400"><Cpu size={20} /></div>
                   <div>
                     <p className="text-sm font-semibold text-white">Local LLM</p>
-                    <p className="text-[10px] text-slate-400">Ollama, LM Studio, or a local compatible server</p>
+                    <p className="text-[10px] text-slate-400">Ollama, LM Studio, or any OpenAI-compatible local server</p>
                   </div>
                 </div>
                 <ArrowRight size={16} className="text-slate-500" />
@@ -247,6 +491,29 @@ const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
                 </div>
               )}
 
+              {mode === 'local' && (
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Local Provider</label>
+                  <select
+                    value={localProvider}
+                    onChange={(e) => {
+                      const nextProvider = e.target.value as LocalProvider;
+                      setLocalProvider(nextProvider);
+                      setConfig({
+                        ...config,
+                        url: defaultEndpointForLocalProvider(nextProvider),
+                        model: nextProvider === 'openai-compatible' ? 'custom' : 'llama3.2:3b',
+                      });
+                      setCustomModel(nextProvider === 'openai-compatible' ? customModel || 'llama-3.2-3b-instruct' : '');
+                      setLocalLLMStatus(null);
+                    }}
+                    className="w-full rounded-xl bg-slate-950 border border-slate-800 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
+                  >
+                    <option value="ollama">Ollama</option>
+                    <option value="openai-compatible">LM Studio / OpenAI-Compatible</option>
+                  </select>
+                </div>
+              )}
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-500 uppercase">Endpoint URL</label>
                 <div className="relative">
@@ -254,9 +521,12 @@ const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
                   <input
                     type="text"
                     value={config.url}
-                    onChange={(e) => setConfig({ ...config, url: e.target.value })}
+                    onChange={(e) => {
+                      setConfig({ ...config, url: e.target.value });
+                      setLocalLLMStatus(null);
+                    }}
                     className="w-full pl-10 pr-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder={mode === 'local' ? 'http://localhost:11434' : 'https://openrouter.ai/api/v1'}
+                    placeholder={mode === 'local' ? defaultEndpointForLocalProvider(localProvider) : 'https://openrouter.ai/api/v1'}
                   />
                 </div>
               </div>
@@ -265,7 +535,10 @@ const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
                 <label className="text-xs font-bold text-slate-500 uppercase">Model</label>
                 <select
                   value={config.model}
-                  onChange={(e) => setConfig({ ...config, model: e.target.value })}
+                  onChange={(e) => {
+                    setConfig({ ...config, model: e.target.value });
+                    setLocalLLMStatus(null);
+                  }}
                   className="w-full rounded-xl bg-slate-950 border border-slate-800 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
                 >
                   {modelOptions.map((modelName) => <option key={modelName} value={modelName}>{modelName}</option>)}
@@ -277,12 +550,94 @@ const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
                 <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="space-y-2">
                   <input
                     type="text"
-                    placeholder={mode === 'local' ? 'e.g. codellama-7b-instruct' : 'e.g. openrouter/provider-model:free'}
+                    placeholder={mode === 'local' ? 'e.g. llama3.2:3b or qwen2.5-coder:7b' : 'e.g. openrouter/provider-model:free'}
                     value={customModel}
-                    onChange={(e) => setCustomModel(e.target.value)}
+                    onChange={(e) => {
+                      setCustomModel(e.target.value);
+                      setLocalLLMStatus(null);
+                    }}
                     className="w-full rounded-xl bg-slate-950 border border-indigo-500 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </motion.div>
+              )}
+
+              {mode === 'local' && (
+                <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h4 className="text-sm font-black text-white">Local LLM Health Check</h4>
+                      <p className="mt-1 text-xs leading-5 text-slate-400">
+                        Checks if the local server is reachable, the selected model is available, and the model can generate output.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={checkingLocalLLM ? stopLocalLLMCheck : checkLocalLLM}
+                      className={`shrink-0 rounded-lg border px-3 py-2 text-xs font-black text-white ${checkingLocalLLM ? 'border-red-500/50 bg-red-600 hover:bg-red-500' : 'border-slate-700 bg-slate-900 hover:bg-slate-800'}`}
+                    >
+                      {checkingLocalLLM ? 'Stop Check' : 'Test Local LLM'}
+                    </button>
+                  </div>
+
+                  <p className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-xs leading-5 text-amber-100">
+                    Local LLM mode requires the backend to reach your local server. Use Ollama, LM Studio, or any OpenAI-compatible endpoint exposed from this laptop.
+                  </p>
+
+                  {localLLMStatus && (
+                    <div
+                      className={`mt-4 rounded-xl border p-3 ${
+                        localLLMStatus.ok
+                          ? 'border-emerald-500/30 bg-emerald-500/10'
+                          : 'border-red-500/30 bg-red-500/10'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p
+                          className={`flex items-center gap-2 text-xs font-black ${
+                            localLLMStatus.ok ? 'text-emerald-300' : 'text-red-300'
+                          }`}
+                        >
+                          <Activity size={14} /> {localLLMStatus.status}
+                        </p>
+
+                        {localLLMStatus.latency_ms != null && (
+                          <p className="text-xs text-slate-400">{localLLMStatus.latency_ms} ms</p>
+                        )}
+                      </div>
+
+                      <p className="mt-2 text-xs leading-5 text-slate-300">{localLLMStatus.message}</p>
+
+                      {localLLMStatus.status === 'MODEL_NOT_FOUND' && (
+                        <p className="mt-2 rounded-lg bg-slate-950 p-3 text-xs text-slate-300">
+                          Load or install this model in your local LLM app: <span className="font-mono text-emerald-300">{localLLMStatus.model}</span>
+                        </p>
+                      )}
+
+                      {localLLMStatus.status === 'SERVER_NOT_RUNNING' && (
+                        <p className="mt-2 rounded-lg bg-slate-950 p-3 text-xs text-slate-300">
+                          Start your local server, then verify the endpoint URL. For LM Studio, enable the local server and use its reachable URL.
+                        </p>
+                      )}
+
+                      {localLLMStatus.sample_output && (
+                        <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950 p-3">
+                          <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">Sample Output</p>
+                          <p className="mt-1 text-xs text-slate-300">{localLLMStatus.sample_output}</p>
+                        </div>
+                      )}
+
+                      {localLLMStatus.error_detail && (
+                        <details className="mt-3">
+                          <summary className="cursor-pointer text-xs font-bold text-slate-400">Error details</summary>
+                          <pre className="mt-2 max-h-40 overflow-auto rounded-lg bg-slate-950 p-3 text-[11px] text-red-200 whitespace-pre-wrap">
+                            {localLLMStatus.error_detail}
+                          </pre>
+                        </details>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
 
               <button
@@ -300,3 +655,19 @@ const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
 };
 
 export default ConfigPanel;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

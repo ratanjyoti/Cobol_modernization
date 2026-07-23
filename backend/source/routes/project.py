@@ -224,21 +224,178 @@ def check_ai_api_status(project):
 
     if mode == "local":
         base_url = (project.custom_api_base_url or "http://localhost:11434").rstrip("/")
+        local_provider = (project.local_provider or ("openai-compatible" if base_url.endswith("/v1") else "ollama")).lower()
+        started = datetime.datetime.utcnow()
+
+        def elapsed_ms():
+            return int((datetime.datetime.utcnow() - started).total_seconds() * 1000)
+
+        def openai_url():
+            return base_url if base_url.endswith("/v1") else f"{base_url}/v1"
+
+        errors = []
+
+        if local_provider == "ollama":
+            try:
+                tags_response = requests.get(f"{base_url}/api/tags", timeout=(4, 8))
+                if tags_response.status_code == 200:
+                    tags_data = tags_response.json()
+                    installed_models = [
+                        item.get("name") or item.get("model")
+                        for item in tags_data.get("models", [])
+                        if item.get("name") or item.get("model")
+                    ]
+                    if model not in installed_models:
+                        installed = ", ".join(installed_models) if installed_models else "none"
+                        return {
+                            "active": False,
+                            "provider": "ollama",
+                            "model": model,
+                            "status": "MODEL_NOT_FOUND",
+                            "detail": f"Model '{model}' is not installed. Installed models: {installed}.",
+                        }
+
+                    generate_response = requests.post(
+                        f"{base_url}/api/generate",
+                        json={
+                            "model": model,
+                            "prompt": "Reply with exactly: OK",
+                            "stream": False,
+                            "options": {"temperature": 0, "num_predict": 8},
+                        },
+                        timeout=(4, 45),
+                    )
+                    latency_ms = elapsed_ms()
+                    if generate_response.status_code != 200:
+                        return {
+                            "active": False,
+                            "provider": "ollama",
+                            "model": model,
+                            "status": "GENERATION_FAILED",
+                            "detail": f"Model '{model}' failed to generate output. HTTP {generate_response.status_code}: {generate_response.text[:180]}",
+                            "latency_ms": latency_ms,
+                        }
+                    output = (generate_response.json().get("response") or "").strip()
+                    if not output:
+                        return {
+                            "active": False,
+                            "provider": "ollama",
+                            "model": model,
+                            "status": "EMPTY_OUTPUT",
+                            "detail": f"Model '{model}' responded, but the output was empty.",
+                            "latency_ms": latency_ms,
+                            "sample_output": "",
+                        }
+                    return {
+                        "active": True,
+                        "provider": "ollama",
+                        "model": model,
+                        "status": "READY",
+                        "detail": f"Local model '{model}' generated output successfully in {latency_ms} ms.",
+                        "latency_ms": latency_ms,
+                        "sample_output": output[:120],
+                    }
+                errors.append(f"Ollama /api/tags returned HTTP {tags_response.status_code}")
+            except Exception as exc:
+                errors.append(f"Ollama check failed: {str(exc)[:180]}")
+        else:
+            errors.append("Ollama check skipped because local_provider is openai-compatible")
+
         try:
-            response = requests.get(f"{base_url}/api/tags", timeout=8)
-            response.raise_for_status()
+            api_base = openai_url()
+            models_response = requests.get(f"{api_base}/models", timeout=(4, 8))
+            if models_response.status_code != 200:
+                return {
+                    "active": False,
+                    "provider": "openai-compatible",
+                    "model": model,
+                    "status": "SERVER_ERROR",
+                    "detail": f"Local server is reachable, but model list failed at {api_base}/models. HTTP {models_response.status_code}: {models_response.text[:180]}. {' | '.join(errors)}",
+                }
+
+            models_data = models_response.json()
+            installed_models = [
+                item.get("id") or item.get("name")
+                for item in models_data.get("data", [])
+                if item.get("id") or item.get("name")
+            ]
+            if model not in installed_models:
+                installed = ", ".join(installed_models) if installed_models else "none"
+                return {
+                    "active": False,
+                    "provider": "openai-compatible",
+                    "model": model,
+                    "status": "MODEL_NOT_FOUND",
+                    "detail": f"Model '{model}' is not available from the local server. Available models: {installed}.",
+                }
+
+            chat_response = requests.post(
+                f"{api_base}/chat/completions",
+                json={
+                    "model": model,
+                    "messages": [{"role": "user", "content": "Reply with exactly: OK"}],
+                    "temperature": 0,
+                    "max_tokens": 8,
+                    "stream": False,
+                },
+                timeout=(4, 45),
+            )
+            latency_ms = elapsed_ms()
+            if chat_response.status_code != 200:
+                return {
+                    "active": False,
+                    "provider": "openai-compatible",
+                    "model": model,
+                    "status": "GENERATION_FAILED",
+                    "detail": f"Model '{model}' failed to generate output. HTTP {chat_response.status_code}: {chat_response.text[:180]}",
+                    "latency_ms": latency_ms,
+                }
+
+            choices = chat_response.json().get("choices") or []
+            message = choices[0].get("message") if choices else {}
+            output = ((message or {}).get("content") or (choices[0].get("text") if choices else "") or "").strip()
+            if not output:
+                return {
+                    "active": False,
+                    "provider": "openai-compatible",
+                    "model": model,
+                    "status": "EMPTY_OUTPUT",
+                    "detail": f"Model '{model}' responded, but the output was empty.",
+                    "latency_ms": latency_ms,
+                    "sample_output": "",
+                }
             return {
                 "active": True,
+                "provider": "openai-compatible",
+                "model": model,
+                "status": "READY",
+                "detail": f"Local model '{model}' generated output successfully in {latency_ms} ms.",
+                "latency_ms": latency_ms,
+                "sample_output": output[:120],
+            }
+        except requests.exceptions.ConnectionError as exc:
+            return {
+                "active": False,
                 "provider": "local",
                 "model": model,
-                "detail": "Local model server responded.",
+                "status": "SERVER_NOT_RUNNING",
+                "detail": f"Local LLM server is not reachable from the backend at {base_url}. Start the local server or use a reachable endpoint URL. {' | '.join(errors + [str(exc)[:180]])}",
+            }
+        except requests.exceptions.Timeout as exc:
+            return {
+                "active": False,
+                "provider": "local",
+                "model": model,
+                "status": "TIMEOUT",
+                "detail": f"Local LLM did not respond before timeout. {' | '.join(errors + [str(exc)[:180]])}",
             }
         except Exception as exc:
             return {
                 "active": False,
                 "provider": "local",
                 "model": model,
-                "detail": str(exc)[:180],
+                "status": "UNKNOWN_ERROR",
+                "detail": f"Unexpected error while checking local LLM: {' | '.join(errors + [str(exc)[:180]])}",
             }
 
     api_key = project.custom_api_key or settings.OPENROUTER_API_KEY
@@ -618,6 +775,7 @@ async def get_project_config(run_id: str, db: Session = Depends(get_db)):
         "key_preview": mask_api_key(project.custom_api_key),
         "url": project.custom_api_base_url or ("http://localhost:11434" if mode == "local" else "https://openrouter.ai/api/v1"),
         "model": project.llm_model or ("llama3" if mode == "local" else settings.OPENROUTER_MODEL),
+        "local_provider": project.local_provider or ("openai-compatible" if (project.custom_api_base_url or "").rstrip("/").endswith("/v1") else "ollama"),
         "lang": project.interaction_lang,
         "neo4j_uri": project.neo4j_uri or settings.NEO4J_URI or "",
         "neo4j_user": project.neo4j_user or settings.NEO4J_USER or "neo4j",
@@ -693,6 +851,14 @@ async def update_project_config(run_id: str, updates: dict, background_tasks: Ba
     SERVICE_HEALTH_CACHE.pop(run_id, None)
     background_tasks.add_task(refresh_service_health_cache, run_id)
     return {"status": "Configuration updated", "health_refresh": "queued"}
+
+
+
+
+
+
+
+
 
 
 
