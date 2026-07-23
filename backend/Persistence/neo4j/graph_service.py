@@ -62,14 +62,22 @@ class GraphService:
         "UNRESOLVED": "UNRESOLVED",
     }
 
-    def __init__(self):
+    def __init__(self, uri=None, user=None, password=None):
         if GraphDatabase is None:
             raise RuntimeError("Neo4j Python driver is not installed")
 
-        uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-        user = os.getenv("NEO4J_USER", "neo4j")
-        password = os.getenv("NEO4J_PASSWORD", "password")
+        uri = uri or os.getenv("NEO4J_URI", "bolt://localhost:7687")
+        user = user or os.getenv("NEO4J_USER", "neo4j")
+        password = password or os.getenv("NEO4J_PASSWORD", "password")
         self.driver = GraphDatabase.driver(uri, auth=(user, password))
+
+    @classmethod
+    def for_project(cls, project=None):
+        return cls(
+            uri=getattr(project, "neo4j_uri", None),
+            user=getattr(project, "neo4j_user", None),
+            password=getattr(project, "neo4j_password", None),
+        )
 
     def close(self):
         self.driver.close()

@@ -47,6 +47,9 @@ def ensure_schema_columns():
             "ai_mode": "ALTER TABLE projects ADD COLUMN ai_mode VARCHAR",
             "custom_api_key": "ALTER TABLE projects ADD COLUMN custom_api_key VARCHAR",
             "custom_api_base_url": "ALTER TABLE projects ADD COLUMN custom_api_base_url VARCHAR",
+            "neo4j_uri": "ALTER TABLE projects ADD COLUMN neo4j_uri VARCHAR",
+            "neo4j_user": "ALTER TABLE projects ADD COLUMN neo4j_user VARCHAR",
+            "neo4j_password": "ALTER TABLE projects ADD COLUMN neo4j_password VARCHAR",
         })
         _add_missing_columns(connection, "file_complexity", {
             "mode": "ALTER TABLE file_complexity ADD COLUMN mode VARCHAR",
@@ -113,6 +116,9 @@ def ensure_indexes():
             "ai_mode": "ALTER TABLE projects ADD COLUMN ai_mode VARCHAR",
             "custom_api_key": "ALTER TABLE projects ADD COLUMN custom_api_key VARCHAR",
             "custom_api_base_url": "ALTER TABLE projects ADD COLUMN custom_api_base_url VARCHAR",
+            "neo4j_uri": "ALTER TABLE projects ADD COLUMN neo4j_uri VARCHAR",
+            "neo4j_user": "ALTER TABLE projects ADD COLUMN neo4j_user VARCHAR",
+            "neo4j_password": "ALTER TABLE projects ADD COLUMN neo4j_password VARCHAR",
         })
         for statement in index_statements:
             connection.execute(text(statement))

@@ -22,7 +22,7 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from Persistence.neo4j.graph_service import GraphService
-from Persistence.sqlite.models import FileChunk, FileComplexity, FileRelation, FileStatus, ProjectFile, ProjectComplexity
+from Persistence.sqlite.models import FileChunk, FileComplexity, FileRelation, FileStatus, Project, ProjectFile, ProjectComplexity
 from Persistence.sqlite.session import SessionLocal, get_db
 from Processes.discovery_process import DiscoveryProcess, GitHubIngestionError
 from Processes.graphing_process import GraphingProcess
@@ -248,7 +248,8 @@ async def get_graph_data(run_id: str, db: Session = Depends(get_db)):
     try:
         if not graph_refreshed:
             raise RuntimeError("Skipping Neo4j read because graph refresh did not complete")
-        graph_service = GraphService()
+        project = db.query(Project).filter(Project.run_id == run_id).first()
+        graph_service = GraphService.for_project(project)
         graph_data = graph_service.get_graph(run_id)
         if graph_data["nodes"] or graph_data["edges"]:
             return graph_data
@@ -698,7 +699,6 @@ async def confirm_language(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-
 
 
 

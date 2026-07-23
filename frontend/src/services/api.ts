@@ -9,6 +9,11 @@ export interface ProjectConfig {
   key_preview?: string | null;
   url?: string;
   model?: string;
+  neo4j_uri?: string;
+  neo4j_user?: string;
+  neo4j_password?: string;
+  has_neo4j_password?: boolean;
+  neo4j_password_preview?: string | null;
   lang?: string;
   speed_profile?: 'Turbo' | 'Fast' | 'Balanced' | 'Thorough';
   reasoning_effort?: 'Low' | 'Medium' | 'High';
@@ -55,6 +60,9 @@ export interface ProjectSummary {
   has_custom_api_key?: boolean;
   llm_model?: string | null;
   interaction_lang?: string | null;
+  neo4j_uri?: string | null;
+  neo4j_user?: string | null;
+  has_neo4j_password?: boolean;
   speed_profile?: string | null;
   reasoning_effort?: string | null;
   parallel_workers?: number | null;

@@ -1,6 +1,6 @@
 ﻿from Chunking.dependency_scanner.resolution_service import ResolutionService
 from Persistence.neo4j.graph_service import GraphService
-from Persistence.sqlite.models import FileRelation, ProjectFile
+from Persistence.sqlite.models import FileRelation, Project, ProjectFile
 
 
 class GraphingProcess:
@@ -13,7 +13,8 @@ class GraphingProcess:
 
         graph_service = None
         try:
-            graph_service = GraphService()
+            project = self.db.query(Project).filter(Project.run_id == run_id).first()
+            graph_service = GraphService.for_project(project)
         except Exception as exc:
             print(f"Neo4j graph build skipped for {run_id}: {exc}")
             return False

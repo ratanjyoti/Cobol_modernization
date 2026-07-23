@@ -12,6 +12,9 @@ class ProjectRepository:
         "model": "llm_model",
         "lang": "interaction_lang",
         "workers": "parallel_workers",
+        "neo4j_uri": "neo4j_uri",
+        "neo4j_user": "neo4j_user",
+        "neo4j_password": "neo4j_password",
     }
 
     def __init__(self, session: Session):
@@ -35,7 +38,7 @@ class ProjectRepository:
             return False
 
         for key, value in updates.items():
-            if key in {"key", "custom_api_key"} and value == "":
+            if key in {"key", "custom_api_key", "neo4j_password"} and value == "":
                 continue
             attr = self.CONFIG_FIELD_MAP.get(key, key)
             if hasattr(project, attr):

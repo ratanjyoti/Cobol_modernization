@@ -12,7 +12,7 @@ from Processes.onboarding_process import OnboardingProcess
 from Persistence.neo4j.graph_service import GraphService
 from Chunking.dependency_scanner.resolution_service import ResolutionService
 from Config.llm_config import settings
-from Persistence.sqlite.models import FileRelation, ProjectFile
+from Persistence.sqlite.models import FileRelation, Project, ProjectFile
 from Persistence.sqlite.project_repo import ProjectRepository
 from Persistence.sqlite.session import get_db
 from paths import UPLOADS_DIR
@@ -26,6 +26,14 @@ def mask_api_key(api_key: str | None):
     if len(api_key) <= 8:
         return "****"
     return f"{api_key[:5]}****{api_key[-4:]}"
+
+
+def mask_secret(secret: str | None):
+    if not secret:
+        return None
+    if len(secret) <= 4:
+        return "****"
+    return f"****{secret[-4:]}"
 
 
 def api_error_message(response: requests.Response) -> str:
@@ -111,6 +119,9 @@ def serialize_project(project, files=None):
         "has_custom_api_key": bool(project.custom_api_key),
         "llm_model": project.llm_model,
         "interaction_lang": project.interaction_lang,
+        "neo4j_uri": project.neo4j_uri,
+        "neo4j_user": project.neo4j_user,
+        "has_neo4j_password": bool(project.neo4j_password),
         "speed_profile": project.speed_profile,
         "reasoning_effort": project.reasoning_effort,
         "parallel_workers": project.parallel_workers,
@@ -144,6 +155,9 @@ def serialize_project_summary(project, files_count: int, file_status_counts: dic
         "has_custom_api_key": bool(project.custom_api_key),
         "llm_model": project.llm_model,
         "interaction_lang": project.interaction_lang,
+        "neo4j_uri": project.neo4j_uri,
+        "neo4j_user": project.neo4j_user,
+        "has_neo4j_password": bool(project.neo4j_password),
         "speed_profile": project.speed_profile,
         "reasoning_effort": project.reasoning_effort,
         "parallel_workers": project.parallel_workers,
@@ -186,10 +200,10 @@ def refresh_dependency_map(run_id: str, db: Session):
         print(f"Neo4j graph refresh skipped for {run_id}: {exc}")
         return False
 
-def get_neo4j_discovery_data(run_id: str):
+def get_neo4j_discovery_data(run_id: str, project: Project | None = None):
     graph_service = None
     try:
-        graph_service = GraphService()
+        graph_service = GraphService.for_project(project)
         data = graph_service.get_discovery_data(run_id)
         if data["files"] or data["relations"]:
             return data
@@ -284,21 +298,29 @@ def check_ai_api_status(project):
         }
 
 
-def check_neo4j_status():
+def check_neo4j_status(project: Project | None = None):
     graph_service = None
     try:
-        graph_service = GraphService()
+        graph_service = GraphService.for_project(project)
         graph_service.driver.verify_connectivity()
-        return {"active": True, "detail": "Neo4j connection verified."}
+        return {
+            "active": True,
+            "provider": "Neo4j",
+            "detail": "Neo4j connection verified.",
+        }
     except Exception as exc:
-        return {"active": False, "detail": str(exc)[:180]}
+        return {
+            "active": False,
+            "provider": "Neo4j",
+            "detail": str(exc)[:180],
+        }
     finally:
         if graph_service is not None:
             graph_service.close()
-def clear_neo4j_run(run_id: str):
+def clear_neo4j_run(run_id: str, project: Project | None = None):
     graph_service = None
     try:
-        graph_service = GraphService()
+        graph_service = GraphService.for_project(project)
         graph_service.clear_run(run_id)
     except Exception as exc:
         print(f"Neo4j clear skipped for {run_id}: {exc}")
@@ -371,11 +393,12 @@ async def delete_all_runs(db: Session = Depends(get_db)):
 @router.delete("/{run_id}")
 async def delete_run(run_id: str, db: Session = Depends(get_db)):
     repo = ProjectRepository(db)
-    if not repo.get_by_run_id(run_id):
+    project = repo.get_by_run_id(run_id)
+    if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    clear_neo4j_run(run_id, project)
     result = repo.delete_project(run_id)
-    clear_neo4j_run(run_id)
     remove_tree_sync(UPLOADS_DIR / run_id)
     return {"status": "Success", **result}
 
@@ -383,11 +406,12 @@ async def delete_run(run_id: str, db: Session = Depends(get_db)):
 @router.delete("/{run_id}/files")
 async def clear_project_files(run_id: str, db: Session = Depends(get_db)):
     repo = ProjectRepository(db)
-    if not repo.get_by_run_id(run_id):
+    project = repo.get_by_run_id(run_id)
+    if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    clear_neo4j_run(run_id, project)
     deleted_count = repo.delete_files_by_run_id(run_id)
-    clear_neo4j_run(run_id)
     remove_tree_sync(UPLOADS_DIR / run_id)
     return {"status": "Success", "files_deleted": deleted_count}
 
@@ -418,6 +442,10 @@ async def get_project_config(run_id: str, db: Session = Depends(get_db)):
         "url": project.custom_api_base_url or ("http://localhost:11434" if mode == "local" else "https://openrouter.ai/api/v1"),
         "model": project.llm_model or ("llama3" if mode == "local" else settings.OPENROUTER_MODEL),
         "lang": project.interaction_lang,
+        "neo4j_uri": project.neo4j_uri or settings.NEO4J_URI or "",
+        "neo4j_user": project.neo4j_user or settings.NEO4J_USER or "neo4j",
+        "has_neo4j_password": bool(project.neo4j_password or settings.NEO4J_PASSWORD),
+        "neo4j_password_preview": mask_secret(project.neo4j_password or settings.NEO4J_PASSWORD),
         "speed_profile": project.speed_profile,
         "reasoning_effort": project.reasoning_effort,
         "workers": project.parallel_workers,
@@ -433,7 +461,7 @@ async def get_project_service_health(run_id: str, db: Session = Depends(get_db))
 
     return {
         "ai_api": check_ai_api_status(project),
-        "neo4j": check_neo4j_status(),
+        "neo4j": check_neo4j_status(project),
     }
 @router.get("/{run_id}/files")
 async def list_project_files(run_id: str, db: Session = Depends(get_db)):
@@ -450,7 +478,8 @@ async def list_project_relations(run_id: str, db: Session = Depends(get_db)):
     if not repo.get_by_run_id(run_id):
         raise HTTPException(status_code=404, detail="Project not found")
     graph_refreshed = refresh_dependency_map(run_id, db)
-    neo4j_data = get_neo4j_discovery_data(run_id) if graph_refreshed else None
+    project = repo.get_by_run_id(run_id)
+    neo4j_data = get_neo4j_discovery_data(run_id, project) if graph_refreshed else None
     if neo4j_data is not None:
         return {"relations": neo4j_data["relations"]}
 
@@ -465,7 +494,8 @@ async def get_project_discovery_data(run_id: str, db: Session = Depends(get_db))
         raise HTTPException(status_code=404, detail="Project not found")
 
     graph_refreshed = refresh_dependency_map(run_id, db)
-    neo4j_data = get_neo4j_discovery_data(run_id) if graph_refreshed else None
+    project = repo.get_by_run_id(run_id)
+    neo4j_data = get_neo4j_discovery_data(run_id, project) if graph_refreshed else None
     if neo4j_data is not None:
         return neo4j_data
 

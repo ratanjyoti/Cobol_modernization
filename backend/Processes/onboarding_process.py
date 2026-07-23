@@ -31,6 +31,9 @@ class OnboardingProcess:
             custom_api_base_url=config_data.get("url") or config_data.get("custom_api_base_url"),
             llm_model=config_data.get("model"),
             interaction_lang=config_data.get("lang", "en"),
+            neo4j_uri=config_data.get("neo4j_uri"),
+            neo4j_user=config_data.get("neo4j_user"),
+            neo4j_password=config_data.get("neo4j_password"),
             speed_profile=config_data.get("speed_profile", "Balanced"),
             reasoning_effort=config_data.get("reasoning_effort", "Medium"),
             parallel_workers=int(config_data.get("workers", 4))

@@ -32,6 +32,10 @@ class Project(Base):
     llm_model = Column(String)
     interaction_lang = Column(String)
 
+    neo4j_uri = Column(String, nullable=True)
+    neo4j_user = Column(String, nullable=True)
+    neo4j_password = Column(String, nullable=True)
+
     speed_profile = Column(String)
     reasoning_effort = Column(String)
     parallel_workers = Column(Integer)
