@@ -237,6 +237,17 @@ const Dashboard = () => {
     const includeHealth = options.includeHealth !== false;
     if (includeHealth) setHealthLoading(true);
     try {
+      if (options.silent) {
+        const dashboard = await ProjectAPI.getDashboardStatus(currentRunId);
+        setDashboardStatus(dashboard);
+        setServiceHealth(dashboard.service_health || emptyHealth);
+        setProjects((current) => {
+          const exists = current.some((project) => project.run_id === dashboard.project.run_id);
+          return exists ? current.map((project) => project.run_id === dashboard.project.run_id ? dashboard.project : project) : [dashboard.project, ...current];
+        });
+        return;
+      }
+
       const [dashboard, projectDetail, discovery, complexity, rules] = await Promise.all([
         ProjectAPI.getDashboardStatus(currentRunId),
         ProjectAPI.get(currentRunId),
@@ -246,6 +257,7 @@ const Dashboard = () => {
       ]);
 
       setDashboardStatus(dashboard);
+      setServiceHealth(dashboard.service_health || emptyHealth);
       setProjects((current) => {
         const exists = current.some((project) => project.run_id === projectDetail.run_id);
         return exists ? current.map((project) => project.run_id === projectDetail.run_id ? projectDetail : project) : [projectDetail, ...current];

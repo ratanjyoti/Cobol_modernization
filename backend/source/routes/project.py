@@ -1,5 +1,5 @@
 # Implementation for project.py
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from pathlib import Path
@@ -15,10 +15,11 @@ from Chunking.dependency_scanner.resolution_service import ResolutionService
 from Config.llm_config import settings
 from Persistence.sqlite.models import BusinessRule, ChunkAnalysis, FileAnalysis, FileChunk, FileComplexity, FileRelation, Project, ProjectComplexity, ProjectFile
 from Persistence.sqlite.project_repo import ProjectRepository
-from Persistence.sqlite.session import get_db
+from Persistence.sqlite.session import SessionLocal, get_db
 from paths import UPLOADS_DIR
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
+SERVICE_HEALTH_CACHE: dict[str, dict] = {}
 
 
 def mask_api_key(api_key: str | None):
@@ -318,6 +319,39 @@ def check_neo4j_status(project: Project | None = None):
     finally:
         if graph_service is not None:
             graph_service.close()
+
+
+def build_service_health(project: Project):
+    return {
+        "ai_api": check_ai_api_status(project),
+        "neo4j": check_neo4j_status(project),
+        "updated_at": datetime.datetime.utcnow().isoformat() + "Z",
+    }
+
+
+def refresh_service_health_cache(run_id: str):
+    db = SessionLocal()
+    try:
+        project = db.query(Project).filter(Project.run_id == run_id).first()
+        if project:
+            SERVICE_HEALTH_CACHE[run_id] = build_service_health(project)
+    except Exception as exc:
+        SERVICE_HEALTH_CACHE[run_id] = {
+            "ai_api": {"active": False, "provider": "AI API", "detail": f"Health refresh failed: {str(exc)[:180]}"},
+            "neo4j": {"active": False, "provider": "Neo4j", "detail": f"Health refresh failed: {str(exc)[:180]}"},
+            "updated_at": datetime.datetime.utcnow().isoformat() + "Z",
+        }
+    finally:
+        db.close()
+
+
+def get_cached_service_health(run_id: str, project: Project):
+    cached = SERVICE_HEALTH_CACHE.get(run_id)
+    if cached:
+        return cached
+    SERVICE_HEALTH_CACHE[run_id] = build_service_health(project)
+    return SERVICE_HEALTH_CACHE[run_id]
+
 def clear_neo4j_run(run_id: str, project: Project | None = None):
     graph_service = None
     try:
@@ -377,9 +411,11 @@ async def list_projects(db: Session = Depends(get_db)):
 
 @router.post("")
 @router.post("/create")
-async def create_project(config: dict, db: Session = Depends(get_db)):
+async def create_project(config: dict, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     process = OnboardingProcess(db)
     result = process.create_new_project(config, user_id=1)
+    if result.get("run_id"):
+        background_tasks.add_task(refresh_service_health_cache, result["run_id"])
     return result
 
 
@@ -563,6 +599,7 @@ async def get_project_dashboard_status(run_id: str, db: Session = Depends(get_db
             "converted_chunks": converted_chunks,
             "total_chunks": chunk_total,
         },
+        "service_health": get_cached_service_health(run_id, project),
         "journey": journey,
         "updated_at": datetime.datetime.utcnow().isoformat() + "Z",
     }
@@ -648,12 +685,14 @@ async def get_project_discovery_data(run_id: str, db: Session = Depends(get_db))
 
 
 @router.patch("/{run_id}/config")
-async def update_project_config(run_id: str, updates: dict, db: Session = Depends(get_db)):
+async def update_project_config(run_id: str, updates: dict, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     process = OnboardingProcess(db)
     success = process.update_config(run_id, updates)
     if not success:
         raise HTTPException(status_code=404, detail="Project not found")
-    return {"status": "Configuration updated"}
+    SERVICE_HEALTH_CACHE.pop(run_id, None)
+    background_tasks.add_task(refresh_service_health_cache, run_id)
+    return {"status": "Configuration updated", "health_refresh": "queued"}
 
 
 

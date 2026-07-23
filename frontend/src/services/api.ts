@@ -95,6 +95,7 @@ export interface DashboardStatus {
     converted_chunks: number;
     total_chunks: number;
   };
+  service_health: ServiceHealth;
   journey: JourneyStepStatus[];
   updated_at: string;
 }
