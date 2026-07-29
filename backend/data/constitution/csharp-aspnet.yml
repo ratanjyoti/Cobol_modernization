@@ -1,0 +1,54 @@
+profile:
+  id: csharp-aspnet
+  target_language: csharp
+  framework: ASP.NET Core
+  description: C# ASP.NET Core backend service generation profile.
+
+architecture:
+  style: layered
+  layers:
+    - controller
+    - service
+    - repository
+    - dto
+    - domain
+    - exception
+  decomposition: by-business-domain
+  business_logic_location: service
+  data_access_location: repository
+  shared_copybooks: dto-or-domain-model
+  unresolved_dependencies: adapter-stub
+
+naming:
+  base_namespace: Modernizer.Migration
+  classes: PascalCase
+  methods: PascalCase
+  properties: PascalCase
+  fields: camelCase
+  constants: PascalCase
+
+types:
+  money: decimal
+  decimal: decimal
+  integer: int
+  long: long
+  string: string
+  date: DateOnly
+  datetime: DateTime
+  boolean: bool
+
+patterns:
+  dependency_injection: constructor-injection
+  exceptions: custom exceptions
+  null_handling: nullable-reference-types
+  validation: data annotations
+  logging: ILogger
+  comments: include COBOL traceability comments
+
+testing:
+  framework: xUnit
+  style: arrange-act-assert
+
+traceability:
+  enabled: true
+  comment_format: "// Migrated from: {source_file}::{source_location}"

@@ -1,0 +1,54 @@
+profile:
+  id: java-quarkus
+  target_language: java
+  framework: Quarkus
+  description: Java Quarkus backend service generation profile.
+
+architecture:
+  style: layered
+  layers:
+    - resource
+    - service
+    - repository
+    - dto
+    - domain
+    - exception
+  decomposition: by-business-domain
+  business_logic_location: service
+  data_access_location: repository
+  shared_copybooks: dto-or-shared-domain-model
+  unresolved_dependencies: adapter-stub
+
+naming:
+  base_package: com.modernizer.migration
+  classes: PascalCase
+  methods: camelCase
+  fields: camelCase
+  constants: UPPER_SNAKE_CASE
+  packages: lowercase-domain-based
+
+types:
+  money: BigDecimal
+  decimal: BigDecimal
+  integer: Integer
+  long: Long
+  string: String
+  date: LocalDate
+  datetime: LocalDateTime
+  boolean: boolean
+
+patterns:
+  dependency_injection: constructor-injection
+  exceptions: unchecked-custom-exceptions
+  null_handling: Optional for nullable return values
+  validation: Jakarta Bean Validation
+  logging: SLF4J
+  comments: include COBOL traceability comments
+
+testing:
+  framework: JUnit 5
+  style: given-when-then
+
+traceability:
+  enabled: true
+  comment_format: "// Migrated from: {source_file}::{source_location}"

@@ -1,0 +1,54 @@
+profile:
+  id: python-fastapi
+  target_language: python
+  framework: FastAPI
+  description: Python FastAPI backend service generation profile.
+
+architecture:
+  style: layered
+  layers:
+    - router
+    - service
+    - repository
+    - schema
+    - domain
+    - exception
+  decomposition: by-business-domain
+  business_logic_location: service
+  data_access_location: repository
+  shared_copybooks: pydantic-schema-or-domain-model
+  unresolved_dependencies: adapter-stub
+
+naming:
+  base_package: generated_app
+  classes: PascalCase
+  functions: snake_case
+  variables: snake_case
+  constants: UPPER_SNAKE_CASE
+  modules: snake_case
+
+types:
+  money: Decimal
+  decimal: Decimal
+  integer: int
+  long: int
+  string: str
+  date: date
+  datetime: datetime
+  boolean: bool
+
+patterns:
+  dependency_injection: FastAPI Depends where useful
+  exceptions: custom exceptions with HTTP mapping
+  null_handling: Optional
+  validation: Pydantic models
+  logging: standard logging
+  comments: include COBOL traceability comments
+
+testing:
+  framework: pytest
+  style: arrange-act-assert
+
+traceability:
+  enabled: true
+  comment_format: "# Migrated from: {source_file}::{source_location}"

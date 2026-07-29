@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 from Persistence.sqlite.session import get_db
 from Persistence.sqlite.models import BusinessRule, Project
 from Processes.logic_extraction_process import LogicExtractionProcess
-
 BACKEND_DIR = Path(__file__).resolve().parent
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
@@ -22,6 +21,8 @@ init_db()
 
 # Import the routers from your routes folder
 from source.routes import project, discovery, business_rule_routes, llm_health
+from source.routes.prompt_routes import router as prompt_router
+from source.routes.code_generation_routes import router as code_generation_router
 
 app = FastAPI(
     title="ModernizerAI Backend",
@@ -74,6 +75,8 @@ app.include_router(project.router)
 app.include_router(discovery.router)
 app.include_router(business_rule_routes.router)
 app.include_router(llm_health.router)
+app.include_router(prompt_router)
+app.include_router(code_generation_router)
 
 # ==============================================================================
 # 3. GLOBAL ERROR HANDLING
@@ -175,5 +178,4 @@ if __name__ == "__main__":
     import uvicorn
     # Run the server on localhost:8000
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
-
 
