@@ -9,6 +9,7 @@ import {
   KeyRound,
   Link as LinkIcon,
   UserRound,
+  Check,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -40,12 +41,54 @@ type MigrationScopeId =
   | 'business_rules_ddd'
   | 'full_migration_ddd';
 
+type TargetConversionLanguage = 'java' | 'python' | 'csharp';
+
 type MigrationScope = {
   id: MigrationScopeId;
   level: 'Low' | 'Medium' | 'High' | 'Very High';
   title: string;
   tokenRange: string;
   description: string;
+};
+
+const TARGET_CONVERSION_LANGUAGES: Array<{
+  id: TargetConversionLanguage;
+  label: string;
+  framework: string;
+  description: string;
+}> = [
+  {
+    id: 'java',
+    label: 'Java',
+    framework: 'Quarkus',
+    description: 'Generate Java Quarkus resources, services, repositories, DTOs, and tests.',
+  },
+  {
+    id: 'python',
+    label: 'Python',
+    framework: 'FastAPI',
+    description: 'Generate Python FastAPI routers, services, repositories, schemas, and tests.',
+  },
+  {
+    id: 'csharp',
+    label: 'C#',
+    framework: 'ASP.NET Core',
+    description: 'Generate ASP.NET Core controllers, services, repositories, DTOs, and tests.',
+  },
+];
+
+const isTargetConversionLanguage = (value: string | null): value is TargetConversionLanguage => {
+  return TARGET_CONVERSION_LANGUAGES.some((target) => target.id === value);
+};
+
+const getStoredTargetConversionLanguage = (currentRunId?: string | null): TargetConversionLanguage => {
+  const runSpecific = currentRunId ? localStorage.getItem(`modernizer_target_language_${currentRunId}`) : null;
+  const globalTarget = localStorage.getItem('modernizer_target_language');
+  const value = (runSpecific || globalTarget || 'java').toLowerCase();
+
+  if (value === 'python') return 'python';
+  if (value === 'csharp' || value === 'c#') return 'csharp';
+  return 'java';
 };
 
 const MIGRATION_SCOPES: MigrationScope[] = [
@@ -330,6 +373,9 @@ const Neo4jConfigPanel = ({ runId, onSave }: Neo4jConfigPanelProps) => {
 const InitialSetup = () => {
   const savedScope = localStorage.getItem('modernizer_migration_scope');
 
+  const [targetConversionLanguage, setTargetConversionLanguage] = useState<TargetConversionLanguage>(
+    getStoredTargetConversionLanguage(localStorage.getItem('active_run_id'))
+  );
   const [migrationScope, setMigrationScope] = useState<MigrationScopeId>(
     isMigrationScopeId(savedScope) ? savedScope : 'reverse_engineering'
   );
@@ -385,6 +431,7 @@ const InitialSetup = () => {
 
       if ((!runId || !data.some((project) => project.run_id === runId)) && data[0]?.run_id) {
         setRunId(data[0].run_id);
+        setTargetConversionLanguage(getStoredTargetConversionLanguage(data[0].run_id));
         localStorage.setItem('active_run_id', data[0].run_id);
       }
     } catch (e) {
@@ -394,6 +441,7 @@ const InitialSetup = () => {
 
   const handleProjectChange = (id: string) => {
     setRunId(id);
+    setTargetConversionLanguage(getStoredTargetConversionLanguage(id));
     localStorage.setItem('active_run_id', id);
     toast.success(`Active project switched to ${id}`);
   };
@@ -426,20 +474,24 @@ const InitialSetup = () => {
 
     try {
       const response = await ProjectAPI.create({
-        project_name: runName,
-        ...aiConfig,
-        ...neo4jConfig,
-        lang: sourceMetaLang,
-        migration_scope: migrationScope,
-        speed_profile: 'Balanced',
-        workers: 4,
-      } as any);
+  project_name: runName,
+  ...aiConfig,
+  ...neo4jConfig,
+  lang: sourceMetaLang,
+  migration_scope: migrationScope,
+  target_language: targetConversionLanguage,
+  conversion_target_language: targetConversionLanguage,
+  speed_profile: 'Balanced',
+  workers: 4,
+} as any);
 
       const newRunId = response.run_id;
       localStorage.setItem('active_run_id', newRunId);
       localStorage.setItem(`ai_config_${newRunId}`, JSON.stringify({ ...aiConfig, key: '' }));
       localStorage.setItem('neo4j_config', JSON.stringify({ ...neo4jConfig, neo4j_password: '' }));
       localStorage.setItem('modernizer_migration_scope', migrationScope);
+      localStorage.setItem('modernizer_target_language', targetConversionLanguage);
+      localStorage.setItem(`modernizer_target_language_${newRunId}`, targetConversionLanguage);
 
       setRunId(newRunId);
       setProjects([
@@ -468,6 +520,22 @@ const InitialSetup = () => {
       }
     }
   };
+  const saveTargetConversionLanguage = async (target: TargetConversionLanguage) => {
+  setTargetConversionLanguage(target);
+  localStorage.setItem('modernizer_target_language', target);
+  if (runId) localStorage.setItem(`modernizer_target_language_${runId}`, target);
+
+  if (runId) {
+    try {
+      await ProjectAPI.updateConfig(runId, {
+        target_language: target,
+        conversion_target_language: target,
+      } as any);
+    } catch (e) {
+      console.error('Failed to sync target conversion language', e);
+    }
+  }
+};
 
   const saveMigrationScope = async (scope: MigrationScopeId) => {
     setMigrationScope(scope);
@@ -586,6 +654,46 @@ const InitialSetup = () => {
       </section>
 
       <section className="space-y-8">
+        <div className="space-y-4">
+          <SectionLabel>Select Target Conversion Language</SectionLabel>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            {TARGET_CONVERSION_LANGUAGES.map((target) => {
+              const isActive = targetConversionLanguage === target.id;
+
+              return (
+                <button
+                  key={target.id}
+                  type="button"
+                  onClick={() => saveTargetConversionLanguage(target.id)}
+                  className={`relative min-h-[140px] rounded-xl border p-4 text-left transition-all ${
+                    isActive
+                      ? 'border-orange-500/70 bg-orange-500/10 shadow-lg shadow-orange-950/20'
+                      : 'border-slate-800 bg-slate-900/40 hover:border-slate-600 hover:bg-slate-900/70'
+                  }`}
+                >
+                  {isActive && (
+                    <span className="absolute right-3 top-3 flex h-4 w-4 items-center justify-center rounded-full border border-orange-400 text-orange-300">
+                      <Check size={10} />
+                    </span>
+                  )}
+
+                  <h3 className="text-sm font-black text-white">{target.label}</h3>
+                  <p className="mt-2 font-mono text-xs font-bold text-orange-300">
+                    {target.framework}
+                  </p>
+                  <p className="mt-3 text-xs leading-5 text-slate-400">
+                    {target.description}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+
+          <p className="text-xs leading-5 text-slate-500">
+            This target language is locked for the run. Code Generation will use this selected target only to avoid unnecessary extra LLM calls.
+          </p>
+        </div>
         <div className="space-y-4">
           <SectionLabel>Select Migration Scope & Budget</SectionLabel>
 
