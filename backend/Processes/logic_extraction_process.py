@@ -8,6 +8,7 @@ from Agents.implementations.business_logic_extractor import BusinessLogicExtract
 from Agents.infrastructure.chat_client_factory import ChatClientFactory
 from Chunking.context.chunk_context_manager import ChunkContextManager
 from Persistence.sqlite.models import BusinessRule, ChunkAnalysis, FileChunk, ProjectFile
+from paths import UPLOADS_DIR
 
 
 class LogicExtractionProcess:
@@ -64,12 +65,7 @@ class LogicExtractionProcess:
             for analysis in analyses
         }
 
-        chunks = (
-            self.db.query(FileChunk)
-            .filter_by(run_id=run_id)
-            .order_by(FileChunk.file_id, FileChunk.chunk_index)
-            .all()
-        )
+        chunks = self._load_or_create_chunks(run_id)
 
         files = {
             file.id: file
@@ -152,6 +148,69 @@ class LogicExtractionProcess:
         except Exception:
             self.db.rollback()
             raise
+
+    def _load_or_create_chunks(self, run_id: str) -> list[FileChunk]:
+        chunks = (
+            self.db.query(FileChunk)
+            .filter_by(run_id=run_id)
+            .order_by(FileChunk.file_id, FileChunk.chunk_index)
+            .all()
+        )
+        if chunks:
+            return chunks
+
+        project_files = self.db.query(ProjectFile).filter_by(run_id=run_id).all()
+        created = []
+
+        for project_file in project_files:
+            content = self._read_project_file(project_file)
+            if not content or not self._is_legacy_source_chunk(project_file, content):
+                continue
+
+            chunk = FileChunk(
+                run_id=run_id,
+                file_id=project_file.id,
+                chunk_index=0,
+                content=content,
+                start_line=1,
+                end_line=content.count("\n") + (1 if content else 0),
+                overlap_content="",
+                semantic_units='["file:FILE"]',
+                status="PENDING",
+            )
+            self.db.add(chunk)
+            created.append(chunk)
+
+        if created:
+            self.db.commit()
+            return (
+                self.db.query(FileChunk)
+                .filter_by(run_id=run_id)
+                .order_by(FileChunk.file_id, FileChunk.chunk_index)
+                .all()
+            )
+
+        return []
+
+    def _read_project_file(self, project_file: ProjectFile) -> str:
+        rel = (project_file.filepath or project_file.filename or "").replace("\\", "/").strip("/")
+        if not rel or ".." in rel.split("/"):
+            return ""
+
+        candidates = [
+            UPLOADS_DIR / project_file.run_id / rel,
+            UPLOADS_DIR / project_file.run_id / "local_repo" / rel,
+            UPLOADS_DIR / project_file.run_id / (project_file.filename or ""),
+        ]
+
+        for candidate in candidates:
+            try:
+                if candidate.exists() and candidate.is_file():
+                    return candidate.read_text(errors="ignore")
+            except OSError as exc:
+                print(f"Could not read uploaded file {candidate}: {exc}")
+
+        return ""
 
     def _prepare_agent_result(self, result: Any, chunk: FileChunk, technical_yaml: str) -> list[dict]:
         if isinstance(result, dict):

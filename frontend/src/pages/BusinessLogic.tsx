@@ -17,6 +17,7 @@ import {
   Pencil,
   Save,
   X,
+  Download,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getApiErrorDetail, ProjectAPI } from '../services/api';
@@ -36,6 +37,125 @@ interface BusinessRule {
   complexity_rating?: string;
   modernization_tips?: string[];
 }
+
+const cleanMarkdownText = (value?: string | null, fallback = 'Not available.') => {
+  const text = (value || '').trim();
+  return text || fallback;
+};
+
+const markdownList = (items?: string[]) => {
+  if (!items || items.length === 0) return '* None detected.';
+  return items.map((item) => `* ${item}`).join('\n');
+};
+
+const buildBusinessRulesMarkdown = (allRules: BusinessRule[], activeRunId: string | null) => {
+  const generated = new Date().toLocaleString();
+  const groups = allRules.reduce<Record<string, BusinessRule[]>>((acc, rule) => {
+    const filename = rule.filename || 'Uploaded source file';
+    if (!acc[filename]) acc[filename] = [];
+    acc[filename].push(rule);
+    return acc;
+  }, {});
+
+  const filenames = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+  const verified = allRules.filter((rule) => rule.status === 'VERIFIED').length;
+  const rejected = allRules.filter((rule) => rule.status === 'REJECTED').length;
+  const pending = allRules.filter((rule) => rule.status === 'PENDING').length;
+
+  const lines: string[] = [
+    '# Business Rules Details',
+    '',
+    `**Generated**: ${generated}`,
+    `**Project Run ID**: ${activeRunId || 'Not selected'}`,
+    `**Total Files Analyzed**: ${filenames.length}`,
+    `**Total Business Rules**: ${allRules.length}`,
+    `**Verified Rules**: ${verified}`,
+    `**Pending Rules**: ${pending}`,
+    `**Rejected Rules**: ${rejected}`,
+    '',
+    '---',
+    '',
+    '## Business Logic',
+    '',
+  ];
+
+  filenames.forEach((filename) => {
+    const fileRules = groups[filename];
+    const metadata = fileRules[0];
+    lines.push(
+      `## ${filename}`,
+      '',
+      '### Business Purpose',
+      cleanMarkdownText(metadata.business_purpose),
+      '',
+      '### Detailed Functional Logic',
+      cleanMarkdownText(metadata.functional_logic),
+      '',
+      '---',
+      ''
+    );
+  });
+
+  lines.push('---', '', '## Business Rules', '');
+
+  filenames.forEach((filename) => {
+    const fileRules = groups[filename];
+    lines.push(`### ${filename}`, '');
+    fileRules.forEach((rule, index) => {
+      const ruleLabel = rule.rule_id || `RULE-${index + 1}`;
+      lines.push(
+        `#### ${ruleLabel}`,
+        '',
+        `**Status:** ${rule.status}`,
+        '',
+        '**Rule Text:**',
+        cleanMarkdownText(rule.rule_text),
+        '',
+        `**Technical Reference:** ${cleanMarkdownText(rule.technical_ref, 'Derived from source analysis.')}`,
+        '',
+        '---',
+        ''
+      );
+    });
+  });
+
+  lines.push('## Technical Evidence', '');
+
+  filenames.forEach((filename) => {
+    const metadata = groups[filename][0];
+    lines.push(
+      `### ${filename}`,
+      '',
+      '**Program Description:** Extracted from AI analysis',
+      '',
+      '**Dependencies:**',
+      markdownList(metadata.dependencies),
+      '',
+      '**Technical YAML / Evidence:**',
+      '',
+      '```yaml',
+      cleanMarkdownText(metadata.technical_yaml, 'Structure analysis not available.'),
+      '```',
+      '',
+      '---',
+      ''
+    );
+  });
+
+  return lines.join('\n');
+};
+
+const isGenericFallbackRule = (rule: BusinessRule) => {
+  const text = `${rule.rule_text || ''} ${rule.technical_ref || ''}`.toLowerCase();
+  return (
+    text.includes('must preserve its') ||
+    text.includes('preserve behavior') ||
+    text.includes('during modernization') ||
+    text.includes('derived from uploaded source file | confidence: low') ||
+    text.includes('matching business outcome must be applied') ||
+    text.includes('corresponding business outcome')
+  );
+};
 
 const BusinessLogic = () => {
   const navigate = useNavigate();
@@ -82,7 +202,8 @@ const BusinessLogic = () => {
         const existingRules = await ProjectAPI.getBusinessRules(runId);
         if (cancelled) return;
 
-        if (existingRules.length > 0) {
+        const hasOnlyUsableStoredRules = existingRules.length > 0 && !existingRules.some(isGenericFallbackRule);
+        if (hasOnlyUsableStoredRules) {
           applyRules(existingRules);
           return;
         }
@@ -211,6 +332,26 @@ const BusinessLogic = () => {
   const fileMetadata = currentFileRules[0] || null;
   const canApproveBaseline = rules.length > 0 && !loading && !autoExtracting;
 
+  const handleDownloadBusinessRules = () => {
+    if (rules.length === 0) {
+      toast.error('No business rules available to download');
+      return;
+    }
+
+    const markdown = buildBusinessRulesMarkdown(rules, runId);
+    const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `business-rules-${runId || stamp}.md`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    toast.success('Business rules markdown downloaded');
+  };
+
   return (
     <div className="space-y-6 min-h-screen pb-24">
       <header className="flex flex-col gap-5 border-b border-slate-800 pb-7 lg:flex-row lg:items-start lg:justify-between">
@@ -225,7 +366,25 @@ const BusinessLogic = () => {
         </div>
 
         <div className="flex flex-col items-end gap-3">
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={handleDownloadBusinessRules}
+            disabled={rules.length === 0}
+            className={`flex items-center gap-2 rounded-xl border px-4 py-2 text-xs font-extrabold shadow-sm transition-all ${
+              rules.length > 0
+                ? 'border-neutral-900 bg-neutral-950 text-white hover:-translate-y-0.5 hover:bg-neutral-800'
+                : 'cursor-not-allowed border-slate-300 bg-slate-100 text-slate-400 shadow-none opacity-70'
+            }`}
+          >
+            <Download
+              size={14}
+              className={rules.length > 0 ? 'text-white' : 'text-slate-400'}
+            />
+            <span className={rules.length > 0 ? 'text-white' : 'text-slate-400'}>
+              Download MD
+            </span>
+          </button>
             <div className="text-right">
               <p className="text-xs font-bold text-slate-500 uppercase">Verification Progress</p>
               <p className={`text-xl font-black ${verificationPercentage >= 80 ? 'text-emerald-400' : 'text-amber-400'}`}>{verificationPercentage}%</p>
@@ -417,7 +576,7 @@ const BusinessLogic = () => {
 
       {selectedFile && fileMetadata && (
         <section className="glass-card rounded-3xl border border-indigo-500/30 bg-slate-900/50 p-6">
-          <div className="mb-4 flex flex-col gap-2 border-b border-slate-800 pb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mb-4 flex flex-col gap-3 border-b border-slate-800 pb-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-2 text-indigo-400">
               <ShieldCheck size={18} />
               <h3 className="text-sm font-bold uppercase tracking-widest">Business Rules</h3>

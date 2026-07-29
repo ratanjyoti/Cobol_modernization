@@ -38,6 +38,9 @@ IMPORTANT WRITING RULES:
 - Write in business language, not COBOL syntax.
 - Do not say "IF statement", "MOVE", "PERFORM", "paragraph", or "variable" unless required in technical_ref.
 - Convert technical names into business terms where possible.
+- Extract intent, not syntax. The rule must explain the business outcome that must be preserved.
+- Prefer rule wording like: "If customer balance is negative, the account must be marked as overdraft."
+- Avoid vague rules such as "the system must preserve behavior" or "apply the corresponding business outcome."
 - Be specific and evidence-based. Do not invent business rules.
 - Every rule must be traceable to a technical_ref.
 - If the code contains validation, calculation, status change, file read/write, SQL, or external call behavior, extract it.
@@ -58,6 +61,16 @@ EXTRACT:
 
 3. rules:
    Atomic rules. Each rule must describe exactly one business rule, validation, calculation, data access rule, or state transition.
+   For condition/action blocks, combine the condition and action into one business intent rule.
+
+Example:
+COBOL:
+IF CUSTOMER-BALANCE < 0
+   MOVE 'Y' TO OVERDRAFT-FLAG
+END-IF
+
+Business rule:
+If customer balance is negative, the account must be marked as overdraft.
 
 OUTPUT FORMAT:
 Return ONLY valid JSON. No markdown. No explanation outside JSON.
@@ -202,6 +215,8 @@ Schema:
 
             if not rule_text:
                 continue
+            if self._is_generic_preservation_rule(rule_text):
+                continue
 
             rule_type = str(rule_type).upper().strip()
             allowed_types = {
@@ -258,6 +273,7 @@ Schema:
         functional_logic = self._functional_logic(domain, raw_code)
 
         rules = []
+        rules.extend(self._rules_from_structured_blocks(raw_code, domain))
         rules.extend(self._rules_from_yaml(technical_yaml))
         rules.extend(self._rules_from_code(raw_code, domain))
 
@@ -267,6 +283,8 @@ Schema:
         for rule in rules:
             rule_text = self._clean_text(rule.get("rule_text", ""))
             if not rule_text:
+                continue
+            if self._is_generic_preservation_rule(rule_text):
                 continue
 
             key = rule_text.lower()
@@ -279,17 +297,6 @@ Schema:
                 "rule_type": rule.get("rule_type", "BUSINESS_DECISION"),
                 "technical_ref": rule.get("technical_ref", ""),
                 "confidence": rule.get("confidence", "MEDIUM"),
-            })
-
-        if not unique_rules:
-            unique_rules.append({
-                "rule_text": (
-                    f"The {program_name} component must preserve its "
-                    f"{domain['process']} behavior during modernization."
-                ),
-                "rule_type": "WORKFLOW",
-                "technical_ref": "Derived from uploaded source file",
-                "confidence": "LOW",
             })
 
         return {
@@ -323,6 +330,9 @@ Schema:
             if not description:
                 continue
 
+            if re.match(r"^\s*IF\b", description, flags=re.IGNORECASE):
+                continue
+
             rule_text, rule_type = self._line_to_business_rule(description)
 
             if rule_text:
@@ -348,6 +358,9 @@ Schema:
             if upper.startswith(("*", "*>")):
                 continue
 
+            if upper.startswith(("IF ", "END-IF", "END IF", "ELSE")):
+                continue
+
             rule_text, rule_type = self._line_to_business_rule(line, domain)
 
             if rule_text:
@@ -359,6 +372,96 @@ Schema:
                 })
 
         return rules
+
+    def _rules_from_structured_blocks(self, raw_code: str, domain: dict) -> list[dict]:
+        lines = [
+            (line_no, self._strip_sequence_number(raw_line).strip())
+            for line_no, raw_line in enumerate((raw_code or "").splitlines(), start=1)
+        ]
+        rules = []
+
+        for index, (line_no, line) in enumerate(lines):
+            if not line or line.upper().startswith(("*", "*>")):
+                continue
+
+            upper = line.upper()
+            if not upper.startswith("IF "):
+                continue
+
+            condition = self._condition_to_business_text(line)
+            action_lines: list[tuple[int, str]] = []
+
+            for action_line_no, action_line in lines[index + 1:index + 8]:
+                action_upper = action_line.upper()
+                if not action_line or action_upper.startswith(("*", "*>")):
+                    continue
+                if action_upper.startswith(("ELSE", "END-IF", "END IF")):
+                    break
+                action_lines.append((action_line_no, action_line))
+
+            for action_line_no, action_line in action_lines:
+                action_text, rule_type = self._action_to_business_outcome(action_line, domain)
+                if not action_text:
+                    continue
+
+                rules.append({
+                    "rule_text": f"If {condition}, {action_text}.",
+                    "rule_type": rule_type,
+                    "technical_ref": f"COBOL lines {line_no}-{action_line_no}: {line} / {action_line}",
+                    "confidence": "HIGH",
+                })
+
+        return rules
+
+    def _action_to_business_outcome(self, line: str, domain: dict) -> tuple[str, str]:
+        stripped = self._strip_sequence_number(line).strip().rstrip(".")
+        upper = stripped.upper()
+
+        move_match = re.search(
+            r"\bMOVE\s+(.+?)\s+TO\s+([A-Z0-9_-]+)",
+            stripped,
+            flags=re.IGNORECASE,
+        )
+        if move_match:
+            value = move_match.group(1).strip()
+            target = move_match.group(2).strip()
+            target_phrase = self._business_phrase(target)
+            value_phrase = self._literal_to_business_value(value, target)
+
+            if self._is_flag_target(target):
+                return (
+                    f"the {self._flag_subject(target, domain)} must be marked as {self._flag_state(target, value_phrase)}",
+                    "STATE_TRANSITION",
+                )
+
+            return (
+                f"the {target_phrase} must be set to {value_phrase}",
+                "STATE_TRANSITION",
+            )
+
+        compute_match = re.search(r"\bCOMPUTE\s+([A-Z0-9_-]+)\s*=", stripped, flags=re.IGNORECASE)
+        if compute_match:
+            return (
+                f"the {self._business_phrase(compute_match.group(1))} must be recalculated using the defined business formula",
+                "CALCULATION",
+            )
+
+        perform_match = re.search(r"\bPERFORM\s+([A-Z0-9_-]+)", stripped, flags=re.IGNORECASE)
+        if perform_match:
+            return (
+                f"the {self._business_phrase(perform_match.group(1))} business step must be performed",
+                "WORKFLOW",
+            )
+
+        if upper.startswith("DISPLAY "):
+            message = self._display_message_to_business_text(stripped)
+            return (f"{message} must be shown to the business user or output channel", "WORKFLOW")
+
+        if upper.startswith("CALL "):
+            service = self._extract_called_service(stripped)
+            return (f"{service} must be invoked to complete the supporting business operation", "EXTERNAL_SERVICE")
+
+        return ("", "")
 
     def _line_to_business_rule(self, line: str, domain: dict | None = None) -> tuple[str, str]:
         domain = domain or {
@@ -372,7 +475,7 @@ Schema:
         if upper.startswith("IF ") or " IF " in upper or upper.startswith("EVALUATE "):
             condition = self._condition_to_business_text(stripped)
             return (
-                f"When {condition}, the system must apply the corresponding business outcome consistently.",
+                f"If {condition}, the matching business outcome must be applied.",
                 "BUSINESS_DECISION",
             )
 
@@ -494,6 +597,14 @@ Schema:
                 "outcome": "payroll records remain accurate and ready for business processing",
             }
 
+        if any(word in text for word in ["overdraft", "account", "acct", "balance"]):
+            return {
+                "entity": "account",
+                "process": "account processing",
+                "action": "validating account information, evaluating balances, and applying account-related business decisions",
+                "outcome": "account activity follows operational policies",
+            }
+
         if any(word in text for word in ["customer", "cust", "client"]):
             if "display" in program_lower:
                 action = "displaying customer information including identifiers, names, addresses, balances, and statuses"
@@ -507,14 +618,6 @@ Schema:
                 "process": "customer information handling",
                 "action": action,
                 "outcome": "staff can access customer details needed for service and account decisions",
-            }
-
-        if any(word in text for word in ["account", "acct", "balance"]):
-            return {
-                "entity": "account",
-                "process": "account processing",
-                "action": "validating account information, evaluating balances, and applying account-related business decisions",
-                "outcome": "account activity follows operational policies",
             }
 
         if any(word in text for word in ["order", "invoice", "payment", "transaction", "txn"]):
@@ -593,14 +696,89 @@ Schema:
             flags=re.IGNORECASE,
         )[0]
 
+        condition = self._normalize_cobol_check_symbols(condition)
+        if re.fullmatch(r"\s*VERIFY[-_\s]+PASSED\s*", condition, flags=re.IGNORECASE):
+            return "verification passed condition is active"
+        if self._looks_like_condition_flag(condition):
+            return f"{self._business_phrase(condition)} is active"
+
+        negative_match = re.match(r"\s*([A-Z0-9_-]+)\s*(?:<|LESS\s+THAN)\s*(?:0|ZERO|ZEROS|ZEROES)\s*$", condition, flags=re.IGNORECASE)
+        if negative_match:
+            return f"{self._business_phrase(negative_match.group(1))} is negative"
+
+        positive_match = re.match(r"\s*([A-Z0-9_-]+)\s*(?:>|GREATER\s+THAN)\s*(?:0|ZERO|ZEROS|ZEROES)\s*$", condition, flags=re.IGNORECASE)
+        if positive_match:
+            return f"{self._business_phrase(positive_match.group(1))} is positive"
+
+        zero_match = re.match(r"\s*([A-Z0-9_-]+)\s*(?:=|EQUAL\s+TO|EQUAL)\s*(?:0|ZERO|ZEROS|ZEROES)\s*$", condition, flags=re.IGNORECASE)
+        if zero_match:
+            return f"{self._business_phrase(zero_match.group(1))} is zero"
+
         condition = condition.replace("<=", " is less than or equal to ")
         condition = condition.replace(">=", " is greater than or equal to ")
         condition = condition.replace(" NOT = ", " is not equal to ")
+        condition = condition.replace(" NOT EQUAL ", " is not equal to ")
+        condition = condition.replace(" EQUAL ", " is equal to ")
+        condition = condition.replace(" LESS THAN ", " is less than ")
+        condition = condition.replace(" GREATER THAN ", " is greater than ")
         condition = condition.replace("=", " is equal to ")
         condition = condition.replace("<", " is less than ")
         condition = condition.replace(">", " is greater than ")
 
         return self._business_phrase(condition)
+
+    def _literal_to_business_value(self, value: str, target: str) -> str:
+        cleaned = str(value or "").strip().strip("'\"").rstrip(".")
+        target_upper = target.upper()
+
+        if cleaned.upper() in {"Y", "YES", "TRUE", "1"}:
+            if "OVERDRAFT" in target_upper:
+                return "overdraft"
+            return "active"
+        if cleaned.upper() in {"N", "NO", "FALSE", "0"}:
+            if "OVERDRAFT" in target_upper:
+                return "not overdraft"
+            return "inactive"
+        if cleaned.upper() in {"ZERO", "ZEROS", "ZEROES"}:
+            return "zero"
+
+        return self._business_phrase(cleaned)
+
+    @staticmethod
+    def _is_flag_target(target: str) -> bool:
+        upper = str(target or "").upper()
+        return any(marker in upper for marker in ["FLAG", "SW", "SWITCH", "IND", "INDICATOR", "STATUS"])
+
+    def _flag_subject(self, target: str, domain: dict) -> str:
+        if "OVERDRAFT" in str(target or "").upper():
+            return "account"
+
+        target_phrase = self._business_phrase(target)
+        target_phrase = re.sub(r"\b(flag|switch|indicator|status)\b", "", target_phrase).strip()
+
+        if target_phrase:
+            return target_phrase
+
+        return domain.get("entity") or "business record"
+
+    @staticmethod
+    def _flag_state(target: str, value_phrase: str) -> str:
+        if value_phrase:
+            return value_phrase
+
+        target_upper = str(target or "").upper()
+        if "OVERDRAFT" in target_upper:
+            return "overdraft"
+
+        return "active"
+
+    def _display_message_to_business_text(self, line: str) -> str:
+        text = re.sub(r"^\s*DISPLAY\s+", "", line, flags=re.IGNORECASE).strip(" .'\"")
+        text = self._normalize_display_text(text)
+        if not text:
+            return "the required business message"
+
+        return f"the {self._business_phrase(text)} message"
 
     def _sql_to_business_text(self, line: str) -> str:
         upper = line.upper()
@@ -676,8 +854,24 @@ Schema:
     def _clean_text(text: Any) -> str:
         return re.sub(r"\s+", " ", str(text or "").strip())
 
+    @staticmethod
+    def _is_generic_preservation_rule(text: str) -> bool:
+        lowered = str(text or "").lower()
+        generic_patterns = [
+            "must preserve its",
+            "preserve behavior",
+            "preserve its behavior",
+            "during modernization",
+            "matching business outcome must be applied",
+            "corresponding business outcome",
+            "legacy business processing behavior",
+        ]
+        return any(pattern in lowered for pattern in generic_patterns)
+
     def _business_phrase(self, text: str) -> str:
-        phrase = str(text or "").replace("-", " ").replace("_", " ")
+        phrase = self._normalize_cobol_check_symbols(str(text or ""))
+        phrase = phrase.replace("-", " ").replace("_", " ")
+        phrase = phrase.strip(" .'\"")
 
         replacements = {
             "acct": "account",
@@ -693,6 +887,7 @@ Schema:
             "id": "identifier",
             "num": "number",
             "qty": "quantity",
+            "compare": "comparison",
             "sal": "salary",
             "he": "overtime hours",
             "irrf": "income tax withholding",
@@ -706,3 +901,35 @@ Schema:
 
         cleaned = re.sub(r"\s+", " ", " ".join(words)).strip()
         return cleaned
+
+    @staticmethod
+    def _normalize_cobol_check_symbols(text: str) -> str:
+        value = str(text or "")
+        value = re.sub(r"==\s*UT\s*==", " ", value, flags=re.IGNORECASE)
+        value = re.sub(r"==\s*([A-Z0-9_-]+)\s*==", r" \1 ", value, flags=re.IGNORECASE)
+        value = value.replace("==", " ")
+        return re.sub(r"\s+", " ", value).strip()
+
+    @staticmethod
+    def _looks_like_condition_flag(condition: str) -> bool:
+        value = str(condition or "").strip()
+        if not value:
+            return False
+        if re.search(r"[<>=]|\b(EQUAL|LESS|GREATER|NOT)\b", value, flags=re.IGNORECASE):
+            return False
+        return bool(re.fullmatch(r"[A-Z0-9][A-Z0-9_\-\s]*", value, flags=re.IGNORECASE))
+
+    def _normalize_display_text(self, text: str) -> str:
+        value = self._normalize_cobol_check_symbols(text)
+        value = re.sub(r"['\"]", " ", value)
+        value = re.sub(r"\bEXPECTED\b", "expected", value, flags=re.IGNORECASE)
+        value = re.sub(r"\bPASSED\b", "verification passed", value, flags=re.IGNORECASE)
+        value = re.sub(r"\s+", " ", value).strip()
+
+        if re.search(r"\bexpected\b", value, flags=re.IGNORECASE):
+            tail = re.sub(r"\bexpected\b", "", value, flags=re.IGNORECASE).strip()
+            if tail:
+                return f"expected {tail} result"
+            return "expected result"
+
+        return value
