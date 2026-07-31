@@ -1,0 +1,110 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 23,
+  "source_file": "COPYP002-padded.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "Convert COBOL to Java Quarkus backend service",
+  "classes": [
+    {
+      "class_name": "Group1Item1",
+      "file_path": "com/modernizer/migration/Group1Item1.java",
+      "layer": "resource",
+      "responsibility": "Resource class for Group 1 item 1",
+      "source_mapping": [
+        "COPYP002-padded.CBL::XXX::-GROUP-1"
+      ]
+    },
+    {
+      "class_name": "Group1Item2",
+      "file_path": "com/modernizer/migration/Group1Item2.java",
+      "layer": "resource",
+      "responsibility": "Resource class for Group 1 item 2",
+      "source_mapping": [
+        "COPYP002-padded.CBL::XXX::-ITEM-1-1"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "getItem1",
+      "owning_class": "Group1Item1",
+      "responsibility": "Get item 1 from Group 1",
+      "source_mapping": [
+        "COPYP002-padded.CBL::XXX::-ITEM-1-1-1"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "getItem2",
+      "owning_class": "Group1Item2",
+      "responsibility": "Get item 2 from Group 1",
+      "source_mapping": [
+        "COPYP002-padded.CBL::XXX::-ITEM-1-1-2"
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [],
+  "external_dependencies": [],
+  "unresolved_items": [
+    "adapter-stub"
+  ],
+  "assumptions": [],
+  "raw_plan": {
+    "summary": "Convert COBOL to Java Quarkus backend service",
+    "target_package_or_namespace": "com.modernizer.migration",
+    "classes": [
+      {
+        "class_name": "Group1Item1",
+        "file_path": "com/modernizer/migration/Group1Item1.java",
+        "layer": "resource",
+        "responsibility": "Resource class for Group 1 item 1",
+        "source_mapping": [
+          "COPYP002-padded.CBL::XXX::-GROUP-1"
+        ]
+      },
+      {
+        "class_name": "Group1Item2",
+        "file_path": "com/modernizer/migration/Group1Item2.java",
+        "layer": "resource",
+        "responsibility": "Resource class for Group 1 item 2",
+        "source_mapping": [
+          "COPYP002-padded.CBL::XXX::-ITEM-1-1"
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "getItem1",
+        "owning_class": "Group1Item1",
+        "responsibility": "Get item 1 from Group 1",
+        "source_mapping": [
+          "COPYP002-padded.CBL::XXX::-ITEM-1-1-1"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "getItem2",
+        "owning_class": "Group1Item2",
+        "responsibility": "Get item 2 from Group 1",
+        "source_mapping": [
+          "COPYP002-padded.CBL::XXX::-ITEM-1-1-2"
+        ],
+        "inputs": [],
+        "outputs": []
+      }
+    ],
+    "data_models": [],
+    "external_dependencies": [],
+    "unresolved_items": [
+      "adapter-stub"
+    ],
+    "assumptions": []
+  }
+}

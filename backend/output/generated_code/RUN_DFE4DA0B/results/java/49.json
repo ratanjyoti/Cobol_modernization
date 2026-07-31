@@ -1,0 +1,22 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "status": "GENERATED",
+  "summary": "Generated typed model/DTO from data copybook TEXEM.cpy.",
+  "generated_files": [
+    {
+      "path": "src/main/java/com/modernizer/migration/model/Texem.java",
+      "language": "java",
+      "file_type": "dto",
+      "content": "package com.modernizer.migration.model;\n\n/**\n * Generated model from COBOL copybook TEXEM.cpy.\n * Fields are derived from COBOL PIC clauses and locked symbol mappings.\n */\npublic class Texem {\n    private String firstName;\n    private String lastName;\n    private String tmsCrea;\n\n    public String getFirstName() {\n        return firstName;\n    }\n\n    public void setFirstName(String firstName) {\n        this.firstName = firstName;\n    }\n    public String getLastName() {\n        return lastName;\n    }\n\n    public void setLastName(String lastName) {\n        this.lastName = lastName;\n    }\n    public String getTmsCrea() {\n        return tmsCrea;\n    }\n\n    public void setTmsCrea(String tmsCrea) {\n        this.tmsCrea = tmsCrea;\n    }\n}\n",
+      "source_file": "TEXEM.cpy",
+      "notes": [
+        "Generated deterministically from copybook PIC fields."
+      ]
+    }
+  ],
+  "unresolved_items": [],
+  "warnings": [],
+  "errors": []
+}

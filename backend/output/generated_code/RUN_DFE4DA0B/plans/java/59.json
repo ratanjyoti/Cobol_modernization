@@ -1,0 +1,134 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 59,
+  "source_file": "REPLAC.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "COBOL to Java Quarkus conversion plan",
+  "classes": [
+    {
+      "class_name": "ReplacService",
+      "file_path": "ReplacService.java",
+      "layer": "resource",
+      "responsibility": "Handles the business logic of the GREETING program.",
+      "source_mapping": [
+        "REPLAC.CBL:2000-SPEAK",
+        "REPLAC.CBL:3000-SAY-NO-MORE",
+        "REPLAC.CBL:9999-END"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "speak",
+      "owning_class": "ReplacService",
+      "responsibility": "Speaks a greeting message based on the WS-FRIEND value.",
+      "source_mapping": [
+        "REPLAC.CBL:2000-SPEAK"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "sayNoMore",
+      "owning_class": "ReplacService",
+      "responsibility": "Displays a farewell message with the WS-FRIEND value.",
+      "source_mapping": [
+        "REPLAC.CBL:3000-SAY-NO-MORE"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "end",
+      "owning_class": "ReplacService",
+      "responsibility": "Marks the end of the program.",
+      "source_mapping": [
+        "REPLAC.CBL:9999-END"
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [],
+  "external_dependencies": [],
+  "unresolved_items": [
+    "WS-COUNT",
+    "WS-FRIEND",
+    "WS-GREETING",
+    "WS-FAREWELL"
+  ],
+  "assumptions": [],
+  "raw_plan": {
+    "summary": "COBOL to Java Quarkus conversion plan",
+    "target_package_or_namespace": "com.modernizer.migration",
+    "classes": [
+      {
+        "class_name": "ReplacService",
+        "file_path": "ReplacService.java",
+        "layer": "resource",
+        "responsibility": "Handles the business logic of the GREETING program.",
+        "source_mapping": [
+          "REPLAC.CBL:2000-SPEAK",
+          "REPLAC.CBL:3000-SAY-NO-MORE",
+          "REPLAC.CBL:9999-END"
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "speak",
+        "owning_class": "ReplacService",
+        "responsibility": "Speaks a greeting message based on the WS-FRIEND value.",
+        "source_mapping": [
+          "REPLAC.CBL:2000-SPEAK"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "sayNoMore",
+        "owning_class": "ReplacService",
+        "responsibility": "Displays a farewell message with the WS-FRIEND value.",
+        "source_mapping": [
+          "REPLAC.CBL:3000-SAY-NO-MORE"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "end",
+        "owning_class": "ReplacService",
+        "responsibility": "Marks the end of the program.",
+        "source_mapping": [
+          "REPLAC.CBL:9999-END"
+        ],
+        "inputs": [],
+        "outputs": []
+      }
+    ],
+    "data_models": [],
+    "external_dependencies": [],
+    "unresolved_items": [
+      {
+        "name": "WS-COUNT",
+        "type": "int"
+      },
+      {
+        "name": "WS-FRIEND",
+        "type": "String"
+      },
+      {
+        "name": "WS-GREETING",
+        "type": "String"
+      },
+      {
+        "name": "WS-FAREWELL",
+        "type": "String"
+      }
+    ],
+    "assumptions": []
+  }
+}

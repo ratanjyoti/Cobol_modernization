@@ -1,0 +1,294 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 58,
+  "source_file": "NUMBERS.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "Conversion Plan for NUMBERS.CBL to Java Quarkus",
+  "classes": [
+    {
+      "class_name": "NumbersService",
+      "file_path": "NumbersService.java",
+      "layer": "service",
+      "responsibility": "Business logic for numbers operations",
+      "source_mapping": [
+        "NUMBERS.CBL",
+        "ENVIRONMENT DIVISION"
+      ]
+    },
+    {
+      "class_name": "NumbersRepository",
+      "file_path": "NumbersRepository.java",
+      "layer": "repository",
+      "responsibility": "Data access for numbers operations",
+      "source_mapping": [
+        "NUMBERS.CBL",
+        "DATA DIVISION"
+      ]
+    },
+    {
+      "class_name": "NumbersDTO",
+      "file_path": "NumbersDTO.java",
+      "layer": "dto",
+      "responsibility": "Data transfer object for numbers operations",
+      "source_mapping": [
+        "NUMBERS.CBL",
+        "WORKING-STORAGE SECTION"
+      ]
+    },
+    {
+      "class_name": "NumberServiceTest",
+      "file_path": "NumberServiceTest.java",
+      "layer": "test",
+      "responsibility": "Unit tests for numbers service",
+      "source_mapping": [
+        "NUMBERS.CBL",
+        "PROCEDURE DIVISION"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "getNumbers",
+      "owning_class": "NumbersService",
+      "responsibility": "Returns a list of numbers",
+      "source_mapping": [
+        "NUMBERS.CBL",
+        "ENVIRONMENT DIVISION"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "getNumberOccurrence",
+      "owning_class": "NumbersRepository",
+      "responsibility": "Returns the occurrence of a number",
+      "source_mapping": [
+        "NUMBERS.CBL",
+        "DATA DIVISION"
+      ],
+      "inputs": [
+        "wsNumOcc"
+      ],
+      "outputs": []
+    },
+    {
+      "method_name": "getNumberDisplayField",
+      "owning_class": "NumbersRepository",
+      "responsibility": "Returns the display field of a number",
+      "source_mapping": [
+        "NUMBERS.CBL",
+        "DATA DIVISION"
+      ],
+      "inputs": [
+        "wsDisplayField"
+      ],
+      "outputs": []
+    },
+    {
+      "method_name": "getNumberField1",
+      "owning_class": "NumbersRepository",
+      "responsibility": "Returns the first field of a number",
+      "source_mapping": [
+        "NUMBERS.CBL",
+        "DATA DIVISION"
+      ],
+      "inputs": [
+        "wsField1"
+      ],
+      "outputs": []
+    },
+    {
+      "method_name": "getNumberField2",
+      "owning_class": "NumbersRepository",
+      "responsibility": "Returns the second field of a number",
+      "source_mapping": [
+        "NUMBERS.CBL",
+        "DATA DIVISION"
+      ],
+      "inputs": [
+        "wsField2"
+      ],
+      "outputs": []
+    },
+    {
+      "method_name": "getNumberField3",
+      "owning_class": "NumbersRepository",
+      "responsibility": "Returns the third field of a number",
+      "source_mapping": [
+        "NUMBERS.CBL",
+        "DATA DIVISION"
+      ],
+      "inputs": [
+        "wsField3"
+      ],
+      "outputs": []
+    },
+    {
+      "method_name": "getNumberField4",
+      "owning_class": "NumbersRepository",
+      "responsibility": "Returns the fourth field of a number",
+      "source_mapping": [
+        "NUMBERS.CBL",
+        "DATA DIVISION"
+      ],
+      "inputs": [
+        "wsField4"
+      ],
+      "outputs": []
+    }
+  ],
+  "data_models": [],
+  "external_dependencies": [],
+  "unresolved_items": [
+    "adapter-stub"
+  ],
+  "assumptions": [],
+  "raw_plan": {
+    "summary": "Conversion Plan for NUMBERS.CBL to Java Quarkus",
+    "target_package_or_namespace": "com.modernizer.migration",
+    "classes": [
+      {
+        "class_name": "NumbersService",
+        "file_path": "NumbersService.java",
+        "layer": "service",
+        "responsibility": "Business logic for numbers operations",
+        "source_mapping": [
+          "NUMBERS.CBL",
+          "ENVIRONMENT DIVISION"
+        ]
+      },
+      {
+        "class_name": "NumbersRepository",
+        "file_path": "NumbersRepository.java",
+        "layer": "repository",
+        "responsibility": "Data access for numbers operations",
+        "source_mapping": [
+          "NUMBERS.CBL",
+          "DATA DIVISION"
+        ]
+      },
+      {
+        "class_name": "NumbersDTO",
+        "file_path": "NumbersDTO.java",
+        "layer": "dto",
+        "responsibility": "Data transfer object for numbers operations",
+        "source_mapping": [
+          "NUMBERS.CBL",
+          "WORKING-STORAGE SECTION"
+        ]
+      },
+      {
+        "class_name": "NumberServiceTest",
+        "file_path": "NumberServiceTest.java",
+        "layer": "test",
+        "responsibility": "Unit tests for numbers service",
+        "source_mapping": [
+          "NUMBERS.CBL",
+          "PROCEDURE DIVISION"
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "getNumbers",
+        "owning_class": "NumbersService",
+        "responsibility": "Returns a list of numbers",
+        "source_mapping": [
+          "NUMBERS.CBL",
+          "ENVIRONMENT DIVISION"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "getNumberOccurrence",
+        "owning_class": "NumbersRepository",
+        "responsibility": "Returns the occurrence of a number",
+        "source_mapping": [
+          "NUMBERS.CBL",
+          "DATA DIVISION"
+        ],
+        "inputs": [
+          "wsNumOcc"
+        ],
+        "outputs": []
+      },
+      {
+        "method_name": "getNumberDisplayField",
+        "owning_class": "NumbersRepository",
+        "responsibility": "Returns the display field of a number",
+        "source_mapping": [
+          "NUMBERS.CBL",
+          "DATA DIVISION"
+        ],
+        "inputs": [
+          "wsDisplayField"
+        ],
+        "outputs": []
+      },
+      {
+        "method_name": "getNumberField1",
+        "owning_class": "NumbersRepository",
+        "responsibility": "Returns the first field of a number",
+        "source_mapping": [
+          "NUMBERS.CBL",
+          "DATA DIVISION"
+        ],
+        "inputs": [
+          "wsField1"
+        ],
+        "outputs": []
+      },
+      {
+        "method_name": "getNumberField2",
+        "owning_class": "NumbersRepository",
+        "responsibility": "Returns the second field of a number",
+        "source_mapping": [
+          "NUMBERS.CBL",
+          "DATA DIVISION"
+        ],
+        "inputs": [
+          "wsField2"
+        ],
+        "outputs": []
+      },
+      {
+        "method_name": "getNumberField3",
+        "owning_class": "NumbersRepository",
+        "responsibility": "Returns the third field of a number",
+        "source_mapping": [
+          "NUMBERS.CBL",
+          "DATA DIVISION"
+        ],
+        "inputs": [
+          "wsField3"
+        ],
+        "outputs": []
+      },
+      {
+        "method_name": "getNumberField4",
+        "owning_class": "NumbersRepository",
+        "responsibility": "Returns the fourth field of a number",
+        "source_mapping": [
+          "NUMBERS.CBL",
+          "DATA DIVISION"
+        ],
+        "inputs": [
+          "wsField4"
+        ],
+        "outputs": []
+      }
+    ],
+    "data_models": [],
+    "external_dependencies": [],
+    "unresolved_items": [
+      {
+        "name": "adapter-stub"
+      }
+    ],
+    "assumptions": []
+  }
+}

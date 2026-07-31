@@ -1,0 +1,264 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 29,
+  "source_file": "EX005-padded.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "Conversion Plan for EX005-padded.CBL to Java Quarkus",
+  "classes": [
+    {
+      "class_name": "Copy003Item1",
+      "file_path": "Copy003Item1.java",
+      "layer": "resource",
+      "responsibility": "Resource class for COPY003-ITEM-1",
+      "source_mapping": [
+        "COPY003-ITEM-1 PIC X."
+      ]
+    },
+    {
+      "class_name": "Copy003Item2",
+      "file_path": "Copy003Item2.java",
+      "layer": "resource",
+      "responsibility": "Resource class for COPY003-ITEM-2",
+      "source_mapping": [
+        "COPY003-ITEM-2 PIC X."
+      ]
+    },
+    {
+      "class_name": "Copy004Item1",
+      "file_path": "Copy004Item1.java",
+      "layer": "resource",
+      "responsibility": "Resource class for COPY004-ITEM-1",
+      "source_mapping": [
+        "COPY004-ITEM-1 PIC X."
+      ]
+    },
+    {
+      "class_name": "Copy004Item2",
+      "file_path": "Copy004Item2.java",
+      "layer": "resource",
+      "responsibility": "Resource class for COPY004-ITEM-2",
+      "source_mapping": [
+        "COPY004-ITEM-2 PIC X."
+      ]
+    },
+    {
+      "class_name": "Copy006Item1",
+      "file_path": "Copy006Item1.java",
+      "layer": "resource",
+      "responsibility": "Resource class for COPY006-ITEM-1",
+      "source_mapping": [
+        "COPY006-ITEM-1 PIC X."
+      ]
+    },
+    {
+      "class_name": "Copy006Item2",
+      "file_path": "Copy006Item2.java",
+      "layer": "resource",
+      "responsibility": "Resource class for COPY006-ITEM-2",
+      "source_mapping": [
+        "COPY006-ITEM-2 PIC X."
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "getCopy003Item1",
+      "owning_class": "Copy003Item1",
+      "responsibility": "Returns the value of COPY003-ITEM-1",
+      "source_mapping": [
+        "COPY005-GROUP-ITEM.01"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "getCopy003Item2",
+      "owning_class": "Copy003Item2",
+      "responsibility": "Returns the value of COPY003-ITEM-2",
+      "source_mapping": [
+        "COPY005-GROUP-ITEM.01"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "getCopy004Item1",
+      "owning_class": "Copy004Item1",
+      "responsibility": "Returns the value of COPY004-ITEM-1",
+      "source_mapping": [
+        "COPY005-GROUP-ITEM.01"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "getCopy004Item2",
+      "owning_class": "Copy004Item2",
+      "responsibility": "Returns the value of COPY004-ITEM-2",
+      "source_mapping": [
+        "COPY005-GROUP-ITEM.01"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "getCopy006Item1",
+      "owning_class": "Copy006Item1",
+      "responsibility": "Returns the value of COPY006-ITEM-1",
+      "source_mapping": [
+        "COPY005-GROUP-ITEM.01"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "getCopy006Item2",
+      "owning_class": "Copy006Item2",
+      "responsibility": "Returns the value of COPY006-ITEM-2",
+      "source_mapping": [
+        "COPY005-GROUP-ITEM.01"
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [],
+  "external_dependencies": [],
+  "unresolved_items": [
+    "adapter-stub"
+  ],
+  "assumptions": [],
+  "raw_plan": {
+    "summary": "Conversion Plan for EX005-padded.CBL to Java Quarkus",
+    "target_package_or_namespace": "com.modernizer.migration",
+    "classes": [
+      {
+        "class_name": "Copy003Item1",
+        "file_path": "Copy003Item1.java",
+        "layer": "resource",
+        "responsibility": "Resource class for COPY003-ITEM-1",
+        "source_mapping": [
+          "COPY003-ITEM-1 PIC X."
+        ]
+      },
+      {
+        "class_name": "Copy003Item2",
+        "file_path": "Copy003Item2.java",
+        "layer": "resource",
+        "responsibility": "Resource class for COPY003-ITEM-2",
+        "source_mapping": [
+          "COPY003-ITEM-2 PIC X."
+        ]
+      },
+      {
+        "class_name": "Copy004Item1",
+        "file_path": "Copy004Item1.java",
+        "layer": "resource",
+        "responsibility": "Resource class for COPY004-ITEM-1",
+        "source_mapping": [
+          "COPY004-ITEM-1 PIC X."
+        ]
+      },
+      {
+        "class_name": "Copy004Item2",
+        "file_path": "Copy004Item2.java",
+        "layer": "resource",
+        "responsibility": "Resource class for COPY004-ITEM-2",
+        "source_mapping": [
+          "COPY004-ITEM-2 PIC X."
+        ]
+      },
+      {
+        "class_name": "Copy006Item1",
+        "file_path": "Copy006Item1.java",
+        "layer": "resource",
+        "responsibility": "Resource class for COPY006-ITEM-1",
+        "source_mapping": [
+          "COPY006-ITEM-1 PIC X."
+        ]
+      },
+      {
+        "class_name": "Copy006Item2",
+        "file_path": "Copy006Item2.java",
+        "layer": "resource",
+        "responsibility": "Resource class for COPY006-ITEM-2",
+        "source_mapping": [
+          "COPY006-ITEM-2 PIC X."
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "getCopy003Item1",
+        "owning_class": "Copy003Item1",
+        "responsibility": "Returns the value of COPY003-ITEM-1",
+        "source_mapping": [
+          "COPY005-GROUP-ITEM.01"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "getCopy003Item2",
+        "owning_class": "Copy003Item2",
+        "responsibility": "Returns the value of COPY003-ITEM-2",
+        "source_mapping": [
+          "COPY005-GROUP-ITEM.01"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "getCopy004Item1",
+        "owning_class": "Copy004Item1",
+        "responsibility": "Returns the value of COPY004-ITEM-1",
+        "source_mapping": [
+          "COPY005-GROUP-ITEM.01"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "getCopy004Item2",
+        "owning_class": "Copy004Item2",
+        "responsibility": "Returns the value of COPY004-ITEM-2",
+        "source_mapping": [
+          "COPY005-GROUP-ITEM.01"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "getCopy006Item1",
+        "owning_class": "Copy006Item1",
+        "responsibility": "Returns the value of COPY006-ITEM-1",
+        "source_mapping": [
+          "COPY005-GROUP-ITEM.01"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "getCopy006Item2",
+        "owning_class": "Copy006Item2",
+        "responsibility": "Returns the value of COPY006-ITEM-2",
+        "source_mapping": [
+          "COPY005-GROUP-ITEM.01"
+        ],
+        "inputs": [],
+        "outputs": []
+      }
+    ],
+    "data_models": [],
+    "external_dependencies": [],
+    "unresolved_items": [
+      {
+        "name": "adapter-stub"
+      }
+    ],
+    "assumptions": []
+  }
+}

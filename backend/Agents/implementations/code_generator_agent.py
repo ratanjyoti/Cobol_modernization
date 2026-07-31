@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import requests
+from services.plan_sanitizer_service import PlanSanitizerService
 from services.symbol_registry_service import SymbolRegistryService
 from Agents.infrastructure.constitution_loader import ConstitutionLoader
 from Agents.infrastructure.codegen_context_builder import CodegenContextBuilder
@@ -44,6 +45,7 @@ class CodeGeneratorAgent:
         self.llm_config = llm_config or {}
         self.prompt_store = prompt_store or PromptStore()
         self.constitution_loader = constitution_loader or ConstitutionLoader()
+        self.plan_sanitizer = PlanSanitizerService()
 
     def generate_code(
         self,
@@ -155,11 +157,20 @@ class CodeGeneratorAgent:
             if not path or not content:
                 continue
 
+            file_type = self._file_type(item.get("file_type"))
+
+            safe_path = self.plan_sanitizer.sanitize_file_path_for_generated_file(
+                path=path,
+                source_file=file_context.filepath or file_context.filename,
+                target_language=target.value,
+                file_type=file_type.value,
+            )
+
             generated_files.append(
                 GeneratedFile(
-                    path=self._normalize_generated_path(path, content, target),
+                    path=safe_path,
                     language=target,
-                    file_type=self._file_type(item.get("file_type")),
+                    file_type=file_type,
                     content=content,
                     source_file=file_context.filename,
                     notes=list(item.get("notes") or []),

@@ -1,0 +1,489 @@
+{
+  "run_id": "RUN_B71F2E57",
+  "file_id": 960,
+  "source_file": "CCHECKPD.CPY",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "Conversion Plan for CCHECKPD.CPY to Java Quarkus",
+  "classes": [
+    {
+      "class_name": "CcheckpdService",
+      "file_path": "CcheckpdService.java",
+      "layer": "resource",
+      "responsibility": "Handles business logic and interactions with external systems",
+      "source_mapping": [
+        "COBOL/CCHECKPD.CPY",
+        "COBOL/CCHECKPD.CPY"
+      ]
+    },
+    {
+      "class_name": "CcheckpdRepository",
+      "file_path": "CcheckpdRepository.java",
+      "layer": "repository",
+      "responsibility": "Handles data access and storage",
+      "source_mapping": [
+        "COBOL/CCHECKPD.CPY",
+        "COBOL/CCHECKPD.CPY"
+      ]
+    },
+    {
+      "class_name": "MockService",
+      "file_path": "MockService.java",
+      "layer": "resource",
+      "responsibility": "Handles mock data and interactions with external systems",
+      "source_mapping": [
+        "COBOL/CCHECKPD.CPY",
+        "COBOL/CCHECKPD.CPY"
+      ]
+    },
+    {
+      "class_name": "CcheckpdDto",
+      "file_path": "CcheckpdDto.java",
+      "layer": "dto",
+      "responsibility": "Represents business data in a standardized format",
+      "source_mapping": [
+        "COBOL/CCHECKPD.CPY",
+        "COBOL/CCHECKPD.CPY"
+      ]
+    },
+    {
+      "class_name": "CcheckpdDomainModel",
+      "file_path": "CcheckpdDomainModel.java",
+      "layer": "domain",
+      "responsibility": "Represents business domain logic and rules",
+      "source_mapping": [
+        "COBOL/CCHECKPD.CPY",
+        "COBOL/CCHECKPD.CPY"
+      ]
+    },
+    {
+      "class_name": "CcheckpdException",
+      "file_path": "CcheckpdException.java",
+      "layer": "exception",
+      "responsibility": "Handles business exceptions and errors",
+      "source_mapping": [
+        "COBOL/CCHECKPD.CPY",
+        "COBOL/CCHECKPD.CPY"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "after",
+      "owning_class": "CcheckpdService",
+      "responsibility": "Handles after logic and cleanup",
+      "source_mapping": [
+        "COBOL/CCHECKPD.CPY",
+        "COBOL/CCHECKPD.CPY"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "assertAccesses",
+      "owning_class": "CcheckpdService",
+      "responsibility": "Handles assertions and access checks",
+      "source_mapping": [
+        "COBOL/CCHECKPD.CPY",
+        "COBOL/CCHECKPD.CPY"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "before",
+      "owning_class": "CcheckpdService",
+      "responsibility": "Handles before logic and setup",
+      "source_mapping": [
+        "COBOL/CCHECKPD.CPY",
+        "COBOL/CCHECKPD.CPY"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "checkExpectation",
+      "owning_class": "CcheckpdService",
+      "responsibility": "Handles expectation checks and validation",
+      "source_mapping": [
+        "COBOL/CCHECKPD.CPY",
+        "COBOL/CCHECKPD.CPY"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "compare",
+      "owning_class": "MockService",
+      "responsibility": "Handles comparison logic and mock data",
+      "source_mapping": [
+        "COBOL/CCHECKPD.CPY",
+        "COBOL/CCHECKPD.CPY"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "displayFailed",
+      "owning_class": "CcheckpdService",
+      "responsibility": "Handles display logic for failed cases",
+      "source_mapping": [
+        "COBOL/CCHECKPD.CPY",
+        "COBOL/CCHECKPD.CPY"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "displayPassed",
+      "owning_class": "CcheckpdService",
+      "responsibility": "Handles display logic for passed cases",
+      "source_mapping": [
+        "COBOL/CCHECKPD.CPY",
+        "COBOL/CCHECKPD.CPY"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "end",
+      "owning_class": "CcheckpdService",
+      "responsibility": "Handles end logic and cleanup",
+      "source_mapping": [
+        "COBOL/CCHECKPD.CPY",
+        "COBOL/CCHECKPD.CPY"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "initialize",
+      "owning_class": "MockService",
+      "responsibility": "Handles initialization logic and mock data",
+      "source_mapping": [
+        "COBOL/CCHECKPD.CPY",
+        "COBOL/CCHECKPD.CPY"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "lookupMock",
+      "owning_class": "MockService",
+      "responsibility": "Handles lookup logic for mock data",
+      "source_mapping": [
+        "COBOL/CCHECKPD.CPY",
+        "COBOL/CCHECKPD.CPY"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "setCallMock",
+      "owning_class": "MockService",
+      "responsibility": "Handles set logic for call mock data",
+      "source_mapping": [
+        "COBOL/CCHECKPD.CPY",
+        "COBOL/CCHECKPD.CPY"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "setCicsMock",
+      "owning_class": "MockService",
+      "responsibility": "Handles set logic for CICS mock data",
+      "source_mapping": [
+        "COBOL/CCHECKPD.CPY",
+        "COBOL/CCHECKPD.CPY"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "setFileMock",
+      "owning_class": "MockService",
+      "responsibility": "Handles set logic for file mock data",
+      "source_mapping": [
+        "COBOL/CCHECKPD.CPY",
+        "COBOL/CCHECKPD.CPY"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "setMock",
+      "owning_class": "CcheckpdService",
+      "responsibility": "Handles set logic for mock data",
+      "source_mapping": [
+        "COBOL/CCHECKPD.CPY",
+        "COBOL/CCHECKPD.CPY"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "setParaMock",
+      "owning_class": "MockService",
+      "responsibility": "Handles set logic for para mock data",
+      "source_mapping": [
+        "COBOL/CCHECKPD.CPY",
+        "COBOL/CCHECKPD.CPY"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "lookupFile",
+      "owning_class": "MockService",
+      "responsibility": "Handles lookup logic for file data",
+      "source_mapping": [
+        "COBOL/CCHECKPD.CPY",
+        "COBOL/CCHECKPD.CPY"
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [],
+  "external_dependencies": [
+    "MockService",
+    "CcheckpdRepository"
+  ],
+  "unresolved_items": [
+    "External call to adapter stub"
+  ],
+  "assumptions": [],
+  "raw_plan": {
+    "summary": "Conversion Plan for CCHECKPD.CPY to Java Quarkus",
+    "target_package_or_namespace": "com.modernizer.migration",
+    "classes": [
+      {
+        "class_name": "CcheckpdService",
+        "file_path": "CcheckpdService.java",
+        "layer": "resource",
+        "responsibility": "Handles business logic and interactions with external systems",
+        "source_mapping": [
+          "COBOL/CCHECKPD.CPY",
+          "COBOL/CCHECKPD.CPY"
+        ]
+      },
+      {
+        "class_name": "CcheckpdRepository",
+        "file_path": "CcheckpdRepository.java",
+        "layer": "repository",
+        "responsibility": "Handles data access and storage",
+        "source_mapping": [
+          "COBOL/CCHECKPD.CPY",
+          "COBOL/CCHECKPD.CPY"
+        ]
+      },
+      {
+        "class_name": "MockService",
+        "file_path": "MockService.java",
+        "layer": "resource",
+        "responsibility": "Handles mock data and interactions with external systems",
+        "source_mapping": [
+          "COBOL/CCHECKPD.CPY",
+          "COBOL/CCHECKPD.CPY"
+        ]
+      },
+      {
+        "class_name": "CcheckpdDto",
+        "file_path": "CcheckpdDto.java",
+        "layer": "dto",
+        "responsibility": "Represents business data in a standardized format",
+        "source_mapping": [
+          "COBOL/CCHECKPD.CPY",
+          "COBOL/CCHECKPD.CPY"
+        ]
+      },
+      {
+        "class_name": "CcheckpdDomainModel",
+        "file_path": "CcheckpdDomainModel.java",
+        "layer": "domain",
+        "responsibility": "Represents business domain logic and rules",
+        "source_mapping": [
+          "COBOL/CCHECKPD.CPY",
+          "COBOL/CCHECKPD.CPY"
+        ]
+      },
+      {
+        "class_name": "CcheckpdException",
+        "file_path": "CcheckpdException.java",
+        "layer": "exception",
+        "responsibility": "Handles business exceptions and errors",
+        "source_mapping": [
+          "COBOL/CCHECKPD.CPY",
+          "COBOL/CCHECKPD.CPY"
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "after",
+        "owning_class": "CcheckpdService",
+        "responsibility": "Handles after logic and cleanup",
+        "source_mapping": [
+          "COBOL/CCHECKPD.CPY",
+          "COBOL/CCHECKPD.CPY"
+        ]
+      },
+      {
+        "method_name": "assertAccesses",
+        "owning_class": "CcheckpdService",
+        "responsibility": "Handles assertions and access checks",
+        "source_mapping": [
+          "COBOL/CCHECKPD.CPY",
+          "COBOL/CCHECKPD.CPY"
+        ]
+      },
+      {
+        "method_name": "before",
+        "owning_class": "CcheckpdService",
+        "responsibility": "Handles before logic and setup",
+        "source_mapping": [
+          "COBOL/CCHECKPD.CPY",
+          "COBOL/CCHECKPD.CPY"
+        ]
+      },
+      {
+        "method_name": "checkExpectation",
+        "owning_class": "CcheckpdService",
+        "responsibility": "Handles expectation checks and validation",
+        "source_mapping": [
+          "COBOL/CCHECKPD.CPY",
+          "COBOL/CCHECKPD.CPY"
+        ]
+      },
+      {
+        "method_name": "compare",
+        "owning_class": "MockService",
+        "responsibility": "Handles comparison logic and mock data",
+        "source_mapping": [
+          "COBOL/CCHECKPD.CPY",
+          "COBOL/CCHECKPD.CPY"
+        ]
+      },
+      {
+        "method_name": "displayFailed",
+        "owning_class": "CcheckpdService",
+        "responsibility": "Handles display logic for failed cases",
+        "source_mapping": [
+          "COBOL/CCHECKPD.CPY",
+          "COBOL/CCHECKPD.CPY"
+        ]
+      },
+      {
+        "method_name": "displayPassed",
+        "owning_class": "CcheckpdService",
+        "responsibility": "Handles display logic for passed cases",
+        "source_mapping": [
+          "COBOL/CCHECKPD.CPY",
+          "COBOL/CCHECKPD.CPY"
+        ]
+      },
+      {
+        "method_name": "end",
+        "owning_class": "CcheckpdService",
+        "responsibility": "Handles end logic and cleanup",
+        "source_mapping": [
+          "COBOL/CCHECKPD.CPY",
+          "COBOL/CCHECKPD.CPY"
+        ]
+      },
+      {
+        "method_name": "initialize",
+        "owning_class": "MockService",
+        "responsibility": "Handles initialization logic and mock data",
+        "source_mapping": [
+          "COBOL/CCHECKPD.CPY",
+          "COBOL/CCHECKPD.CPY"
+        ]
+      },
+      {
+        "method_name": "lookupMock",
+        "owning_class": "MockService",
+        "responsibility": "Handles lookup logic for mock data",
+        "source_mapping": [
+          "COBOL/CCHECKPD.CPY",
+          "COBOL/CCHECKPD.CPY"
+        ]
+      },
+      {
+        "method_name": "setCallMock",
+        "owning_class": "MockService",
+        "responsibility": "Handles set logic for call mock data",
+        "source_mapping": [
+          "COBOL/CCHECKPD.CPY",
+          "COBOL/CCHECKPD.CPY"
+        ]
+      },
+      {
+        "method_name": "setCicsMock",
+        "owning_class": "MockService",
+        "responsibility": "Handles set logic for CICS mock data",
+        "source_mapping": [
+          "COBOL/CCHECKPD.CPY",
+          "COBOL/CCHECKPD.CPY"
+        ]
+      },
+      {
+        "method_name": "setFileMock",
+        "owning_class": "MockService",
+        "responsibility": "Handles set logic for file mock data",
+        "source_mapping": [
+          "COBOL/CCHECKPD.CPY",
+          "COBOL/CCHECKPD.CPY"
+        ]
+      },
+      {
+        "method_name": "setMock",
+        "owning_class": "CcheckpdService",
+        "responsibility": "Handles set logic for mock data",
+        "source_mapping": [
+          "COBOL/CCHECKPD.CPY",
+          "COBOL/CCHECKPD.CPY"
+        ]
+      },
+      {
+        "method_name": "setParaMock",
+        "owning_class": "MockService",
+        "responsibility": "Handles set logic for para mock data",
+        "source_mapping": [
+          "COBOL/CCHECKPD.CPY",
+          "COBOL/CCHECKPD.CPY"
+        ]
+      },
+      {
+        "method_name": "lookupFile",
+        "owning_class": "MockService",
+        "responsibility": "Handles lookup logic for file data",
+        "source_mapping": [
+          "COBOL/CCHECKPD.CPY",
+          "COBOL/CCHECKPD.CPY"
+        ]
+      }
+    ],
+    "data_models": [],
+    "external_dependencies": [
+      {
+        "name": "MockService",
+        "type": "service"
+      },
+      {
+        "name": "CcheckpdRepository",
+        "type": "repository"
+      }
+    ],
+    "unresolved_items": [
+      {
+        "name": "adapter-stub",
+        "description": "External call to adapter stub"
+      }
+    ],
+    "assumptions": []
+  }
+}

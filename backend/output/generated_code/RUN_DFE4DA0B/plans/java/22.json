@@ -1,0 +1,118 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 22,
+  "source_file": "COPYP001.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "Conversion Plan for COPYP001.CBL to Java Quarkus",
+  "classes": [
+    {
+      "class_name": "CopyGroup1",
+      "file_path": "com/modernizer/migration/CopyGroup1.java",
+      "layer": "resource",
+      "responsibility": "Resource layer for CopyGroup1",
+      "source_mapping": [
+        "COPYP001.CBL"
+      ]
+    },
+    {
+      "class_name": "CopyItem1",
+      "file_path": "com/modernizer/migration/CopyItem1.java",
+      "layer": "service",
+      "responsibility": "Service layer for CopyItem1",
+      "source_mapping": [
+        "COPYP001.CBL"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "processGroup",
+      "owning_class": "CopyGroup1",
+      "responsibility": "Process group method",
+      "source_mapping": [
+        "COPYP001.CBL"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "processItem",
+      "owning_class": "CopyItem1",
+      "responsibility": "Process item method",
+      "source_mapping": [
+        "COPYP001.CBL"
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [],
+  "external_dependencies": [],
+  "unresolved_items": [
+    "==XXX==-ITEM-1-1-1",
+    "==XXX==-ITEM-1-2-1"
+  ],
+  "assumptions": [],
+  "raw_plan": {
+    "summary": "Conversion Plan for COPYP001.CBL to Java Quarkus",
+    "target_package_or_namespace": "com.modernizer.migration",
+    "classes": [
+      {
+        "class_name": "CopyGroup1",
+        "file_path": "com/modernizer/migration/CopyGroup1.java",
+        "layer": "resource",
+        "responsibility": "Resource layer for CopyGroup1",
+        "source_mapping": [
+          "COPYP001.CBL"
+        ]
+      },
+      {
+        "class_name": "CopyItem1",
+        "file_path": "com/modernizer/migration/CopyItem1.java",
+        "layer": "service",
+        "responsibility": "Service layer for CopyItem1",
+        "source_mapping": [
+          "COPYP001.CBL"
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "processGroup",
+        "owning_class": "CopyGroup1",
+        "responsibility": "Process group method",
+        "source_mapping": [
+          "COPYP001.CBL"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "processItem",
+        "owning_class": "CopyItem1",
+        "responsibility": "Process item method",
+        "source_mapping": [
+          "COPYP001.CBL"
+        ],
+        "inputs": [],
+        "outputs": []
+      }
+    ],
+    "data_models": [],
+    "external_dependencies": [],
+    "unresolved_items": [
+      {
+        "name": "==XXX==-ITEM-1-1-1",
+        "type": "string"
+      },
+      {
+        "name": "==XXX==-ITEM-1-2-1",
+        "type": "string"
+      }
+    ],
+    "assumptions": []
+  }
+}

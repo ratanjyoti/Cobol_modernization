@@ -1,0 +1,372 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 72,
+  "source_file": "INVDATE-AFTER.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "Conversion plan for INVDATE-AFTER.CBL to Java Quarkus",
+  "classes": [
+    {
+      "class_name": "InvdateAfterService",
+      "file_path": "InvdateAfterService.java",
+      "layer": "service",
+      "responsibility": "Handles business logic for INVDATE component",
+      "source_mapping": [
+        "INVDATE-AFTER.CBL",
+        "UT-INITIALIZE"
+      ]
+    },
+    {
+      "class_name": "UtTest",
+      "file_path": "UtTest.java",
+      "layer": "test",
+      "responsibility": "Contains unit tests for INVDATE component",
+      "source_mapping": [
+        "INVDATE-AFTER.CBL",
+        "UT-BEFORE",
+        "UT-AFTER"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "initialize",
+      "owning_class": "InvdateAfterService",
+      "responsibility": "Initializes INVDATE component",
+      "source_mapping": [
+        "INVDATE-AFTER.CBL",
+        "0500-INITIALIZE"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "processInvoices",
+      "owning_class": "InvdateAfterService",
+      "responsibility": "Processes invoices for INVDATE component",
+      "source_mapping": [
+        "INVDATE-AFTER.CBL",
+        "1000-PROCESS-INVOICES"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "nextInvoiceDate",
+      "owning_class": "InvdateAfterService",
+      "responsibility": "Calculates next invoice date for INVDATE component",
+      "source_mapping": [
+        "INVDATE-AFTER.CBL",
+        "2000-NEXT-INVOICE-DATE"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "handleFebruary",
+      "owning_class": "InvdateAfterService",
+      "responsibility": "Handles February month for INVDATE component",
+      "source_mapping": [
+        "INVDATE-AFTER.CBL",
+        "2100-HANDLE-FEBRUARY"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "utBefore",
+      "owning_class": "UtTest",
+      "responsibility": "Sets up test environment for INVDATE component",
+      "source_mapping": [
+        "INVDATE-AFTER.CBL",
+        "UT-BEFORE"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "utAfter",
+      "owning_class": "UtTest",
+      "responsibility": "Verifies results of INVDATE component",
+      "source_mapping": [
+        "INVDATE-AFTER.CBL",
+        "UT-AFTER"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "utInitialize",
+      "owning_class": "UtTest",
+      "responsibility": "Initializes test environment for INVDATE component",
+      "source_mapping": [
+        "INVDATE-AFTER.CBL",
+        "UT-INITIALIZE"
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [
+    {
+      "name": "InvdateAfterService",
+      "fields": [
+        {
+          "name": "wsNextInvoiceDate",
+          "type": "String"
+        },
+        {
+          "name": "wsQuotient",
+          "type": "int"
+        },
+        {
+          "name": "wsRemainder",
+          "type": "int"
+        }
+      ]
+    },
+    {
+      "name": "UtTest",
+      "fields": [
+        {
+          "name": "utTestCaseName",
+          "type": "String"
+        },
+        {
+          "name": "utTestCaseCount",
+          "type": "int"
+        },
+        {
+          "name": "utNormalCompare",
+          "type": "boolean"
+        },
+        {
+          "name": "utActual",
+          "type": "String"
+        },
+        {
+          "name": "utExpected",
+          "type": "String"
+        }
+      ]
+    }
+  ],
+  "external_dependencies": [
+    "{\"source_file\": \"ZUTZCWS\", \"target_item\": \"ZUTZCWS\", \"relation_type\": \"INCLUDES\"}",
+    "{\"source_file\": \"DATETIME\", \"target_item\": \"DATETIME\", \"relation_type\": \"INCLUDES\"}",
+    "{\"source_file\": \"ZUTZCPD\", \"target_item\": \"ZUTZCPD\", \"relation_type\": \"INCLUDES\"}"
+  ],
+  "unresolved_items": [
+    "Flag to indicate whether current date should be set",
+    "Flag to indicate whether comparison is normal",
+    "Flag to indicate whether comparison is default"
+  ],
+  "assumptions": [
+    "Month abbreviation for February",
+    "Month abbreviation for 30-day month",
+    "Month abbreviation for 31-day month"
+  ],
+  "raw_plan": {
+    "summary": "Conversion plan for INVDATE-AFTER.CBL to Java Quarkus",
+    "target_package_or_namespace": "com.modernizer.migration",
+    "classes": [
+      {
+        "class_name": "InvdateAfterService",
+        "file_path": "InvdateAfterService.java",
+        "layer": "service",
+        "responsibility": "Handles business logic for INVDATE component",
+        "source_mapping": [
+          "INVDATE-AFTER.CBL",
+          "UT-INITIALIZE"
+        ]
+      },
+      {
+        "class_name": "UtTest",
+        "file_path": "UtTest.java",
+        "layer": "test",
+        "responsibility": "Contains unit tests for INVDATE component",
+        "source_mapping": [
+          "INVDATE-AFTER.CBL",
+          "UT-BEFORE",
+          "UT-AFTER"
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "initialize",
+        "owning_class": "InvdateAfterService",
+        "responsibility": "Initializes INVDATE component",
+        "source_mapping": [
+          "INVDATE-AFTER.CBL",
+          "0500-INITIALIZE"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "processInvoices",
+        "owning_class": "InvdateAfterService",
+        "responsibility": "Processes invoices for INVDATE component",
+        "source_mapping": [
+          "INVDATE-AFTER.CBL",
+          "1000-PROCESS-INVOICES"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "nextInvoiceDate",
+        "owning_class": "InvdateAfterService",
+        "responsibility": "Calculates next invoice date for INVDATE component",
+        "source_mapping": [
+          "INVDATE-AFTER.CBL",
+          "2000-NEXT-INVOICE-DATE"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "handleFebruary",
+        "owning_class": "InvdateAfterService",
+        "responsibility": "Handles February month for INVDATE component",
+        "source_mapping": [
+          "INVDATE-AFTER.CBL",
+          "2100-HANDLE-FEBRUARY"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "utBefore",
+        "owning_class": "UtTest",
+        "responsibility": "Sets up test environment for INVDATE component",
+        "source_mapping": [
+          "INVDATE-AFTER.CBL",
+          "UT-BEFORE"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "utAfter",
+        "owning_class": "UtTest",
+        "responsibility": "Verifies results of INVDATE component",
+        "source_mapping": [
+          "INVDATE-AFTER.CBL",
+          "UT-AFTER"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "utInitialize",
+        "owning_class": "UtTest",
+        "responsibility": "Initializes test environment for INVDATE component",
+        "source_mapping": [
+          "INVDATE-AFTER.CBL",
+          "UT-INITIALIZE"
+        ],
+        "inputs": [],
+        "outputs": []
+      }
+    ],
+    "data_models": [
+      {
+        "name": "InvdateAfterService",
+        "fields": [
+          {
+            "name": "wsNextInvoiceDate",
+            "type": "String"
+          },
+          {
+            "name": "wsQuotient",
+            "type": "int"
+          },
+          {
+            "name": "wsRemainder",
+            "type": "int"
+          }
+        ]
+      },
+      {
+        "name": "UtTest",
+        "fields": [
+          {
+            "name": "utTestCaseName",
+            "type": "String"
+          },
+          {
+            "name": "utTestCaseCount",
+            "type": "int"
+          },
+          {
+            "name": "utNormalCompare",
+            "type": "boolean"
+          },
+          {
+            "name": "utActual",
+            "type": "String"
+          },
+          {
+            "name": "utExpected",
+            "type": "String"
+          }
+        ]
+      }
+    ],
+    "external_dependencies": [
+      {
+        "source_file": "ZUTZCWS",
+        "target_item": "ZUTZCWS",
+        "relation_type": "INCLUDES"
+      },
+      {
+        "source_file": "DATETIME",
+        "target_item": "DATETIME",
+        "relation_type": "INCLUDES"
+      },
+      {
+        "source_file": "ZUTZCPD",
+        "target_item": "ZUTZCPD",
+        "relation_type": "INCLUDES"
+      }
+    ],
+    "unresolved_items": [
+      {
+        "name": "DO-NOT-SET-CURRENT-DATE",
+        "type": "boolean",
+        "description": "Flag to indicate whether current date should be set"
+      },
+      {
+        "name": "UT-NORMAL-COMPARE",
+        "type": "boolean",
+        "description": "Flag to indicate whether comparison is normal"
+      },
+      {
+        "name": "UT-COMPARE-DEFAULT",
+        "type": "boolean",
+        "description": "Flag to indicate whether comparison is default"
+      }
+    ],
+    "assumptions": [
+      {
+        "name": "FEBRUARY",
+        "type": "String",
+        "description": "Month abbreviation for February"
+      },
+      {
+        "name": "30-DAY-MONTH",
+        "type": "String",
+        "description": "Month abbreviation for 30-day month"
+      },
+      {
+        "name": "31-DAY-MONTH",
+        "type": "String",
+        "description": "Month abbreviation for 31-day month"
+      }
+    ]
+  }
+}

@@ -23,6 +23,7 @@ from paths import UPLOADS_DIR
 
 class CodegenContextBuilder:
     """
+    Data aggregation layer between analysis storage and the conversion/code-generation agents..
     Builds file-level context for conversion planning and code generation.
 
     Inputs come from:

@@ -1,0 +1,78 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 61,
+  "source_file": "TESTNESTED.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration.TestnestedService",
+  "summary": "Conversion plan for TESTNESTED.CBL to Java Quarkus backend service",
+  "classes": [
+    {
+      "class_name": "TestnestedService",
+      "file_path": "TestnestedService.java",
+      "layer": "resource",
+      "responsibility": "Handles business logic for the Testnested service",
+      "source_mapping": [
+        "TESTNESTED.CBL, MOCK-SECTION-WITH-ERROR SECTION"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "endEvaluate",
+      "owning_class": "TestnestedService",
+      "responsibility": "Evaluates the ONE-DIGIT field and updates its value accordingly",
+      "source_mapping": [
+        "TESTNESTED.CBL, MOCK-SECTION-WITH-ERROR SECTION"
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [
+    {
+      "name": "ONE-DIGIT",
+      "type": "String"
+    }
+  ],
+  "external_dependencies": [],
+  "unresolved_items": [],
+  "assumptions": [],
+  "raw_plan": {
+    "summary": "Conversion plan for TESTNESTED.CBL to Java Quarkus backend service",
+    "target_package_or_namespace": "com.modernizer.migration.TestnestedService",
+    "classes": [
+      {
+        "class_name": "TestnestedService",
+        "file_path": "TestnestedService.java",
+        "layer": "resource",
+        "responsibility": "Handles business logic for the Testnested service",
+        "source_mapping": [
+          "TESTNESTED.CBL, MOCK-SECTION-WITH-ERROR SECTION"
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "endEvaluate",
+        "owning_class": "TestnestedService",
+        "responsibility": "Evaluates the ONE-DIGIT field and updates its value accordingly",
+        "source_mapping": [
+          "TESTNESTED.CBL, MOCK-SECTION-WITH-ERROR SECTION"
+        ],
+        "inputs": [],
+        "outputs": []
+      }
+    ],
+    "data_models": [
+      {
+        "name": "ONE-DIGIT",
+        "type": "String"
+      }
+    ],
+    "external_dependencies": [],
+    "unresolved_items": [],
+    "assumptions": []
+  }
+}

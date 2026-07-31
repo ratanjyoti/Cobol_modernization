@@ -10,8 +10,6 @@ engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     connect_args={"check_same_thread": False, "timeout": 30},
 )
-
-
 @event.listens_for(engine, "connect")
 def configure_sqlite_connection(dbapi_connection, _connection_record):
     cursor = dbapi_connection.cursor()

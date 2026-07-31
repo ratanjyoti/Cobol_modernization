@@ -27,6 +27,7 @@ import type {
   GeneratedFileContent,
   GeneratedFileSummary,
   MigrationReportResponse,
+  PipelineStatusResponse,
   RegistryResponse,
   TargetLanguage,
   ValidationResponse,
@@ -44,6 +45,8 @@ import {
   readGeneratedFile,
   readMigrationReport,
   validateGeneratedProject,
+  runFullCodeGeneration,
+  getCodeGenerationPipelineStatus,
 } from '../services/codeGenerationApi';
 
 const TARGETS: Array<{
@@ -121,6 +124,9 @@ const CodeGeneration = () => {
   const [reportLoading, setReportLoading] = useState(false);
   const [registry, setRegistry] = useState<RegistryResponse | null>(null);
   const [lockingRegistry, setLockingRegistry] = useState(false);
+  const [pipelineStatus, setPipelineStatus] = useState<PipelineStatusResponse | null>(null);
+  const [pipelineRunning, setPipelineRunning] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const selectedTarget = useMemo(
     () => TARGETS.find((item) => item.id === targetLanguage) || TARGETS[0],
@@ -128,6 +134,16 @@ const CodeGeneration = () => {
   );
 
   const hasRunId = Boolean(runId.trim());
+  const isPipelineSuccessful =
+    pipelineStatus?.status === 'COMPLETED' && pipelineStatus?.download_allowed === true;
+  const isPipelineFailed =
+    pipelineStatus?.status === 'QUALITY_GATE_FAILED' ||
+    pipelineStatus?.status === 'VALIDATION_FAILED' ||
+    pipelineStatus?.status === 'FAILED';
+  const pipelineProgress = Math.max(
+    0,
+    Math.min(100, Number(pipelineStatus?.progress || 0)),
+  );
 
   const loadExistingData = async () => {
     if (!hasRunId) return;
@@ -165,6 +181,103 @@ const CodeGeneration = () => {
   useEffect(() => {
     loadExistingData();
   }, [targetLanguage]);
+
+  useEffect(() => {
+    if (!hasRunId || !targetLanguage) return;
+
+    let cancelled = false;
+
+    const loadStatus = async () => {
+      try {
+        const status = await getCodeGenerationPipelineStatus(runId, targetLanguage);
+
+        if (!cancelled) {
+          setPipelineStatus(status);
+          setPipelineRunning(status.status === 'RUNNING');
+        }
+      } catch (err) {
+        console.error('Failed to load pipeline status:', err);
+      }
+    };
+
+    loadStatus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hasRunId, runId, targetLanguage]);
+
+  useEffect(() => {
+    if (!hasRunId || !targetLanguage) return;
+
+    if (!pipelineRunning && pipelineStatus?.status !== 'RUNNING') return;
+
+    const interval = window.setInterval(async () => {
+      try {
+        const status = await getCodeGenerationPipelineStatus(runId, targetLanguage);
+
+        setPipelineStatus(status);
+
+        if (status.status !== 'RUNNING') {
+          setPipelineRunning(false);
+          window.clearInterval(interval);
+
+          if (status.download_allowed) {
+            await loadExistingData();
+          }
+        }
+      } catch (err) {
+        console.error('Failed to poll pipeline status:', err);
+      }
+    }, 2500);
+
+    return () => window.clearInterval(interval);
+  }, [hasRunId, runId, targetLanguage, pipelineRunning, pipelineStatus?.status]);
+
+  const handleGenerateWorkingCode = async () => {
+    if (!hasRunId) {
+      setError('Please select or enter a run id first.');
+      return;
+    }
+
+    setError('');
+    setMessage('');
+    setPipelineRunning(true);
+    setValidationResult(null);
+    setFixResult(null);
+    setReportResult(null);
+
+    const startingStatus: PipelineStatusResponse = {
+      run_id: runId,
+      target_language: targetLanguage,
+      status: 'RUNNING',
+      stage: 'Starting code generation pipeline...',
+      progress: 1,
+      download_allowed: false,
+    };
+
+    setPipelineStatus(startingStatus);
+
+    try {
+      const result = await runFullCodeGeneration(runId, targetLanguage);
+
+      setPipelineStatus(result);
+      setPipelineRunning(result.status === 'RUNNING');
+
+      if (result.status === 'COMPLETED' && result.download_allowed) {
+        setMessage('Generated working code is ready to download.');
+        await loadExistingData();
+      } else {
+        setError(
+          result.stage ||
+            'Code generation completed but the output is not ready for download.',
+        );
+      }
+    } catch (err) {
+      setPipelineRunning(false);
+      setError(err instanceof Error ? err.message : 'Failed to generate working code');
+    }
+  };
 
   const handleFinalizeRegistry = async () => {
     if (!hasRunId) {
@@ -352,72 +465,74 @@ const CodeGeneration = () => {
     ? generatedProjectDownloadUrl(runId, targetLanguage, true)
     : '#';
   const canDownloadDraft = hasRunId && generatedFiles.length > 0;
+  const canDownloadZip =
+    pipelineStatus?.download_allowed === true ||
+    validationResult?.download_allowed === true;
   const canDownloadVerified =
     hasRunId &&
     generatedFiles.length > 0 &&
-    Boolean(validationResult?.success) &&
-    validationResult?.download_allowed !== false &&
+    canDownloadZip &&
     validationResult?.quality_gate?.success !== false;
+  const manualDebugActions = (
+    <div className="flex flex-wrap gap-2">
+      <button
+        onClick={handleFinalizeRegistry}
+        className="btn-secondary flex items-center gap-2"
+        disabled={lockingRegistry || loading || !hasRunId}
+      >
+        {lockingRegistry ? <Loader2 className="animate-spin" size={18} /> : <LockKeyhole size={18} />}
+        Lock Registry
+      </button>
+
+      <button
+        onClick={handleCreatePlan}
+        className="btn-secondary flex items-center gap-2"
+        disabled={loading || !hasRunId}
+      >
+        {loading ? <Loader2 className="animate-spin" size={18} /> : <Route size={18} />}
+        Create Plan
+      </button>
+
+      <button
+        onClick={handleGenerateCode}
+        className="btn-glow"
+        disabled={loading || !hasRunId}
+      >
+        {loading ? <Loader2 className="animate-spin" size={18} /> : <Sparkles size={18} />}
+        Generate Code
+      </button>
+      <button
+        onClick={handleValidateProject}
+        className="btn-secondary flex items-center gap-2"
+        disabled={validating || loading || !hasRunId || generatedFiles.length === 0}
+      >
+        {validating ? <Loader2 className="animate-spin" size={18} /> : <Terminal size={18} />}
+        Validate
+      </button>
+      <button
+        onClick={handleFixGeneratedCode}
+        className="btn-secondary flex items-center gap-2"
+        disabled={fixing || validating || loading || !hasRunId || !validationResult || validationResult.success}
+      >
+        {fixing ? <Loader2 className="animate-spin" size={18} /> : <Wand2 size={18} />}
+        Fix Errors
+      </button>
+      <button
+        onClick={handleGenerateReport}
+        className="btn-secondary flex items-center gap-2"
+        disabled={reportLoading || loading || !hasRunId || generatedFiles.length === 0}
+      >
+        {reportLoading ? <Loader2 className="animate-spin" size={18} /> : <ScrollText size={18} />}
+        Report
+      </button>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Code Generation"
         description="Create conversion plans and generate modern Java, Python, or C# code from COBOL/Telon analysis."
-        action={(
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={handleFinalizeRegistry}
-              className="btn-secondary flex items-center gap-2"
-              disabled={lockingRegistry || loading || !hasRunId}
-            >
-              {lockingRegistry ? <Loader2 className="animate-spin" size={18} /> : <LockKeyhole size={18} />}
-              Lock Registry
-            </button>
-
-            <button
-              onClick={handleCreatePlan}
-              className="btn-secondary flex items-center gap-2"
-              disabled={loading || !hasRunId}
-            >
-              {loading ? <Loader2 className="animate-spin" size={18} /> : <Route size={18} />}
-              Create Plan
-            </button>
-
-            <button
-              onClick={handleGenerateCode}
-              className="btn-glow"
-              disabled={loading || !hasRunId}
-            >
-              {loading ? <Loader2 className="animate-spin" size={18} /> : <Sparkles size={18} />}
-              Generate Code
-            </button>
-            <button
-              onClick={handleValidateProject}
-              className="btn-secondary flex items-center gap-2"
-              disabled={validating || loading || !hasRunId || generatedFiles.length === 0}
-            >
-              {validating ? <Loader2 className="animate-spin" size={18} /> : <Terminal size={18} />}
-              Validate
-            </button>
-            <button
-              onClick={handleFixGeneratedCode}
-              className="btn-secondary flex items-center gap-2"
-              disabled={fixing || validating || loading || !hasRunId || !validationResult || validationResult.success}
-            >
-              {fixing ? <Loader2 className="animate-spin" size={18} /> : <Wand2 size={18} />}
-              Fix Errors
-            </button>
-            <button
-              onClick={handleGenerateReport}
-              className="btn-secondary flex items-center gap-2"
-              disabled={reportLoading || loading || !hasRunId || generatedFiles.length === 0}
-            >
-              {reportLoading ? <Loader2 className="animate-spin" size={18} /> : <ScrollText size={18} />}
-              Report
-            </button>
-          </div>
-        )}
         meta={<StatusBadge status={generatedFiles.length ? 'Generated' : plans.length ? 'Planned' : 'Ready'} pulse={loading} />}
       />
 
@@ -483,6 +598,173 @@ const CodeGeneration = () => {
             </p>
           </div>
         </div>
+      </section>
+
+      <section className="glass-card p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-body-sm font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+              Code Generation
+            </p>
+            <h2 className="mt-1 text-2xl font-black text-[var(--text-primary)]">
+              Generate Working Code
+            </h2>
+            <p className="mt-2 text-body-sm">
+              The system will plan, generate, repair, validate, and prepare the ZIP automatically.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={handleGenerateWorkingCode}
+              disabled={pipelineRunning || !hasRunId}
+              className="btn-glow flex items-center gap-2 px-5 py-3 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {pipelineRunning ? <Loader2 className="animate-spin" size={18} /> : <Sparkles size={18} />}
+              {pipelineRunning ? 'Generating...' : 'Generate Working Code'}
+            </button>
+
+            <a
+              href={isPipelineSuccessful ? generatedProjectDownloadUrl(runId, targetLanguage) : '#'}
+              onClick={(event) => {
+                if (!isPipelineSuccessful) {
+                  event.preventDefault();
+                }
+              }}
+              className={[
+                'btn-secondary flex items-center gap-2 px-5 py-3',
+                !isPipelineSuccessful ? 'pointer-events-none opacity-50' : '',
+              ].join(' ')}
+              title={
+                isPipelineSuccessful
+                  ? 'Download validation-passed generated code ZIP.'
+                  : 'Download unlocks after the full pipeline completes successfully.'
+              }
+            >
+              <Download size={18} />
+              Download ZIP
+            </a>
+
+            <button
+              type="button"
+              onClick={handleGenerateReport}
+              disabled={reportLoading || pipelineRunning || !hasRunId || !isPipelineSuccessful}
+              className="btn-secondary flex items-center gap-2 px-5 py-3 disabled:cursor-not-allowed disabled:opacity-50"
+              title={
+                isPipelineSuccessful
+                  ? 'Generate or refresh the migration report.'
+                  : 'Report unlocks after the full pipeline completes successfully.'
+              }
+            >
+              {reportLoading ? <Loader2 className="animate-spin" size={18} /> : <ScrollText size={18} />}
+              Report
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-6">
+          <div className="mb-2 flex items-center justify-between gap-4">
+            <span className="min-w-0 text-sm font-semibold text-[var(--text-primary)]">
+              {pipelineStatus?.stage || 'Code generation has not started.'}
+            </span>
+            <span className="shrink-0 font-mono text-sm font-bold text-[var(--terminal-text)]">
+              {pipelineProgress}%
+            </span>
+          </div>
+
+          <div className="h-3 overflow-hidden rounded-full bg-[var(--corporate-border)]">
+            <div
+              className={[
+                'h-full rounded-full transition-all duration-500',
+                isPipelineFailed
+                  ? 'bg-[var(--corporate-danger)]'
+                  : isPipelineSuccessful
+                    ? 'bg-[var(--corporate-success)]'
+                    : 'bg-[var(--corporate-accent)]',
+              ].join(' ')}
+              style={{ width: `${pipelineProgress}%` }}
+            />
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+            <StatusBadge
+              status={pipelineStatus?.status || 'NOT_STARTED'}
+              pulse={pipelineStatus?.status === 'RUNNING'}
+            />
+
+            <span className="text-[var(--text-muted)]">
+              Target: {targetLanguage.toUpperCase()}
+            </span>
+
+            <span className="text-[var(--text-muted)]">
+              Download: {pipelineStatus?.download_allowed ? 'Allowed' : 'Locked until validation passes'}
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <section className="glass-card p-5">
+        <button
+          type="button"
+          onClick={() => setShowAdvanced((value) => !value)}
+          className="flex w-full items-center justify-between gap-4 text-left"
+        >
+          <span className="font-semibold text-[var(--text-primary)]">
+            Advanced generation details
+          </span>
+          <span className="text-sm text-[var(--text-muted)]">
+            {showAdvanced ? 'Hide' : 'Show'}
+          </span>
+        </button>
+
+        {showAdvanced && (
+          <div className="mt-5 space-y-5">
+            <div className="rounded-lg border border-dashed border-[var(--corporate-border)] bg-[var(--surface-soft)] p-5">
+              <h3 className="mb-4 text-sm font-semibold text-[var(--text-primary)]">
+                Manual debug actions
+              </h3>
+              {manualDebugActions}
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+                Pipeline steps
+              </h3>
+
+              {pipelineStatus?.steps?.length ? (
+                <div className="mt-2 overflow-hidden rounded-lg border border-[var(--corporate-border)]">
+                  {pipelineStatus.steps.map((step, index) => (
+                    <div
+                      key={`${step.step}-${index}`}
+                      className="border-b border-[var(--corporate-border)] px-4 py-3 last:border-b-0"
+                    >
+                      <div className="font-mono text-xs font-bold text-[var(--terminal-text)]">
+                        {step.step}
+                      </div>
+                      <pre className="mt-2 max-h-48 overflow-auto rounded-lg bg-[var(--terminal-bg)] p-3 text-xs text-[var(--terminal-text)]">
+                        {JSON.stringify(step, null, 2)}
+                      </pre>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-body-sm">
+                  No pipeline steps recorded yet.
+                </p>
+              )}
+            </div>
+
+            {pipelineStatus?.errors?.length ? (
+              <div>
+                <h3 className="text-sm font-semibold text-[var(--corporate-danger)]">Errors</h3>
+                <pre className="mt-2 max-h-72 overflow-auto rounded-lg border border-[var(--corporate-danger)] bg-[var(--terminal-bg)] p-4 text-xs text-[var(--terminal-text)]">
+                  {JSON.stringify(pipelineStatus.errors, null, 2)}
+                </pre>
+              </div>
+            ) : null}
+          </div>
+        )}
       </section>
 
       {(message || error) && (

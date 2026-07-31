@@ -1,0 +1,41 @@
+{
+  "success": false,
+  "status": "QUALITY_GATE_FAILED",
+  "download_allowed": false,
+  "target_language": "java",
+  "project_dir": "E:\\NEW_genai_projects\\cobol_legacy_main\\ollama\\legacy-modernizer\\backend\\output\\generated_code\\RUN_DFE4DA0B\\project\\java",
+  "command": "generation quality gate",
+  "stdout": "",
+  "stderr": "Only 38 source file(s) were generated, but 77 conversion plan(s) exist.\nGenerated project is missing planned class files: mixed004-padded.cbl, src/main/java/com/modernizer/migration/AlphaException.java, src/main/java/com/modernizer/migration/BController.java, src/main/java/com/modernizer/migration/BDTO.java, src/main/java/com/modernizer/migration/BadCopyGroupItem.java, src/main/java/com/modernizer/migration/BetaService.java, src/main/java/com/modernizer/migration/Bipm012IModuleData.java, src/main/java/com/modernizer/migration/Bipm012Service.java, src/main/java/com/modernizer/migration/CModel.java, src/main/java/com/modernizer/migration/COPY003Item1.java, src/main/java/com/modernizer/migration/COPY003Item2.java, src/main/java/com/modernizer/migration/COPY004Item1.java, src/main/java/com/modernizer/migration/COPY004Item2.java, src/main/java/com/modernizer/migration/COPY006Item1.java, src/main/java/com/modernizer/migration/COPY006Item2.java, src/main/java/com/modernizer/migration/COPYR001-paddedController.java, src/main/java/com/modernizer/migration/COPYR001-paddedDomainB.java, src/main/java/com/modernizer/migration/COPYR001-paddedDomainC.java, src/main/java/com/modernizer/migration/COPYR001-paddedDtoB.java, src/main/java/com/modernizer/migration/COPYR001-paddedDtoC.java\nPlaceholder/stub generated code was rejected: src/main/java/com/modernizer/migration/AdapterStub.java, src/main/java/com/modernizer/migration/dto/Mixed005GroupItemDto.java\nGenerated methods contain comments but no executable implementation: src/main/java/com/modernizer/migration/AdapterStub.java (1 method(s)), src/main/java/com/modernizer/migration/AlphaController.java (1 method(s)), src/main/java/com/modernizer/migration/AlphaControllerTest.java (1 method(s)), src/main/java/com/modernizer/migration/AlphaDomainModelTest.java (2 method(s)), src/main/java/com/modernizer/migration/AlphaDTOTest.java (2 method(s)), src/main/java/com/modernizer/migration/AlphaRepository.java (1 method(s)), src/main/java/com/modernizer/migration/AlphaRepositoryTest.java (1 method(s)), src/main/java/com/modernizer/migration/AlphaService.java (1 method(s)), src/main/java/com/modernizer/migration/AlphaServiceTest.java (1 method(s)), src/main/java/com/modernizer/migration/AlphaTable1Test.java (2 method(s)), src/main/java/com/modernizer/migration/AlphaTable2Test.java (2 method(s)), src/main/java/com/modernizer/migration/BadcopyGroupItemService.java (1 method(s)), src/main/java/com/modernizer/migration/CallMockAfterService.java (8 method(s)), src/main/java/com/modernizer/migration/ConvertTestAfterService.java (2 method(s)), src/main/java/com/modernizer/migration/ConvertTestAfterServiceCompareFiles.java (1 method(s)), src/main/java/com/modernizer/migration/ConvertTestAfterServiceCompareRecords.java (1 method(s)), src/main/java/com/modernizer/migration/Db2progRepository.java (5 method(s)), src/main/java/com/modernizer/migration/Db2progService.java (5 method(s)), src/main/java/com/modernizer/migration/DpicnumbersService/DpicnumbersService.java (1 method(s)), src/main/java/com/modernizer/migration/FileMockAfterController.java (5 method(s))\nLocked method coverage is too low: 20/67 (30%).",
+  "returncode": 1,
+  "quality_gate": {
+    "success": false,
+    "status": "FAILED",
+    "run_id": "RUN_DFE4DA0B",
+    "target_language": "java",
+    "download_allowed": false,
+    "metrics": {
+      "source_file_count": 74,
+      "conversion_plan_count": 77,
+      "manifest_source_file_count": 38,
+      "generated_code_file_count": 96,
+      "planned_class_count": 192,
+      "missing_planned_class_count": 114,
+      "implementation_signal_count": 425,
+      "locked_variable_total": 251,
+      "locked_variable_covered": 128,
+      "locked_variable_coverage_ratio": 0.5099601593625498,
+      "locked_method_total": 67,
+      "locked_method_covered": 20,
+      "locked_method_coverage_ratio": 0.29850746268656714
+    },
+    "failures": [
+      "Only 38 source file(s) were generated, but 77 conversion plan(s) exist.",
+      "Generated project is missing planned class files: mixed004-padded.cbl, src/main/java/com/modernizer/migration/AlphaException.java, src/main/java/com/modernizer/migration/BController.java, src/main/java/com/modernizer/migration/BDTO.java, src/main/java/com/modernizer/migration/BadCopyGroupItem.java, src/main/java/com/modernizer/migration/BetaService.java, src/main/java/com/modernizer/migration/Bipm012IModuleData.java, src/main/java/com/modernizer/migration/Bipm012Service.java, src/main/java/com/modernizer/migration/CModel.java, src/main/java/com/modernizer/migration/COPY003Item1.java, src/main/java/com/modernizer/migration/COPY003Item2.java, src/main/java/com/modernizer/migration/COPY004Item1.java, src/main/java/com/modernizer/migration/COPY004Item2.java, src/main/java/com/modernizer/migration/COPY006Item1.java, src/main/java/com/modernizer/migration/COPY006Item2.java, src/main/java/com/modernizer/migration/COPYR001-paddedController.java, src/main/java/com/modernizer/migration/COPYR001-paddedDomainB.java, src/main/java/com/modernizer/migration/COPYR001-paddedDomainC.java, src/main/java/com/modernizer/migration/COPYR001-paddedDtoB.java, src/main/java/com/modernizer/migration/COPYR001-paddedDtoC.java",
+      "Placeholder/stub generated code was rejected: src/main/java/com/modernizer/migration/AdapterStub.java, src/main/java/com/modernizer/migration/dto/Mixed005GroupItemDto.java",
+      "Generated methods contain comments but no executable implementation: src/main/java/com/modernizer/migration/AdapterStub.java (1 method(s)), src/main/java/com/modernizer/migration/AlphaController.java (1 method(s)), src/main/java/com/modernizer/migration/AlphaControllerTest.java (1 method(s)), src/main/java/com/modernizer/migration/AlphaDomainModelTest.java (2 method(s)), src/main/java/com/modernizer/migration/AlphaDTOTest.java (2 method(s)), src/main/java/com/modernizer/migration/AlphaRepository.java (1 method(s)), src/main/java/com/modernizer/migration/AlphaRepositoryTest.java (1 method(s)), src/main/java/com/modernizer/migration/AlphaService.java (1 method(s)), src/main/java/com/modernizer/migration/AlphaServiceTest.java (1 method(s)), src/main/java/com/modernizer/migration/AlphaTable1Test.java (2 method(s)), src/main/java/com/modernizer/migration/AlphaTable2Test.java (2 method(s)), src/main/java/com/modernizer/migration/BadcopyGroupItemService.java (1 method(s)), src/main/java/com/modernizer/migration/CallMockAfterService.java (8 method(s)), src/main/java/com/modernizer/migration/ConvertTestAfterService.java (2 method(s)), src/main/java/com/modernizer/migration/ConvertTestAfterServiceCompareFiles.java (1 method(s)), src/main/java/com/modernizer/migration/ConvertTestAfterServiceCompareRecords.java (1 method(s)), src/main/java/com/modernizer/migration/Db2progRepository.java (5 method(s)), src/main/java/com/modernizer/migration/Db2progService.java (5 method(s)), src/main/java/com/modernizer/migration/DpicnumbersService/DpicnumbersService.java (1 method(s)), src/main/java/com/modernizer/migration/FileMockAfterController.java (5 method(s))",
+      "Locked method coverage is too low: 20/67 (30%)."
+    ],
+    "warnings": []
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "success": true,
+  "target_language": "java",
+  "project_dir": "E:\\NEW_genai_projects\\cobol_legacy_main\\ollama\\legacy-modernizer\\backend\\output\\generated_code\\RUN_FULL_FLOW_SMOKE\\project\\java",
+  "command": "static Java source validation (mvn not found)",
+  "stdout": "Maven was not found on this machine, so the validator checked generated Java source structure, class names, packages, braces, and placeholder markers.",
+  "stderr": "",
+  "returncode": 0,
+  "checked_files": [
+    "src\\main\\java\\com\\modernizer\\migration\\AcctchkService.java"
+  ],
+  "failed_files": []
+}

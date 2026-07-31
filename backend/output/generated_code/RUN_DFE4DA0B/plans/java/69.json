@@ -1,0 +1,404 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 69,
+  "source_file": "CICDEMO-AFTER.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "Conversion Plan for CICSDEMO-AFTER.CBL to Java Quarkus",
+  "classes": [
+    {
+      "class_name": "CicdemoAfterService",
+      "file_path": "src/main/java/com/modernizer/migration/CicdemoAfterService.java",
+      "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+      "responsibility": "Handles business logic and interactions with external systems",
+      "source_mapping": [
+        "CICSDEMO-AFTER.CBL",
+        "UT-BEFORE",
+        "UT-AFTER"
+      ]
+    },
+    {
+      "class_name": "UtMockAfterService",
+      "file_path": "src/main/java/com/modernizer/migration/UtMockAfterService.java",
+      "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+      "responsibility": "Handles mock behavior and assertions",
+      "source_mapping": [
+        "CICSDEMO-AFTER.CBL",
+        "UT-BEFORE",
+        "UT-LOOKUP-MOCK"
+      ]
+    },
+    {
+      "class_name": "UtMockInitializeService",
+      "file_path": "src/main/java/com/modernizer/migration/UtMockInitializeService.java",
+      "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+      "responsibility": "Handles initialization and setup of mock behavior",
+      "source_mapping": [
+        "CICSDEMO-AFTER.CBL",
+        "UT-INITIALIZE"
+      ]
+    },
+    {
+      "class_name": "UtMockFindService",
+      "file_path": "src/main/java/com/modernizer/migration/UtMockFindService.java",
+      "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+      "responsibility": "Handles finding and retrieving mock data",
+      "source_mapping": [
+        "CICSDEMO-AFTER.CBL",
+        "UT-BEFORE"
+      ]
+    },
+    {
+      "class_name": "UtMockAccessService",
+      "file_path": "src/main/java/com/modernizer/migration/UtMockAccessService.java",
+      "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+      "responsibility": "Handles access and assertions of mock data",
+      "source_mapping": [
+        "CICSDEMO-AFTER.CBL",
+        "UT-LOOKUP-MOCK"
+      ]
+    },
+    {
+      "class_name": "UtMockWriteService",
+      "file_path": "src/main/java/com/modernizer/migration/UtMockWriteService.java",
+      "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+      "responsibility": "Handles writing and updating mock data",
+      "source_mapping": [
+        "CICSDEMO-AFTER.CBL",
+        "UT-BEFORE"
+      ]
+    },
+    {
+      "class_name": "UtMockReadService",
+      "file_path": "src/main/java/com/modernizer/migration/UtMockReadService.java",
+      "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+      "responsibility": "Handles reading and retrieving mock data",
+      "source_mapping": [
+        "CICSDEMO-AFTER.CBL",
+        "UT-BEFORE"
+      ]
+    },
+    {
+      "class_name": "UtMockEndService",
+      "file_path": "src/main/java/com/modernizer/migration/UtMockEndService.java",
+      "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+      "responsibility": "Handles end of mock behavior and cleanup",
+      "source_mapping": [
+        "CICSDEMO-AFTER.CBL",
+        "UT-BEFORE"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "readDataset",
+      "owning_class": "CicdemoAfterService",
+      "responsibility": "Retrieves business record data from external system",
+      "source_mapping": [
+        "0100-READ-DATASET",
+        "UT-BEFORE"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "writeDataset",
+      "owning_class": "CicdemoAfterService",
+      "responsibility": "Writes and updates business record data to external system",
+      "source_mapping": [
+        "0200-WRITE-DATASET",
+        "UT-BEFORE"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "end",
+      "owning_class": "CicdemoAfterService",
+      "responsibility": "Ends mock behavior and cleanup",
+      "source_mapping": [
+        "9999-END",
+        "UT-AFTER"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "utBefore",
+      "owning_class": "UtMockInitializeService",
+      "responsibility": "Initializes and sets up mock behavior",
+      "source_mapping": [
+        "UT-BEFORE"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "utAfter",
+      "owning_class": "UtMockEndService",
+      "responsibility": "Cleans up and ends mock behavior",
+      "source_mapping": [
+        "UT-AFTER"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "utInitialize",
+      "owning_class": "UtMockInitializeService",
+      "responsibility": "Initializes and sets up mock behavior",
+      "source_mapping": [
+        "UT-INITIALIZE"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "utLookUpMock",
+      "owning_class": "UtMockFindService",
+      "responsibility": "Finds and retrieves mock data",
+      "source_mapping": [
+        "UT-BEFORE"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "utSetMock",
+      "owning_class": "UtMockFindService",
+      "responsibility": "Sets up mock behavior",
+      "source_mapping": [
+        "UT-BEFORE"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "utAssertEquals",
+      "owning_class": "UtMockAccessService",
+      "responsibility": "Asserts equality of mock data",
+      "source_mapping": [
+        "UT-LOOKUP-MOCK"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "utAssertEqualsNumeric",
+      "owning_class": "UtMockAccessService",
+      "responsibility": "Asserts equality of numeric values in mock data",
+      "source_mapping": [
+        "UT-LOOKUP-MOCK"
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [],
+  "external_dependencies": [
+    "ZUTZCWS",
+    "DFHEIBLK",
+    "ZUTZCPD"
+  ],
+  "unresolved_items": [
+    "adapter-stub"
+  ],
+  "assumptions": [],
+  "raw_plan": {
+    "summary": "Conversion Plan for CICSDEMO-AFTER.CBL to Java Quarkus",
+    "target_package_or_namespace": "com.modernizer.migration",
+    "classes": [
+      {
+        "class_name": "CicdemoAfterService",
+        "file_path": "src/main/java/com/modernizer/migration/CicdemoAfterService.java",
+        "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+        "responsibility": "Handles business logic and interactions with external systems",
+        "source_mapping": [
+          "CICSDEMO-AFTER.CBL",
+          "UT-BEFORE",
+          "UT-AFTER"
+        ]
+      },
+      {
+        "class_name": "UtMockAfterService",
+        "file_path": "src/main/java/com/modernizer/migration/UtMockAfterService.java",
+        "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+        "responsibility": "Handles mock behavior and assertions",
+        "source_mapping": [
+          "CICSDEMO-AFTER.CBL",
+          "UT-BEFORE",
+          "UT-LOOKUP-MOCK"
+        ]
+      },
+      {
+        "class_name": "UtMockInitializeService",
+        "file_path": "src/main/java/com/modernizer/migration/UtMockInitializeService.java",
+        "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+        "responsibility": "Handles initialization and setup of mock behavior",
+        "source_mapping": [
+          "CICSDEMO-AFTER.CBL",
+          "UT-INITIALIZE"
+        ]
+      },
+      {
+        "class_name": "UtMockFindService",
+        "file_path": "src/main/java/com/modernizer/migration/UtMockFindService.java",
+        "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+        "responsibility": "Handles finding and retrieving mock data",
+        "source_mapping": [
+          "CICSDEMO-AFTER.CBL",
+          "UT-BEFORE"
+        ]
+      },
+      {
+        "class_name": "UtMockAccessService",
+        "file_path": "src/main/java/com/modernizer/migration/UtMockAccessService.java",
+        "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+        "responsibility": "Handles access and assertions of mock data",
+        "source_mapping": [
+          "CICSDEMO-AFTER.CBL",
+          "UT-LOOKUP-MOCK"
+        ]
+      },
+      {
+        "class_name": "UtMockWriteService",
+        "file_path": "src/main/java/com/modernizer/migration/UtMockWriteService.java",
+        "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+        "responsibility": "Handles writing and updating mock data",
+        "source_mapping": [
+          "CICSDEMO-AFTER.CBL",
+          "UT-BEFORE"
+        ]
+      },
+      {
+        "class_name": "UtMockReadService",
+        "file_path": "src/main/java/com/modernizer/migration/UtMockReadService.java",
+        "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+        "responsibility": "Handles reading and retrieving mock data",
+        "source_mapping": [
+          "CICSDEMO-AFTER.CBL",
+          "UT-BEFORE"
+        ]
+      },
+      {
+        "class_name": "UtMockEndService",
+        "file_path": "src/main/java/com/modernizer/migration/UtMockEndService.java",
+        "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+        "responsibility": "Handles end of mock behavior and cleanup",
+        "source_mapping": [
+          "CICSDEMO-AFTER.CBL",
+          "UT-BEFORE"
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "readDataset",
+        "owning_class": "CicdemoAfterService",
+        "responsibility": "Retrieves business record data from external system",
+        "source_mapping": [
+          "0100-READ-DATASET",
+          "UT-BEFORE"
+        ]
+      },
+      {
+        "method_name": "writeDataset",
+        "owning_class": "CicdemoAfterService",
+        "responsibility": "Writes and updates business record data to external system",
+        "source_mapping": [
+          "0200-WRITE-DATASET",
+          "UT-BEFORE"
+        ]
+      },
+      {
+        "method_name": "end",
+        "owning_class": "CicdemoAfterService",
+        "responsibility": "Ends mock behavior and cleanup",
+        "source_mapping": [
+          "9999-END",
+          "UT-AFTER"
+        ]
+      },
+      {
+        "method_name": "utBefore",
+        "owning_class": "UtMockInitializeService",
+        "responsibility": "Initializes and sets up mock behavior",
+        "source_mapping": [
+          "UT-BEFORE"
+        ]
+      },
+      {
+        "method_name": "utAfter",
+        "owning_class": "UtMockEndService",
+        "responsibility": "Cleans up and ends mock behavior",
+        "source_mapping": [
+          "UT-AFTER"
+        ]
+      },
+      {
+        "method_name": "utInitialize",
+        "owning_class": "UtMockInitializeService",
+        "responsibility": "Initializes and sets up mock behavior",
+        "source_mapping": [
+          "UT-INITIALIZE"
+        ]
+      },
+      {
+        "method_name": "utLookUpMock",
+        "owning_class": "UtMockFindService",
+        "responsibility": "Finds and retrieves mock data",
+        "source_mapping": [
+          "UT-BEFORE"
+        ]
+      },
+      {
+        "method_name": "utSetMock",
+        "owning_class": "UtMockFindService",
+        "responsibility": "Sets up mock behavior",
+        "source_mapping": [
+          "UT-BEFORE"
+        ]
+      },
+      {
+        "method_name": "utAssertEquals",
+        "owning_class": "UtMockAccessService",
+        "responsibility": "Asserts equality of mock data",
+        "source_mapping": [
+          "UT-LOOKUP-MOCK"
+        ]
+      },
+      {
+        "method_name": "utAssertEqualsNumeric",
+        "owning_class": "UtMockAccessService",
+        "responsibility": "Asserts equality of numeric values in mock data",
+        "source_mapping": [
+          "UT-LOOKUP-MOCK"
+        ]
+      }
+    ],
+    "data_models": [],
+    "external_dependencies": [
+      {
+        "name": "ZUTZCWS",
+        "type": "file"
+      },
+      {
+        "name": "DFHEIBLK",
+        "type": "copybook"
+      },
+      {
+        "name": "ZUTZCPD",
+        "type": "file"
+      }
+    ],
+    "unresolved_items": [
+      {
+        "name": "adapter-stub",
+        "type": "dependency"
+      }
+    ],
+    "assumptions": []
+  }
+}

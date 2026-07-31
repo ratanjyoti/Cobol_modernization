@@ -1,0 +1,78 @@
+{
+  "run_id": "RUN_B71F2E57",
+  "file_id": 1009,
+  "source_file": "DB2PROG.cbl",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "Deterministic conversion plan for DB2PROG.cbl. The source will be migrated as a service/data-definition component using extracted business rules and source evidence.",
+  "classes": [
+    {
+      "class_name": "Db2progService",
+      "file_path": "src/main/java/com/modernizer/migration/Db2progService.java",
+      "layer": "service",
+      "responsibility": "Preserve the business behavior, validations, calculations, messages, and shared data semantics identified in DB2PROG.cbl.",
+      "source_mapping": [
+        "DB2PROG.cbl"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "executeBusinessRule",
+      "owning_class": "Db2progService",
+      "responsibility": "Execute the preserved business rule path for this legacy source file.",
+      "source_mapping": [
+        "DB2PROG.cbl"
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [],
+  "external_dependencies": [
+    "src\\main\\cobol\\copy\\TEXEM.cpy"
+  ],
+  "unresolved_items": [],
+  "assumptions": [
+    "Fallback plan created because the configured LLM did not return a usable conversion plan.",
+    "Local OpenAI-compatible planning failed: {\"error\":\"The number of tokens to keep from the initial prompt is greater than the context length (n_keep: 61021>= n_ctx: 8192). Try to load the model with a larger context length, or provide a shorter input.\"}"
+  ],
+  "raw_plan": {
+    "target_package_or_namespace": "com.modernizer.migration",
+    "summary": "Deterministic conversion plan for DB2PROG.cbl. The source will be migrated as a service/data-definition component using extracted business rules and source evidence.",
+    "classes": [
+      {
+        "class_name": "Db2progService",
+        "file_path": "src/main/java/com/modernizer/migration/Db2progService.java",
+        "layer": "service",
+        "responsibility": "Preserve the business behavior, validations, calculations, messages, and shared data semantics identified in DB2PROG.cbl.",
+        "source_mapping": [
+          "DB2PROG.cbl"
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "executeBusinessRule",
+        "owning_class": "Db2progService",
+        "responsibility": "Execute the preserved business rule path for this legacy source file.",
+        "source_mapping": [
+          "DB2PROG.cbl"
+        ],
+        "inputs": [],
+        "outputs": []
+      }
+    ],
+    "data_models": [],
+    "external_dependencies": [
+      "src\\main\\cobol\\copy\\TEXEM.cpy"
+    ],
+    "unresolved_items": [],
+    "assumptions": [
+      "Fallback plan created because the configured LLM did not return a usable conversion plan.",
+      "Local OpenAI-compatible planning failed: {\"error\":\"The number of tokens to keep from the initial prompt is greater than the context length (n_keep: 61021>= n_ctx: 8192). Try to load the model with a larger context length, or provide a shorter input.\"}"
+    ]
+  }
+}

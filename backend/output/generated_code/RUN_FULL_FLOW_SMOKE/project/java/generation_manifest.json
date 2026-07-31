@@ -1,0 +1,15 @@
+{
+  "run_id": "RUN_FULL_FLOW_SMOKE",
+  "target_language": "java",
+  "generated_file_count": 1,
+  "source_file_count": 1,
+  "files": [
+    {
+      "path": "src/main/java/com/modernizer/migration/AcctchkService.java",
+      "language": "java",
+      "file_type": "service",
+      "source_file": "ACCTCHK.CBL"
+    }
+  ],
+  "errors": []
+}

@@ -15,7 +15,7 @@ class ConstitutionLoader:
     Future changes for Java/Python/C# standards should mostly happen in:
       backend/data/constitution/*.yml
     """
-
+    
     PROFILE_FILES = {
         TargetLanguage.JAVA: "java-quarkus.yml",
         TargetLanguage.PYTHON: "python-fastapi.yml",

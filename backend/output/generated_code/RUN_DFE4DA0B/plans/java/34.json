@@ -1,0 +1,177 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 34,
+  "source_file": "EXR001.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "Conversion Plan for EXR001.CBL to Java Quarkus",
+  "classes": [
+    {
+      "class_name": "AlphaService",
+      "file_path": "AlphaService.java",
+      "layer": "resource",
+      "responsibility": "Handles Alpha-related business logic",
+      "source_mapping": [
+        "EXR001.CBL paragraph 01"
+      ]
+    },
+    {
+      "class_name": "BetaService",
+      "file_path": "BetaService.java",
+      "layer": "service",
+      "responsibility": "Handles Beta-related business logic",
+      "source_mapping": [
+        "EXR001.CBL paragraph 02"
+      ]
+    },
+    {
+      "class_name": "DeltaRepository",
+      "file_path": "DeltaRepository.java",
+      "layer": "repository",
+      "responsibility": "Handles Delta-related data access",
+      "source_mapping": [
+        "EXR001.CBL paragraph 02"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "handleAlpha",
+      "owning_class": "AlphaService",
+      "responsibility": "Handles Alpha-related business logic",
+      "source_mapping": [
+        "EXR001.CBL paragraph 01"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "handleBeta",
+      "owning_class": "BetaService",
+      "responsibility": "Handles Beta-related business logic",
+      "source_mapping": [
+        "EXR001.CBL paragraph 02"
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [
+    {
+      "model_name": "AlphaModel",
+      "file_path": "AlphaModel.java",
+      "layer": "dto",
+      "responsibility": "Represents Alpha-related data",
+      "source_mapping": [
+        "EXR001.CBL paragraph 01"
+      ]
+    },
+    {
+      "model_name": "BetaModel",
+      "file_path": "BetaModel.java",
+      "layer": "dto",
+      "responsibility": "Represents Beta-related data",
+      "source_mapping": [
+        "EXR001.CBL paragraph 02"
+      ]
+    }
+  ],
+  "external_dependencies": [
+    "Adapter for DeltaRepository"
+  ],
+  "unresolved_items": [
+    "Missing adapter implementation for DeltaRepository"
+  ],
+  "assumptions": [],
+  "raw_plan": {
+    "summary": "Conversion Plan for EXR001.CBL to Java Quarkus",
+    "target_package_or_namespace": "com.modernizer.migration",
+    "classes": [
+      {
+        "class_name": "AlphaService",
+        "file_path": "AlphaService.java",
+        "layer": "resource",
+        "responsibility": "Handles Alpha-related business logic",
+        "source_mapping": [
+          "EXR001.CBL paragraph 01"
+        ]
+      },
+      {
+        "class_name": "BetaService",
+        "file_path": "BetaService.java",
+        "layer": "service",
+        "responsibility": "Handles Beta-related business logic",
+        "source_mapping": [
+          "EXR001.CBL paragraph 02"
+        ]
+      },
+      {
+        "class_name": "DeltaRepository",
+        "file_path": "DeltaRepository.java",
+        "layer": "repository",
+        "responsibility": "Handles Delta-related data access",
+        "source_mapping": [
+          "EXR001.CBL paragraph 02"
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "handleAlpha",
+        "owning_class": "AlphaService",
+        "responsibility": "Handles Alpha-related business logic",
+        "source_mapping": [
+          "EXR001.CBL paragraph 01"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "handleBeta",
+        "owning_class": "BetaService",
+        "responsibility": "Handles Beta-related business logic",
+        "source_mapping": [
+          "EXR001.CBL paragraph 02"
+        ],
+        "inputs": [],
+        "outputs": []
+      }
+    ],
+    "data_models": [
+      {
+        "model_name": "AlphaModel",
+        "file_path": "AlphaModel.java",
+        "layer": "dto",
+        "responsibility": "Represents Alpha-related data",
+        "source_mapping": [
+          "EXR001.CBL paragraph 01"
+        ]
+      },
+      {
+        "model_name": "BetaModel",
+        "file_path": "BetaModel.java",
+        "layer": "dto",
+        "responsibility": "Represents Beta-related data",
+        "source_mapping": [
+          "EXR001.CBL paragraph 02"
+        ]
+      }
+    ],
+    "external_dependencies": [
+      {
+        "dependency_name": "DeltaRepositoryAdapter",
+        "description": "Adapter for DeltaRepository",
+        "type": "unresolved"
+      }
+    ],
+    "unresolved_items": [
+      {
+        "item_name": "DeltaRepositoryAdapter",
+        "description": "Missing adapter implementation for DeltaRepository"
+      }
+    ],
+    "assumptions": []
+  }
+}

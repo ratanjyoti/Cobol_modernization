@@ -1,0 +1,273 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 62,
+  "source_file": "WS88LEVEL.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "COBOL to Java Quarkus conversion plan",
+  "classes": [
+    {
+      "class_name": "UtSLinefile",
+      "file_path": "UtSLinefile.java",
+      "layer": "resource",
+      "responsibility": "Data access and storage",
+      "source_mapping": [
+        "COBOL/FILE SECTION/FD LINEFILE"
+      ]
+    },
+    {
+      "class_name": "UtSLinefileStatus",
+      "file_path": "UtSLinefileStatus.java",
+      "layer": "resource",
+      "responsibility": "Data access and storage",
+      "source_mapping": [
+        "COBOL/WORKING-STORAGE SECTION/STATUS-LINEFILE"
+      ]
+    },
+    {
+      "class_name": "Lv88Levels",
+      "file_path": "Lv88Levels.java",
+      "layer": "resource",
+      "responsibility": "Business logic",
+      "source_mapping": [
+        "COBOL/DATA DIVISION/FD-88-LEVELS"
+      ]
+    },
+    {
+      "class_name": "Lv88LevelsNumeric",
+      "file_path": "Lv88LevelsNumeric.java",
+      "layer": "resource",
+      "responsibility": "Business logic",
+      "source_mapping": [
+        "COBOL/DATA DIVISION/FD-88-LEVELS-NUMERIC"
+      ]
+    },
+    {
+      "class_name": "UtSProgName",
+      "file_path": "UtSProgName.java",
+      "layer": "resource",
+      "responsibility": "Business logic",
+      "source_mapping": [
+        "COBOL/WORKING-STORAGE SECTION/WS-PROG-NAME"
+      ]
+    },
+    {
+      "class_name": "UtSSubprogramName",
+      "file_path": "UtSSubprogramName.java",
+      "layer": "resource",
+      "responsibility": "Business logic",
+      "source_mapping": [
+        "COBOL/WORKING-STORAGE SECTION/WS-SUBPROGRAM-NAME"
+      ]
+    },
+    {
+      "class_name": "Lv88LevelsController",
+      "file_path": "Lv88LevelsController.java",
+      "layer": "controller",
+      "responsibility": "Business logic and data access",
+      "source_mapping": [
+        "COBOL/PROCEDURE DIVISION/001-INITIALIZE"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "initialize",
+      "owning_class": "Lv88LevelsController",
+      "responsibility": "Initialize the application",
+      "source_mapping": [
+        "COBOL/PROCEDURE DIVISION/001-INITIALIZE"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "getOmega",
+      "owning_class": "UtSLinefileStatus",
+      "responsibility": "Get the omega value",
+      "source_mapping": [
+        "COBOL/WORKING-STORAGE SECTION/STATUS-LINEFILE"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "getSubprogramName",
+      "owning_class": "UtSSubprogramName",
+      "responsibility": "Get the subprogram name",
+      "source_mapping": [
+        "COBOL/WORKING-STORAGE SECTION/WS-SUBPROGRAM-NAME"
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [
+    {
+      "name": "UtSLinefile",
+      "type": "String"
+    },
+    {
+      "name": "UtSLinefileStatus",
+      "type": "int"
+    },
+    {
+      "name": "Lv88Levels",
+      "type": "String"
+    },
+    {
+      "name": "Lv88LevelsNumeric",
+      "type": "BigDecimal"
+    },
+    {
+      "name": "UtSProgName",
+      "type": "String"
+    },
+    {
+      "name": "UtSSubprogramName",
+      "type": "String"
+    }
+  ],
+  "external_dependencies": [
+    "Input/output file for data access"
+  ],
+  "unresolved_items": [],
+  "assumptions": [],
+  "raw_plan": {
+    "summary": "COBOL to Java Quarkus conversion plan",
+    "target_package_or_namespace": "com.modernizer.migration",
+    "classes": [
+      {
+        "class_name": "UtSLinefile",
+        "file_path": "UtSLinefile.java",
+        "layer": "resource",
+        "responsibility": "Data access and storage",
+        "source_mapping": [
+          "COBOL/FILE SECTION/FD LINEFILE"
+        ]
+      },
+      {
+        "class_name": "UtSLinefileStatus",
+        "file_path": "UtSLinefileStatus.java",
+        "layer": "resource",
+        "responsibility": "Data access and storage",
+        "source_mapping": [
+          "COBOL/WORKING-STORAGE SECTION/STATUS-LINEFILE"
+        ]
+      },
+      {
+        "class_name": "Lv88Levels",
+        "file_path": "Lv88Levels.java",
+        "layer": "resource",
+        "responsibility": "Business logic",
+        "source_mapping": [
+          "COBOL/DATA DIVISION/FD-88-LEVELS"
+        ]
+      },
+      {
+        "class_name": "Lv88LevelsNumeric",
+        "file_path": "Lv88LevelsNumeric.java",
+        "layer": "resource",
+        "responsibility": "Business logic",
+        "source_mapping": [
+          "COBOL/DATA DIVISION/FD-88-LEVELS-NUMERIC"
+        ]
+      },
+      {
+        "class_name": "UtSProgName",
+        "file_path": "UtSProgName.java",
+        "layer": "resource",
+        "responsibility": "Business logic",
+        "source_mapping": [
+          "COBOL/WORKING-STORAGE SECTION/WS-PROG-NAME"
+        ]
+      },
+      {
+        "class_name": "UtSSubprogramName",
+        "file_path": "UtSSubprogramName.java",
+        "layer": "resource",
+        "responsibility": "Business logic",
+        "source_mapping": [
+          "COBOL/WORKING-STORAGE SECTION/WS-SUBPROGRAM-NAME"
+        ]
+      },
+      {
+        "class_name": "Lv88LevelsController",
+        "file_path": "Lv88LevelsController.java",
+        "layer": "controller",
+        "responsibility": "Business logic and data access",
+        "source_mapping": [
+          "COBOL/PROCEDURE DIVISION/001-INITIALIZE"
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "initialize",
+        "owning_class": "Lv88LevelsController",
+        "responsibility": "Initialize the application",
+        "source_mapping": [
+          "COBOL/PROCEDURE DIVISION/001-INITIALIZE"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "getOmega",
+        "owning_class": "UtSLinefileStatus",
+        "responsibility": "Get the omega value",
+        "source_mapping": [
+          "COBOL/WORKING-STORAGE SECTION/STATUS-LINEFILE"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "getSubprogramName",
+        "owning_class": "UtSSubprogramName",
+        "responsibility": "Get the subprogram name",
+        "source_mapping": [
+          "COBOL/WORKING-STORAGE SECTION/WS-SUBPROGRAM-NAME"
+        ],
+        "inputs": [],
+        "outputs": []
+      }
+    ],
+    "data_models": [
+      {
+        "name": "UtSLinefile",
+        "type": "String"
+      },
+      {
+        "name": "UtSLinefileStatus",
+        "type": "int"
+      },
+      {
+        "name": "Lv88Levels",
+        "type": "String"
+      },
+      {
+        "name": "Lv88LevelsNumeric",
+        "type": "BigDecimal"
+      },
+      {
+        "name": "UtSProgName",
+        "type": "String"
+      },
+      {
+        "name": "UtSSubprogramName",
+        "type": "String"
+      }
+    ],
+    "external_dependencies": [
+      {
+        "name": "LINEFILE",
+        "description": "Input/output file for data access"
+      }
+    ],
+    "unresolved_items": [],
+    "assumptions": []
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "run_id": "RUN_B71F2E57",
+  "file_id": 1001,
+  "source_file": "mixed006.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "Deterministic conversion plan for mixed006.CBL. The source will be migrated as a service/data-definition component using extracted business rules and source evidence.",
+  "classes": [
+    {
+      "class_name": "Mixed006Service",
+      "file_path": "src/main/java/com/modernizer/migration/Mixed006Service.java",
+      "layer": "service",
+      "responsibility": "Preserve the business behavior, validations, calculations, messages, and shared data semantics identified in mixed006.CBL.",
+      "source_mapping": [
+        "mixed006.CBL"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "executeBusinessRule",
+      "owning_class": "Mixed006Service",
+      "responsibility": "Execute the preserved business rule path for this legacy source file.",
+      "source_mapping": [
+        "mixed006.CBL"
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [],
+  "external_dependencies": [
+    "src\\main\\cobol\\copy\\mixed003.CBL",
+    "src\\main\\cobol\\copy\\mixed004.CBL"
+  ],
+  "unresolved_items": [],
+  "assumptions": [
+    "Fallback plan created because the configured LLM did not return a usable conversion plan.",
+    "Local OpenAI-compatible planning failed: {\"error\":\"The number of tokens to keep from the initial prompt is greater than the context length (n_keep: 60401>= n_ctx: 8192). Try to load the model with a larger context length, or provide a shorter input.\"}"
+  ],
+  "raw_plan": {
+    "target_package_or_namespace": "com.modernizer.migration",
+    "summary": "Deterministic conversion plan for mixed006.CBL. The source will be migrated as a service/data-definition component using extracted business rules and source evidence.",
+    "classes": [
+      {
+        "class_name": "Mixed006Service",
+        "file_path": "src/main/java/com/modernizer/migration/Mixed006Service.java",
+        "layer": "service",
+        "responsibility": "Preserve the business behavior, validations, calculations, messages, and shared data semantics identified in mixed006.CBL.",
+        "source_mapping": [
+          "mixed006.CBL"
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "executeBusinessRule",
+        "owning_class": "Mixed006Service",
+        "responsibility": "Execute the preserved business rule path for this legacy source file.",
+        "source_mapping": [
+          "mixed006.CBL"
+        ],
+        "inputs": [],
+        "outputs": []
+      }
+    ],
+    "data_models": [],
+    "external_dependencies": [
+      "src\\main\\cobol\\copy\\mixed003.CBL",
+      "src\\main\\cobol\\copy\\mixed004.CBL"
+    ],
+    "unresolved_items": [],
+    "assumptions": [
+      "Fallback plan created because the configured LLM did not return a usable conversion plan.",
+      "Local OpenAI-compatible planning failed: {\"error\":\"The number of tokens to keep from the initial prompt is greater than the context length (n_keep: 60401>= n_ctx: 8192). Try to load the model with a larger context length, or provide a shorter input.\"}"
+    ]
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 39,
+  "source_file": "mixed005-padded.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "Conversion Plan for mixed005-padded.CBL to Java Quarkus",
+  "classes": [
+    {
+      "class_name": "Mixed005GroupItemService",
+      "file_path": "src/main/java/com/modernizer/migration/service/Mixed005GroupItemService.java",
+      "layer": "service",
+      "responsibility": "Handles business logic for mixed005 group item service",
+      "source_mapping": [
+        "mixed005-padded.CBL"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "handleMixed005GroupItemCall",
+      "owning_class": "Mixed005GroupItemService",
+      "responsibility": "Handles the call to mixed006.CBL",
+      "source_mapping": [
+        "mixed005-padded.CBL"
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [
+    {
+      "model_name": "Mixed005GroupItemDto",
+      "file_path": "src/main/java/com/modernizer/migration/dto/Mixed005GroupItemDto.java"
+    }
+  ],
+  "external_dependencies": [
+    "{\"dependency_name\": \"mixed006.CBL\", \"relation_type\": \"CALLS\", \"context\": \"\", \"resolved\": false}"
+  ],
+  "unresolved_items": [
+    "mixed006.CBL"
+  ],
+  "assumptions": [],
+  "raw_plan": {
+    "summary": "Conversion Plan for mixed005-padded.CBL to Java Quarkus",
+    "target_package_or_namespace": "com.modernizer.migration",
+    "classes": [
+      {
+        "class_name": "Mixed005GroupItemService",
+        "file_path": "src/main/java/com/modernizer/migration/service/Mixed005GroupItemService.java",
+        "layer": "service",
+        "responsibility": "Handles business logic for mixed005 group item service",
+        "source_mapping": [
+          "mixed005-padded.CBL"
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "handleMixed005GroupItemCall",
+        "owning_class": "Mixed005GroupItemService",
+        "responsibility": "Handles the call to mixed006.CBL",
+        "source_mapping": [
+          "mixed005-padded.CBL"
+        ],
+        "inputs": [],
+        "outputs": []
+      }
+    ],
+    "data_models": [
+      {
+        "model_name": "Mixed005GroupItemDto",
+        "file_path": "src/main/java/com/modernizer/migration/dto/Mixed005GroupItemDto.java"
+      }
+    ],
+    "external_dependencies": [
+      {
+        "dependency_name": "mixed006.CBL",
+        "relation_type": "CALLS",
+        "context": "",
+        "resolved": false
+      }
+    ],
+    "unresolved_items": [
+      {
+        "item_name": "mixed006.CBL",
+        "relation_type": "CALLS",
+        "context": ""
+      }
+    ],
+    "assumptions": []
+  }
+}

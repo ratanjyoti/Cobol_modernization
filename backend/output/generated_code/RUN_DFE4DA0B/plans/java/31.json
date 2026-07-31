@@ -1,0 +1,87 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 31,
+  "source_file": "EXP01-padded.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "Conversion Plan for EXP01-padded.CBL to Java Quarkus",
+  "classes": [
+    {
+      "class_name": "Exp01Service",
+      "file_path": "com/modernizer/migration/Exp01Service.java",
+      "layer": "resource|service",
+      "responsibility": "Handles business logic for EXP01 padded",
+      "source_mapping": [
+        "EXP01-padded.CBL"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "processExp01Padded",
+      "owning_class": "Exp01Service",
+      "responsibility": "Processes EXP01 padded data",
+      "source_mapping": [
+        "EXP01-padded.CBL"
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [
+    {
+      "model_name": "Exp01PaddedDataModel",
+      "class_name": "Exp01PaddedDataModel",
+      "file_path": "com/modernizer/migration/Exp01PaddedDataModel.java"
+    }
+  ],
+  "external_dependencies": [],
+  "unresolved_items": [
+    "Adapter stub for external call"
+  ],
+  "assumptions": [],
+  "raw_plan": {
+    "summary": "Conversion Plan for EXP01-padded.CBL to Java Quarkus",
+    "target_package_or_namespace": "com.modernizer.migration",
+    "classes": [
+      {
+        "class_name": "Exp01Service",
+        "file_path": "com/modernizer/migration/Exp01Service.java",
+        "layer": "resource|service",
+        "responsibility": "Handles business logic for EXP01 padded",
+        "source_mapping": [
+          "EXP01-padded.CBL"
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "processExp01Padded",
+        "owning_class": "Exp01Service",
+        "responsibility": "Processes EXP01 padded data",
+        "source_mapping": [
+          "EXP01-padded.CBL"
+        ],
+        "inputs": [],
+        "outputs": []
+      }
+    ],
+    "data_models": [
+      {
+        "model_name": "Exp01PaddedDataModel",
+        "class_name": "Exp01PaddedDataModel",
+        "file_path": "com/modernizer/migration/Exp01PaddedDataModel.java"
+      }
+    ],
+    "external_dependencies": [],
+    "unresolved_items": [
+      {
+        "item_type": "adapter-stub",
+        "description": "Adapter stub for external call"
+      }
+    ],
+    "assumptions": []
+  }
+}

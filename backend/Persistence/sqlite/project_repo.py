@@ -2,6 +2,12 @@
 from sqlalchemy.orm import Session
 from Persistence.sqlite.models import FileChunk, FileComplexity, FileRelation, Project, ProjectComplexity, ProjectFile
 
+"""It mainly does four things:
+
+Saves and retrieves projects.
+Updates project configuration such as LLM provider, model, API URL, workers, and Neo4j settings.
+Saves and retrieves uploaded project files.
+Deletes project-related records in the correct order."""
 
 class ProjectRepository:
     CONFIG_FIELD_MAP = {

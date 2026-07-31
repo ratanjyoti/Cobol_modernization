@@ -1,0 +1,248 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 50,
+  "source_file": "DB2PROG.cbl",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "Conversion plan for DB2PROG COBOL program to Java Quarkus backend service",
+  "classes": [
+    {
+      "class_name": "Db2progService",
+      "file_path": "src/main/java/com/modernizer/migration/Db2progService.java",
+      "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+      "responsibility": "Handles business logic for DB2 instructions",
+      "source_mapping": [
+        "COBOL/IDENTIFICATION DIVISION, PROGRAM-ID. DB2PROG",
+        "COBOL/ENVIRONMENT DIVISION, INPUT-OUTPUT SECTION"
+      ]
+    },
+    {
+      "class_name": "Db2progRepository",
+      "file_path": "src/main/java/com/modernizer/migration/Db2progRepository.java",
+      "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+      "responsibility": "Handles data access for DB2 instructions",
+      "source_mapping": [
+        "COBOL/DATA DIVISION, WORKING-STORAGE SECTION"
+      ]
+    },
+    {
+      "class_name": "Db2progDTO",
+      "file_path": "src/main/java/com/modernizer/migration/Db2progDTO.java",
+      "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+      "responsibility": "Represents data for DB2 instructions",
+      "source_mapping": [
+        "COBOL/DATA DIVISION, WORKING-STORAGE SECTION"
+      ]
+    },
+    {
+      "class_name": "Db2progDomain",
+      "file_path": "src/main/java/com/modernizer/migration/Db2progDomain.java",
+      "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+      "responsibility": "Represents business domain for DB2 instructions",
+      "source_mapping": [
+        "COBOL/DATA DIVISION, WORKING-STORAGE SECTION"
+      ]
+    },
+    {
+      "class_name": "Db2progException",
+      "file_path": "src/main/java/com/modernizer/migration/Db2progException.java",
+      "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+      "responsibility": "Handles exceptions for DB2 instructions",
+      "source_mapping": [
+        "COBOL/DATA DIVISION, WORKING-STORAGE SECTION"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "main",
+      "owning_class": "Db2progService",
+      "responsibility": "Main entry point for DB2 instructions",
+      "source_mapping": [
+        "COBOL/IDENTIFICATION DIVISION, PROGRAM-ID. DB2PROG"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "select",
+      "owning_class": "Db2progRepository",
+      "responsibility": "Handles SELECT statement for DB2 instructions",
+      "source_mapping": [
+        "COBOL/DATA DIVISION, WORKING-STORAGE SECTION"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "openCursor",
+      "owning_class": "Db2progService",
+      "responsibility": "Opens cursor for DB2 instructions",
+      "source_mapping": [
+        "COBOL/ENVIRONMENT DIVISION, INPUT-OUTPUT SECTION"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "fetchSql",
+      "owning_class": "Db2progRepository",
+      "responsibility": "Handles FETCH SQL statement for DB2 instructions",
+      "source_mapping": [
+        "COBOL/DATA DIVISION, WORKING-STORAGE SECTION"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "closeCursor",
+      "owning_class": "Db2progService",
+      "responsibility": "Closes cursor for DB2 instructions",
+      "source_mapping": [
+        "COBOL/ENVIRONMENT DIVISION, INPUT-OUTPUT SECTION"
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [],
+  "external_dependencies": [
+    "{\"source_file\": \"src/main/cobol/DB2PROG.cbl\", \"target_item\": \"src/main/java/com/modernizer/migration/Db2progService.java\"}",
+    "{\"source_file\": \"src/main/cobol/TEXEM.cbl\", \"target_item\": \"src/main/java/com/modernizer/migration/Db2progRepository.java\"}"
+  ],
+  "unresolved_items": [
+    "Cursor for DB2 instructions",
+    "SQL call area for DB2 instructions"
+  ],
+  "assumptions": [
+    "{\"rule_id\": \"BR-008\", \"rule_text\": \"The system must access database information required to complete the business transaction.\", \"business_purpose\": \"The DB2PROG component serves the business function of defining the shared business data structure used by related programs. It retrieves business record data as part of the shared data definition workflow. The end goal is to ensure that related programs interpret the same business fields consistently.\", \"functional_logic\": \"The system retrieves the matching business record details from the relevant file or data source. Business conditions are evaluated to decide the correct action, message, calculation, or exception path.\", \"technical_ref\": \"[DATA_ACCESS] control_flow.logic_blocks.line-12 | Confidence: MEDIUM\"}"
+  ],
+  "raw_plan": {
+    "summary": "Conversion plan for DB2PROG COBOL program to Java Quarkus backend service",
+    "target_package_or_namespace": "com.modernizer.migration",
+    "classes": [
+      {
+        "class_name": "Db2progService",
+        "file_path": "src/main/java/com/modernizer/migration/Db2progService.java",
+        "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+        "responsibility": "Handles business logic for DB2 instructions",
+        "source_mapping": [
+          "COBOL/IDENTIFICATION DIVISION, PROGRAM-ID. DB2PROG",
+          "COBOL/ENVIRONMENT DIVISION, INPUT-OUTPUT SECTION"
+        ]
+      },
+      {
+        "class_name": "Db2progRepository",
+        "file_path": "src/main/java/com/modernizer/migration/Db2progRepository.java",
+        "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+        "responsibility": "Handles data access for DB2 instructions",
+        "source_mapping": [
+          "COBOL/DATA DIVISION, WORKING-STORAGE SECTION"
+        ]
+      },
+      {
+        "class_name": "Db2progDTO",
+        "file_path": "src/main/java/com/modernizer/migration/Db2progDTO.java",
+        "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+        "responsibility": "Represents data for DB2 instructions",
+        "source_mapping": [
+          "COBOL/DATA DIVISION, WORKING-STORAGE SECTION"
+        ]
+      },
+      {
+        "class_name": "Db2progDomain",
+        "file_path": "src/main/java/com/modernizer/migration/Db2progDomain.java",
+        "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+        "responsibility": "Represents business domain for DB2 instructions",
+        "source_mapping": [
+          "COBOL/DATA DIVISION, WORKING-STORAGE SECTION"
+        ]
+      },
+      {
+        "class_name": "Db2progException",
+        "file_path": "src/main/java/com/modernizer/migration/Db2progException.java",
+        "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+        "responsibility": "Handles exceptions for DB2 instructions",
+        "source_mapping": [
+          "COBOL/DATA DIVISION, WORKING-STORAGE SECTION"
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "main",
+        "owning_class": "Db2progService",
+        "responsibility": "Main entry point for DB2 instructions",
+        "source_mapping": [
+          "COBOL/IDENTIFICATION DIVISION, PROGRAM-ID. DB2PROG"
+        ]
+      },
+      {
+        "method_name": "select",
+        "owning_class": "Db2progRepository",
+        "responsibility": "Handles SELECT statement for DB2 instructions",
+        "source_mapping": [
+          "COBOL/DATA DIVISION, WORKING-STORAGE SECTION"
+        ]
+      },
+      {
+        "method_name": "openCursor",
+        "owning_class": "Db2progService",
+        "responsibility": "Opens cursor for DB2 instructions",
+        "source_mapping": [
+          "COBOL/ENVIRONMENT DIVISION, INPUT-OUTPUT SECTION"
+        ]
+      },
+      {
+        "method_name": "fetchSql",
+        "owning_class": "Db2progRepository",
+        "responsibility": "Handles FETCH SQL statement for DB2 instructions",
+        "source_mapping": [
+          "COBOL/DATA DIVISION, WORKING-STORAGE SECTION"
+        ]
+      },
+      {
+        "method_name": "closeCursor",
+        "owning_class": "Db2progService",
+        "responsibility": "Closes cursor for DB2 instructions",
+        "source_mapping": [
+          "COBOL/ENVIRONMENT DIVISION, INPUT-OUTPUT SECTION"
+        ]
+      }
+    ],
+    "data_models": [],
+    "external_dependencies": [
+      {
+        "source_file": "src/main/cobol/DB2PROG.cbl",
+        "target_item": "src/main/java/com/modernizer/migration/Db2progService.java"
+      },
+      {
+        "source_file": "src/main/cobol/TEXEM.cbl",
+        "target_item": "src/main/java/com/modernizer/migration/Db2progRepository.java"
+      }
+    ],
+    "unresolved_items": [
+      {
+        "name": "NAME-CUR",
+        "type": "cursor",
+        "description": "Cursor for DB2 instructions"
+      },
+      {
+        "name": "SQLCA",
+        "type": "SQL call area",
+        "description": "SQL call area for DB2 instructions"
+      }
+    ],
+    "assumptions": [
+      {
+        "rule_id": "BR-008",
+        "rule_text": "The system must access database information required to complete the business transaction.",
+        "business_purpose": "The DB2PROG component serves the business function of defining the shared business data structure used by related programs. It retrieves business record data as part of the shared data definition workflow. The end goal is to ensure that related programs interpret the same business fields consistently.",
+        "functional_logic": "The system retrieves the matching business record details from the relevant file or data source. Business conditions are evaluated to decide the correct action, message, calculation, or exception path.",
+        "technical_ref": "[DATA_ACCESS] control_flow.logic_blocks.line-12 | Confidence: MEDIUM"
+      }
+    ]
+  }
+}

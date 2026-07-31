@@ -1,0 +1,305 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 68,
+  "source_file": "CALL-MOCK-AFTER.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration.CallMockAfterService",
+  "summary": "Conversion plan for CALL-MOCK-AFTER.CBL to Java Quarkus",
+  "classes": [
+    {
+      "class_name": "CallMockAfterService",
+      "file_path": "src/main/java/com/modernizer/migration/CallMockAfterService.java",
+      "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+      "responsibility": "Handles business logic for the CALLDEMO component",
+      "source_mapping": [
+        "COBOL/CALL-MOCK-AFTER.CBL",
+        "UT-BEFORE"
+      ]
+    },
+    {
+      "class_name": "UtMockAfterService",
+      "file_path": "src/main/java/com/modernizer/migration/UtMockAfterService.java",
+      "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+      "responsibility": "Handles mock behavior for the CALLDEMO component",
+      "source_mapping": [
+        "COBOL/CALL-MOCK-AFTER.CBL",
+        "UT-INITIALIZE"
+      ]
+    },
+    {
+      "class_name": "UtMockClassicCallService",
+      "file_path": "src/main/java/com/modernizer/migration/UtMockClassicCallService.java",
+      "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+      "responsibility": "Handles mock behavior for the CALLDEMO component (classic CALL)",
+      "source_mapping": [
+        "COBOL/CALL-MOCK-AFTER.CBL",
+        "UT-BEFORE"
+      ]
+    },
+    {
+      "class_name": "UtMockDynamicCallService",
+      "file_path": "src/main/java/com/modernizer/migration/UtMockDynamicCallService.java",
+      "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+      "responsibility": "Handles mock behavior for the CALLDEMO component (dynamic subprogram)",
+      "source_mapping": [
+        "COBOL/CALL-MOCK-AFTER.CBL",
+        "UT-BEFORE"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "basicCall",
+      "owning_class": "CallMockAfterService",
+      "responsibility": "Handles basic CALL statement mock behavior",
+      "source_mapping": [
+        "COBOL/CALL-MOCK-AFTER.CBL",
+        "UT-BEFORE"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "classicCall",
+      "owning_class": "UtMockClassicCallService",
+      "responsibility": "Handles classic CALL statement mock behavior",
+      "source_mapping": [
+        "COBOL/CALL-MOCK-AFTER.CBL",
+        "UT-BEFORE"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "dynamicCall",
+      "owning_class": "UtMockDynamicCallService",
+      "responsibility": "Handles dynamic subprogram mock behavior",
+      "source_mapping": [
+        "COBOL/CALL-MOCK-AFTER.CBL",
+        "UT-BEFORE"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "end",
+      "owning_class": "CallMockAfterService",
+      "responsibility": "Handles end of CALLDEMO component mock behavior",
+      "source_mapping": [
+        "COBOL/CALL-MOCK-AFTER.CBL",
+        "UT-BEFORE"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "utAfter",
+      "owning_class": "UtMockAfterService",
+      "responsibility": "Handles after mock behavior for the CALLDEMO component",
+      "source_mapping": [
+        "COBOL/CALL-MOCK-AFTER.CBL",
+        "UT-INITIALIZE"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "utBefore",
+      "owning_class": "UtMockAfterService",
+      "responsibility": "Handles before mock behavior for the CALLDEMO component",
+      "source_mapping": [
+        "COBOL/CALL-MOCK-AFTER.CBL",
+        "UT-INITIALIZE"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "utEnd",
+      "owning_class": "UtMockAfterService",
+      "responsibility": "Handles end mock behavior for the CALLDEMO component",
+      "source_mapping": [
+        "COBOL/CALL-MOCK-AFTER.CBL",
+        "UT-INITIALIZE"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "utInitialize",
+      "owning_class": "UtMockAfterService",
+      "responsibility": "Handles initialize mock behavior for the CALLDEMO component",
+      "source_mapping": [
+        "COBOL/CALL-MOCK-AFTER.CBL",
+        "UT-INITIALIZE"
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [],
+  "external_dependencies": [
+    "ZUTZCWS",
+    "ZUTZCPD"
+  ],
+  "unresolved_items": [
+    "NOTREALNAME"
+  ],
+  "assumptions": [],
+  "raw_plan": {
+    "summary": "Conversion plan for CALL-MOCK-AFTER.CBL to Java Quarkus",
+    "target_package_or_namespace": "com.modernizer.migration.CallMockAfterService",
+    "classes": [
+      {
+        "class_name": "CallMockAfterService",
+        "file_path": "src/main/java/com/modernizer/migration/CallMockAfterService.java",
+        "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+        "responsibility": "Handles business logic for the CALLDEMO component",
+        "source_mapping": [
+          "COBOL/CALL-MOCK-AFTER.CBL",
+          "UT-BEFORE"
+        ]
+      },
+      {
+        "class_name": "UtMockAfterService",
+        "file_path": "src/main/java/com/modernizer/migration/UtMockAfterService.java",
+        "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+        "responsibility": "Handles mock behavior for the CALLDEMO component",
+        "source_mapping": [
+          "COBOL/CALL-MOCK-AFTER.CBL",
+          "UT-INITIALIZE"
+        ]
+      },
+      {
+        "class_name": "UtMockClassicCallService",
+        "file_path": "src/main/java/com/modernizer/migration/UtMockClassicCallService.java",
+        "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+        "responsibility": "Handles mock behavior for the CALLDEMO component (classic CALL)",
+        "source_mapping": [
+          "COBOL/CALL-MOCK-AFTER.CBL",
+          "UT-BEFORE"
+        ]
+      },
+      {
+        "class_name": "UtMockDynamicCallService",
+        "file_path": "src/main/java/com/modernizer/migration/UtMockDynamicCallService.java",
+        "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+        "responsibility": "Handles mock behavior for the CALLDEMO component (dynamic subprogram)",
+        "source_mapping": [
+          "COBOL/CALL-MOCK-AFTER.CBL",
+          "UT-BEFORE"
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "basicCall",
+        "owning_class": "CallMockAfterService",
+        "responsibility": "Handles basic CALL statement mock behavior",
+        "source_mapping": [
+          "COBOL/CALL-MOCK-AFTER.CBL",
+          "UT-BEFORE"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "classicCall",
+        "owning_class": "UtMockClassicCallService",
+        "responsibility": "Handles classic CALL statement mock behavior",
+        "source_mapping": [
+          "COBOL/CALL-MOCK-AFTER.CBL",
+          "UT-BEFORE"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "dynamicCall",
+        "owning_class": "UtMockDynamicCallService",
+        "responsibility": "Handles dynamic subprogram mock behavior",
+        "source_mapping": [
+          "COBOL/CALL-MOCK-AFTER.CBL",
+          "UT-BEFORE"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "end",
+        "owning_class": "CallMockAfterService",
+        "responsibility": "Handles end of CALLDEMO component mock behavior",
+        "source_mapping": [
+          "COBOL/CALL-MOCK-AFTER.CBL",
+          "UT-BEFORE"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "utAfter",
+        "owning_class": "UtMockAfterService",
+        "responsibility": "Handles after mock behavior for the CALLDEMO component",
+        "source_mapping": [
+          "COBOL/CALL-MOCK-AFTER.CBL",
+          "UT-INITIALIZE"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "utBefore",
+        "owning_class": "UtMockAfterService",
+        "responsibility": "Handles before mock behavior for the CALLDEMO component",
+        "source_mapping": [
+          "COBOL/CALL-MOCK-AFTER.CBL",
+          "UT-INITIALIZE"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "utEnd",
+        "owning_class": "UtMockAfterService",
+        "responsibility": "Handles end mock behavior for the CALLDEMO component",
+        "source_mapping": [
+          "COBOL/CALL-MOCK-AFTER.CBL",
+          "UT-INITIALIZE"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "utInitialize",
+        "owning_class": "UtMockAfterService",
+        "responsibility": "Handles initialize mock behavior for the CALLDEMO component",
+        "source_mapping": [
+          "COBOL/CALL-MOCK-AFTER.CBL",
+          "UT-INITIALIZE"
+        ],
+        "inputs": [],
+        "outputs": []
+      }
+    ],
+    "data_models": [],
+    "external_dependencies": [
+      {
+        "name": "ZUTZCWS",
+        "type": "COPYBOOK"
+      },
+      {
+        "name": "ZUTZCPD",
+        "type": "COPYBOOK"
+      }
+    ],
+    "unresolved_items": [
+      {
+        "name": "NOTREALNAME",
+        "type": "EXTERNAL_SERVICE"
+      }
+    ],
+    "assumptions": []
+  }
+}

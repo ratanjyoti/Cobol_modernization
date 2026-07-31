@@ -1,0 +1,74 @@
+{
+  "run_id": "RUN_B71F2E57",
+  "file_id": 985,
+  "source_file": "COPYR001.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "Deterministic conversion plan for COPYR001.CBL. The source will be migrated as a service/data-definition component using extracted business rules and source evidence.",
+  "classes": [
+    {
+      "class_name": "Copyr001Service",
+      "file_path": "src/main/java/com/modernizer/migration/Copyr001Service.java",
+      "layer": "service",
+      "responsibility": "Preserve the business behavior, validations, calculations, messages, and shared data semantics identified in COPYR001.CBL.",
+      "source_mapping": [
+        "COPYR001.CBL"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "executeBusinessRule",
+      "owning_class": "Copyr001Service",
+      "responsibility": "Execute the preserved business rule path for this legacy source file.",
+      "source_mapping": [
+        "COPYR001.CBL"
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [],
+  "external_dependencies": [],
+  "unresolved_items": [],
+  "assumptions": [
+    "Fallback plan created because the configured LLM did not return a usable conversion plan.",
+    "Local OpenAI-compatible planning failed: {\"error\":\"The number of tokens to keep from the initial prompt is greater than the context length (n_keep: 60259>= n_ctx: 8192). Try to load the model with a larger context length, or provide a shorter input.\"}"
+  ],
+  "raw_plan": {
+    "target_package_or_namespace": "com.modernizer.migration",
+    "summary": "Deterministic conversion plan for COPYR001.CBL. The source will be migrated as a service/data-definition component using extracted business rules and source evidence.",
+    "classes": [
+      {
+        "class_name": "Copyr001Service",
+        "file_path": "src/main/java/com/modernizer/migration/Copyr001Service.java",
+        "layer": "service",
+        "responsibility": "Preserve the business behavior, validations, calculations, messages, and shared data semantics identified in COPYR001.CBL.",
+        "source_mapping": [
+          "COPYR001.CBL"
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "executeBusinessRule",
+        "owning_class": "Copyr001Service",
+        "responsibility": "Execute the preserved business rule path for this legacy source file.",
+        "source_mapping": [
+          "COPYR001.CBL"
+        ],
+        "inputs": [],
+        "outputs": []
+      }
+    ],
+    "data_models": [],
+    "external_dependencies": [],
+    "unresolved_items": [],
+    "assumptions": [
+      "Fallback plan created because the configured LLM did not return a usable conversion plan.",
+      "Local OpenAI-compatible planning failed: {\"error\":\"The number of tokens to keep from the initial prompt is greater than the context length (n_keep: 60259>= n_ctx: 8192). Try to load the model with a larger context length, or provide a shorter input.\"}"
+    ]
+  }
+}

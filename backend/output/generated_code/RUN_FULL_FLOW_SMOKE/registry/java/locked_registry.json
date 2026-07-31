@@ -1,0 +1,54 @@
+{
+  "run_id": "RUN_FULL_FLOW_SMOKE",
+  "target_language": "java",
+  "locked": true,
+  "type_mapping_count": 2,
+  "signature_count": 1,
+  "type_mappings": [
+    {
+      "run_id": "RUN_FULL_FLOW_SMOKE",
+      "file_id": 959,
+      "filename": "ACCTCHK.CBL",
+      "target_language": "java",
+      "source_name": "CUSTOMER-BALANCE",
+      "target_name": "customerBalance",
+      "source_type": "S9(9)V99.",
+      "target_type": "BigDecimal",
+      "confidence": 0.85,
+      "evidence": "CUSTOMER-BALANCE PIC S9(9)V99.",
+      "is_locked": 1,
+      "created_at": "2026-07-28T14:09:51.564906"
+    },
+    {
+      "run_id": "RUN_FULL_FLOW_SMOKE",
+      "file_id": 959,
+      "filename": "ACCTCHK.CBL",
+      "target_language": "java",
+      "source_name": "OVERDRAFT-FLAG",
+      "target_name": "overdraftFlag",
+      "source_type": "X.",
+      "target_type": "String",
+      "confidence": 0.85,
+      "evidence": "OVERDRAFT-FLAG PIC X.",
+      "is_locked": 1,
+      "created_at": "2026-07-28T14:09:51.564906"
+    }
+  ],
+  "signatures": [
+    {
+      "run_id": "RUN_FULL_FLOW_SMOKE",
+      "file_id": 959,
+      "filename": "ACCTCHK.CBL",
+      "target_language": "java",
+      "source_paragraph": "END-IF",
+      "target_method": "endIf",
+      "target_class": "AcctchkService",
+      "return_type": "void",
+      "parameters": "[]",
+      "confidence": 0.8,
+      "evidence": "COBOL paragraph: END-IF.",
+      "is_locked": 1,
+      "created_at": "2026-07-28T14:09:51.564906"
+    }
+  ]
+}

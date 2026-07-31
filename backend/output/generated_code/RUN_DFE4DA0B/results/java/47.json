@@ -1,0 +1,22 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "status": "GENERATED",
+  "summary": "Generated typed model/DTO from data copybook SQLCA.cpy.",
+  "generated_files": [
+    {
+      "path": "src/main/java/com/modernizer/migration/model/Sqlca.java",
+      "language": "java",
+      "file_type": "dto",
+      "content": "package com.modernizer.migration.model;\n\n/**\n * Generated model from COBOL copybook SQLCA.cpy.\n * Fields are derived from COBOL PIC clauses and locked symbol mappings.\n */\npublic class Sqlca {\n    private String sqlcaid;\n    private int sqlcabc;\n    private int sqlcode;\n    private int sqlerrml;\n    private String sqlerrmc;\n    private String sqlerrp;\n    private int sqlerrd;\n    private String sqlwarn0;\n    private String sqlwarn1;\n    private String sqlwarn2;\n    private String sqlwarn3;\n    private String sqlwarn4;\n    private String sqlwarn5;\n    private String sqlwarn6;\n    private String sqlwarn7;\n    private String sqlwarn8;\n    private String sqlwarn9;\n    private String sqlwarn10;\n    private String sqlstate;\n\n    public String getSqlcaid() {\n        return sqlcaid;\n    }\n\n    public void setSqlcaid(String sqlcaid) {\n        this.sqlcaid = sqlcaid;\n    }\n    public int getSqlcabc() {\n        return sqlcabc;\n    }\n\n    public void setSqlcabc(int sqlcabc) {\n        this.sqlcabc = sqlcabc;\n    }\n    public int getSqlcode() {\n        return sqlcode;\n    }\n\n    public void setSqlcode(int sqlcode) {\n        this.sqlcode = sqlcode;\n    }\n    public int getSqlerrml() {\n        return sqlerrml;\n    }\n\n    public void setSqlerrml(int sqlerrml) {\n        this.sqlerrml = sqlerrml;\n    }\n    public String getSqlerrmc() {\n        return sqlerrmc;\n    }\n\n    public void setSqlerrmc(String sqlerrmc) {\n        this.sqlerrmc = sqlerrmc;\n    }\n    public String getSqlerrp() {\n        return sqlerrp;\n    }\n\n    public void setSqlerrp(String sqlerrp) {\n        this.sqlerrp = sqlerrp;\n    }\n    public int getSqlerrd() {\n        return sqlerrd;\n    }\n\n    public void setSqlerrd(int sqlerrd) {\n        this.sqlerrd = sqlerrd;\n    }\n    public String getSqlwarn0() {\n        return sqlwarn0;\n    }\n\n    public void setSqlwarn0(String sqlwarn0) {\n        this.sqlwarn0 = sqlwarn0;\n    }\n    public String getSqlwarn1() {\n        return sqlwarn1;\n    }\n\n    public void setSqlwarn1(String sqlwarn1) {\n        this.sqlwarn1 = sqlwarn1;\n    }\n    public String getSqlwarn2() {\n        return sqlwarn2;\n    }\n\n    public void setSqlwarn2(String sqlwarn2) {\n        this.sqlwarn2 = sqlwarn2;\n    }\n    public String getSqlwarn3() {\n        return sqlwarn3;\n    }\n\n    public void setSqlwarn3(String sqlwarn3) {\n        this.sqlwarn3 = sqlwarn3;\n    }\n    public String getSqlwarn4() {\n        return sqlwarn4;\n    }\n\n    public void setSqlwarn4(String sqlwarn4) {\n        this.sqlwarn4 = sqlwarn4;\n    }\n    public String getSqlwarn5() {\n        return sqlwarn5;\n    }\n\n    public void setSqlwarn5(String sqlwarn5) {\n        this.sqlwarn5 = sqlwarn5;\n    }\n    public String getSqlwarn6() {\n        return sqlwarn6;\n    }\n\n    public void setSqlwarn6(String sqlwarn6) {\n        this.sqlwarn6 = sqlwarn6;\n    }\n    public String getSqlwarn7() {\n        return sqlwarn7;\n    }\n\n    public void setSqlwarn7(String sqlwarn7) {\n        this.sqlwarn7 = sqlwarn7;\n    }\n    public String getSqlwarn8() {\n        return sqlwarn8;\n    }\n\n    public void setSqlwarn8(String sqlwarn8) {\n        this.sqlwarn8 = sqlwarn8;\n    }\n    public String getSqlwarn9() {\n        return sqlwarn9;\n    }\n\n    public void setSqlwarn9(String sqlwarn9) {\n        this.sqlwarn9 = sqlwarn9;\n    }\n    public String getSqlwarn10() {\n        return sqlwarn10;\n    }\n\n    public void setSqlwarn10(String sqlwarn10) {\n        this.sqlwarn10 = sqlwarn10;\n    }\n    public String getSqlstate() {\n        return sqlstate;\n    }\n\n    public void setSqlstate(String sqlstate) {\n        this.sqlstate = sqlstate;\n    }\n}\n",
+      "source_file": "SQLCA.cpy",
+      "notes": [
+        "Generated deterministically from copybook PIC fields."
+      ]
+    }
+  ],
+  "unresolved_items": [],
+  "warnings": [],
+  "errors": []
+}

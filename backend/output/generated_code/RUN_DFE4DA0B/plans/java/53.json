@@ -1,0 +1,163 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 53,
+  "source_file": "GREETING.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration.greeting",
+  "summary": "Conversion plan for GREETING.CBL to Java Quarkus backend service",
+  "classes": [
+    {
+      "class_name": "GreetingService",
+      "file_path": "GreetingService.java",
+      "layer": "resource",
+      "responsibility": "Handles business logic for greeting messages",
+      "source_mapping": [
+        "COBOL paragraph: 2000-SPEAK"
+      ]
+    },
+    {
+      "class_name": "GreetingRepository",
+      "file_path": "GreetingRepository.java",
+      "layer": "repository",
+      "responsibility": "Provides data access for greeting messages",
+      "source_mapping": []
+    },
+    {
+      "class_name": "GreetingDTO",
+      "file_path": "GreetingDTO.java",
+      "layer": "dto",
+      "responsibility": "Represents a greeting message in a domain-neutral format",
+      "source_mapping": [
+        "COBOL paragraph: 9999-END"
+      ]
+    },
+    {
+      "class_name": "GreetingDomain",
+      "file_path": "GreetingDomain.java",
+      "layer": "domain",
+      "responsibility": "Defines the business logic for greeting messages",
+      "source_mapping": []
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "speak",
+      "owning_class": "GreetingService",
+      "responsibility": "Handles the 'speak' message in a greeting conversation",
+      "source_mapping": [
+        "COBOL paragraph: 2000-SPEAK"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "end",
+      "owning_class": "GreetingService",
+      "responsibility": "Handles the 'end' message in a greeting conversation",
+      "source_mapping": [
+        "COBOL paragraph: 9999-END"
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [
+    {
+      "model_name": "GreetingMessage",
+      "class_name": "GreetingDTO",
+      "responsibility": "Represents a greeting message in a domain-neutral format"
+    },
+    {
+      "model_name": "GreetingConversation",
+      "class_name": "GreetingDomain",
+      "responsibility": "Defines the business logic for greeting messages"
+    }
+  ],
+  "external_dependencies": [
+    "Stub adapter for external calls"
+  ],
+  "unresolved_items": [],
+  "assumptions": [],
+  "raw_plan": {
+    "summary": "Conversion plan for GREETING.CBL to Java Quarkus backend service",
+    "target_package_or_namespace": "com.modernizer.migration.greeting",
+    "classes": [
+      {
+        "class_name": "GreetingService",
+        "file_path": "GreetingService.java",
+        "layer": "resource",
+        "responsibility": "Handles business logic for greeting messages",
+        "source_mapping": [
+          "COBOL paragraph: 2000-SPEAK"
+        ]
+      },
+      {
+        "class_name": "GreetingRepository",
+        "file_path": "GreetingRepository.java",
+        "layer": "repository",
+        "responsibility": "Provides data access for greeting messages",
+        "source_mapping": []
+      },
+      {
+        "class_name": "GreetingDTO",
+        "file_path": "GreetingDTO.java",
+        "layer": "dto",
+        "responsibility": "Represents a greeting message in a domain-neutral format",
+        "source_mapping": [
+          "COBOL paragraph: 9999-END"
+        ]
+      },
+      {
+        "class_name": "GreetingDomain",
+        "file_path": "GreetingDomain.java",
+        "layer": "domain",
+        "responsibility": "Defines the business logic for greeting messages",
+        "source_mapping": []
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "speak",
+        "owning_class": "GreetingService",
+        "responsibility": "Handles the 'speak' message in a greeting conversation",
+        "source_mapping": [
+          "COBOL paragraph: 2000-SPEAK"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "end",
+        "owning_class": "GreetingService",
+        "responsibility": "Handles the 'end' message in a greeting conversation",
+        "source_mapping": [
+          "COBOL paragraph: 9999-END"
+        ],
+        "inputs": [],
+        "outputs": []
+      }
+    ],
+    "data_models": [
+      {
+        "model_name": "GreetingMessage",
+        "class_name": "GreetingDTO",
+        "responsibility": "Represents a greeting message in a domain-neutral format"
+      },
+      {
+        "model_name": "GreetingConversation",
+        "class_name": "GreetingDomain",
+        "responsibility": "Defines the business logic for greeting messages"
+      }
+    ],
+    "external_dependencies": [
+      {
+        "dependency_id": "adapter-stub",
+        "description": "Stub adapter for external calls"
+      }
+    ],
+    "unresolved_items": [],
+    "assumptions": []
+  }
+}

@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from fastapi.responses import FileResponse
-
 from Processes.code_generation_process import CodeGenerationProcess
 from Persistence.sqlite.session import get_db
 from Processes.conversion_planning_process import ConversionPlanningProcess
 from Processes.code_fix_process import CodeFixProcess
 from services.migration_report_service import MigrationReportService
 from services.symbol_registry_service import SymbolRegistryService
+from Processes.method_body_repair_process import MethodBodyRepairProcess
+from Processes.full_code_generation_pipeline import FullCodeGenerationPipeline
 
 router = APIRouter(prefix="/code-generation", tags=["Code Generation"])
 
@@ -249,3 +250,79 @@ async def get_migration_report(
         raise HTTPException(status_code=404, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+@router.post("/{run_id}/regenerate-missing")
+async def regenerate_missing_generated_files(
+    run_id: str,
+    target_language: str = Query("java"),
+    max_files: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    try:
+        process = CodeGenerationProcess(db)
+
+        return process.regenerate_missing_files(
+            run_id=run_id,
+            target_language=target_language,
+            project_id=run_id,
+            max_files=max_files,
+        )
+
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@router.post("/{run_id}/repair-comment-methods")
+async def repair_comment_only_methods(
+    run_id: str,
+    target_language: str = Query("java"),
+    max_methods: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    try:
+        process = MethodBodyRepairProcess(db)
+
+        return process.repair_comment_only_methods(
+            run_id=run_id,
+            target_language=target_language,
+            max_methods=max_methods,
+            project_id=run_id,
+        )
+
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@router.post("/{run_id}/run-full")
+async def run_full_code_generation_pipeline(
+    run_id: str,
+    target_language: str = Query("java"),
+    db: Session = Depends(get_db),
+):
+    try:
+        pipeline = FullCodeGenerationPipeline(db)
+
+        return pipeline.run(
+            run_id=run_id,
+            target_language=target_language,
+            project_id=run_id,
+        )
+
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/{run_id}/pipeline-status")
+async def get_code_generation_pipeline_status(
+    run_id: str,
+    target_language: str = Query("java"),
+    db: Session = Depends(get_db),
+):
+    try:
+        pipeline = FullCodeGenerationPipeline(db)
+
+        return pipeline.get_status(
+            run_id=run_id,
+            target_language=target_language,
+        )
+
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))

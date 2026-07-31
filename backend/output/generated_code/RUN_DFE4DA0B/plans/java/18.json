@@ -1,0 +1,93 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 18,
+  "source_file": "COPY005-padded.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "Convert COBOL to Java Quarkus backend service",
+  "classes": [
+    {
+      "class_name": "CopyService",
+      "file_path": "src/main/java/com/modernizer/migration/service/CopyService.java",
+      "layer": "service",
+      "responsibility": "Handles business logic for copying data",
+      "source_mapping": [
+        "COPY005-padded.CBL"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "copyData",
+      "owning_class": "CopyService",
+      "responsibility": "Copies data from source to target",
+      "source_mapping": [
+        "COPY005-COBOL"
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [
+    {
+      "model_name": "CopyDataRequest",
+      "type": "dto"
+    },
+    {
+      "model_name": "CopyDataResponse",
+      "type": "dto"
+    }
+  ],
+  "external_dependencies": [],
+  "unresolved_items": [
+    "{\"item_type\": \"adapter-stub\", \"source_file\": \"src/main/cobol/adapter/COPY005-padded.CBL\"}"
+  ],
+  "assumptions": [],
+  "raw_plan": {
+    "summary": "Convert COBOL to Java Quarkus backend service",
+    "target_package_or_namespace": "com.modernizer.migration",
+    "classes": [
+      {
+        "class_name": "CopyService",
+        "file_path": "src/main/java/com/modernizer/migration/service/CopyService.java",
+        "layer": "service",
+        "responsibility": "Handles business logic for copying data",
+        "source_mapping": [
+          "COPY005-padded.CBL"
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "copyData",
+        "owning_class": "CopyService",
+        "responsibility": "Copies data from source to target",
+        "source_mapping": [
+          "COPY005-COBOL"
+        ],
+        "inputs": [],
+        "outputs": []
+      }
+    ],
+    "data_models": [
+      {
+        "model_name": "CopyDataRequest",
+        "type": "dto"
+      },
+      {
+        "model_name": "CopyDataResponse",
+        "type": "dto"
+      }
+    ],
+    "external_dependencies": [],
+    "unresolved_items": [
+      {
+        "item_type": "adapter-stub",
+        "source_file": "src/main/cobol/adapter/COPY005-padded.CBL"
+      }
+    ],
+    "assumptions": []
+  }
+}

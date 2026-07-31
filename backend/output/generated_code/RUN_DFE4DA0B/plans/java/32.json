@@ -1,0 +1,226 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 32,
+  "source_file": "EXP01.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "Conversion Plan for EXP01.CBL to Java Quarkus",
+  "classes": [
+    {
+      "class_name": "NewTextGroup1",
+      "file_path": "com/modernizer/migration/NewTextGroup1.java",
+      "layer": "resource",
+      "responsibility": "Resource layer",
+      "source_mapping": [
+        "01 NEW-TEXT-GROUP-1"
+      ]
+    },
+    {
+      "class_name": "NewTextItem11",
+      "file_path": "com/modernizer/migration/NewTextItem11.java",
+      "layer": "resource",
+      "responsibility": "Resource layer",
+      "source_mapping": [
+        "05 NEW-TEXT-ITEM-1-1"
+      ]
+    },
+    {
+      "class_name": "NewTextItem12",
+      "file_path": "com/modernizer/migration/NewTextItem12.java",
+      "layer": "resource",
+      "responsibility": "Resource layer",
+      "source_mapping": [
+        "05 NEW-TEXT-ITEM-1-2"
+      ]
+    },
+    {
+      "class_name": "NewTextItem21",
+      "file_path": "com/modernizer/migration/NewTextItem21.java",
+      "layer": "resource",
+      "responsibility": "Resource layer",
+      "source_mapping": [
+        "05 NEW-TEXT-ITEM-1-2-1"
+      ]
+    },
+    {
+      "class_name": "NewTextItem22",
+      "file_path": "com/modernizer/migration/NewTextItem22.java",
+      "layer": "resource",
+      "responsibility": "Resource layer",
+      "source_mapping": [
+        "05 NEW-TEXT-ITEM-1-2-2"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "newTextGroup1",
+      "owning_class": "NewTextGroup1",
+      "responsibility": "Resource layer",
+      "source_mapping": [
+        "01 NEW-TEXT-GROUP-1"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "newTextItem11",
+      "owning_class": "NewTextItem11",
+      "responsibility": "Resource layer",
+      "source_mapping": [
+        "05 NEW-TEXT-ITEM-1-1"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "newTextItem12",
+      "owning_class": "NewTextItem12",
+      "responsibility": "Resource layer",
+      "source_mapping": [
+        "05 NEW-TEXT-ITEM-1-2"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "newTextItem21",
+      "owning_class": "NewTextItem21",
+      "responsibility": "Resource layer",
+      "source_mapping": [
+        "05 NEW-TEXT-ITEM-1-2-1"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "newTextItem22",
+      "owning_class": "NewTextItem22",
+      "responsibility": "Resource layer",
+      "source_mapping": [
+        "05 NEW-TEXT-ITEM-1-2-2"
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [],
+  "external_dependencies": [],
+  "unresolved_items": [
+    "adapter-stub"
+  ],
+  "assumptions": [],
+  "raw_plan": {
+    "summary": "Conversion Plan for EXP01.CBL to Java Quarkus",
+    "target_package_or_namespace": "com.modernizer.migration",
+    "classes": [
+      {
+        "class_name": "NewTextGroup1",
+        "file_path": "com/modernizer/migration/NewTextGroup1.java",
+        "layer": "resource",
+        "responsibility": "Resource layer",
+        "source_mapping": [
+          "01 NEW-TEXT-GROUP-1"
+        ]
+      },
+      {
+        "class_name": "NewTextItem11",
+        "file_path": "com/modernizer/migration/NewTextItem11.java",
+        "layer": "resource",
+        "responsibility": "Resource layer",
+        "source_mapping": [
+          "05 NEW-TEXT-ITEM-1-1"
+        ]
+      },
+      {
+        "class_name": "NewTextItem12",
+        "file_path": "com/modernizer/migration/NewTextItem12.java",
+        "layer": "resource",
+        "responsibility": "Resource layer",
+        "source_mapping": [
+          "05 NEW-TEXT-ITEM-1-2"
+        ]
+      },
+      {
+        "class_name": "NewTextItem21",
+        "file_path": "com/modernizer/migration/NewTextItem21.java",
+        "layer": "resource",
+        "responsibility": "Resource layer",
+        "source_mapping": [
+          "05 NEW-TEXT-ITEM-1-2-1"
+        ]
+      },
+      {
+        "class_name": "NewTextItem22",
+        "file_path": "com/modernizer/migration/NewTextItem22.java",
+        "layer": "resource",
+        "responsibility": "Resource layer",
+        "source_mapping": [
+          "05 NEW-TEXT-ITEM-1-2-2"
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "newTextGroup1",
+        "owning_class": "NewTextGroup1",
+        "responsibility": "Resource layer",
+        "source_mapping": [
+          "01 NEW-TEXT-GROUP-1"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "newTextItem11",
+        "owning_class": "NewTextItem11",
+        "responsibility": "Resource layer",
+        "source_mapping": [
+          "05 NEW-TEXT-ITEM-1-1"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "newTextItem12",
+        "owning_class": "NewTextItem12",
+        "responsibility": "Resource layer",
+        "source_mapping": [
+          "05 NEW-TEXT-ITEM-1-2"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "newTextItem21",
+        "owning_class": "NewTextItem21",
+        "responsibility": "Resource layer",
+        "source_mapping": [
+          "05 NEW-TEXT-ITEM-1-2-1"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "newTextItem22",
+        "owning_class": "NewTextItem22",
+        "responsibility": "Resource layer",
+        "source_mapping": [
+          "05 NEW-TEXT-ITEM-1-2-2"
+        ],
+        "inputs": [],
+        "outputs": []
+      }
+    ],
+    "data_models": [],
+    "external_dependencies": [],
+    "unresolved_items": [
+      {
+        "name": "adapter-stub"
+      }
+    ],
+    "assumptions": []
+  }
+}

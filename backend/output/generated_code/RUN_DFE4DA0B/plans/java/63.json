@@ -1,0 +1,496 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 63,
+  "source_file": "CCHECKPARAGRAPHSPD.CPY",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "Conversion Plan for CCHECKPARAGRAPHSPD.CPY",
+  "classes": [
+    {
+      "class_name": "CcheckParagraphspdService",
+      "file_path": "src/main/java/com/modernizer/migration/CcheckparagraphspdService.java",
+      "layer": "resource",
+      "responsibility": "Handles business logic for CCHECKPARAGRAPHSPD.CPY component",
+      "source_mapping": [
+        "COBOL/Telon paragraph, section, screen, or chunk reference"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "assertAccesses",
+      "owning_class": "CcheckParagraphspdService",
+      "responsibility": "Verifies access to a file specification",
+      "source_mapping": [
+        "COBOL/Telon paragraph, section, screen, or chunk reference"
+      ],
+      "inputs": [
+        "==UT==TEST-CASE-NUMBER",
+        "==UT==MOCK-OPERATION"
+      ],
+      "outputs": [
+        "==UT==DISPLAY-MESSAGE"
+      ]
+    },
+    {
+      "method_name": "checkExpectation",
+      "owning_class": "CcheckParagraphspdService",
+      "responsibility": "Compares expected and actual values for equality",
+      "source_mapping": [
+        "COBOL/Telon paragraph, section, screen, or chunk reference"
+      ],
+      "inputs": [
+        "==UT==EXPECTED-ACCESSES",
+        "==UT==ACTUAL-ACCESSES"
+      ],
+      "outputs": [
+        "==UT==COMPARE-PASSED"
+      ]
+    },
+    {
+      "method_name": "compare",
+      "owning_class": "CcheckParagraphspdService",
+      "responsibility": "Compares two values for equality",
+      "source_mapping": [
+        "COBOL/Telon paragraph, section, screen, or chunk reference"
+      ],
+      "inputs": [
+        "==UT==EXPECTED-ACCESSES",
+        "==UT==ACTUAL-ACCESSES"
+      ],
+      "outputs": [
+        "==UT==COMPARE-PASSED"
+      ]
+    },
+    {
+      "method_name": "displayFailed",
+      "owning_class": "CcheckParagraphspdService",
+      "responsibility": "Displays a failed message to the business user",
+      "source_mapping": [
+        "COBOL/Telon paragraph, section, screen, or chunk reference"
+      ],
+      "inputs": [
+        "==UT==TEST-CASE-NUMBER",
+        "==UT==MOCK-OPERATION",
+        "==UT==EXPECTED-ACCESSES"
+      ],
+      "outputs": [
+        "==UT==DISPLAY-MESSAGE"
+      ]
+    },
+    {
+      "method_name": "displayPassed",
+      "owning_class": "CcheckParagraphspdService",
+      "responsibility": "Displays a passed message to the business user",
+      "source_mapping": [
+        "COBOL/Telon paragraph, section, screen, or chunk reference"
+      ],
+      "inputs": [
+        "==UT==TEST-CASE-NUMBER",
+        "==UT==MOCK-OPERATION",
+        "==UT==EXPECTED-ACCESSES"
+      ],
+      "outputs": [
+        "==UT==DISPLAY-MESSAGE"
+      ]
+    },
+    {
+      "method_name": "end",
+      "owning_class": "CcheckParagraphspdService",
+      "responsibility": "Ends the CCHECKPARAGRAPHSPD.CPY component",
+      "source_mapping": [
+        "COBOL/Telon paragraph, section, screen, or chunk reference"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "initialize",
+      "owning_class": "CcheckParagraphspdService",
+      "responsibility": "Initializes the CCHECKPARAGRAPHSPD.CPY component",
+      "source_mapping": [
+        "COBOL/Telon paragraph, section, screen, or chunk reference"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "reverseResult",
+      "owning_class": "CcheckParagraphspdService",
+      "responsibility": "Reverses the result of a test case",
+      "source_mapping": [
+        "COBOL/Telon paragraph, section, screen, or chunk reference"
+      ],
+      "inputs": [
+        "==UT==TEST-CASE-NUMBER",
+        "==UT==MOCK-OPERATION"
+      ],
+      "outputs": []
+    },
+    {
+      "method_name": "verifyAtLeast",
+      "owning_class": "CcheckParagraphspdService",
+      "responsibility": "Verifies that a file specification has at least one access",
+      "source_mapping": [
+        "COBOL/Telon paragraph, section, screen, or chunk reference"
+      ],
+      "inputs": [
+        "==UT==TEST-CASE-NUMBER",
+        "==UT==MOCK-OPERATION"
+      ],
+      "outputs": [
+        "==UT==DISPLAY-MESSAGE"
+      ]
+    },
+    {
+      "method_name": "verifyNoMoreThan",
+      "owning_class": "CcheckParagraphspdService",
+      "responsibility": "Verifies that a file specification has no more than one access",
+      "source_mapping": [
+        "COBOL/Telon paragraph, section, screen, or chunk reference"
+      ],
+      "inputs": [
+        "==UT==TEST-CASE-NUMBER",
+        "==UT==MOCK-OPERATION"
+      ],
+      "outputs": [
+        "==UT==DISPLAY-MESSAGE"
+      ]
+    },
+    {
+      "method_name": "verifyExact",
+      "owning_class": "CcheckParagraphspdService",
+      "responsibility": "Verifies that a file specification has an exact match",
+      "source_mapping": [
+        "COBOL/Telon paragraph, section, screen, or chunk reference"
+      ],
+      "inputs": [
+        "==UT==TEST-CASE-NUMBER",
+        "==UT==MOCK-OPERATION"
+      ],
+      "outputs": [
+        "==UT==DISPLAY-MESSAGE"
+      ]
+    },
+    {
+      "method_name": "lookupFile",
+      "owning_class": "CcheckParagraphspdService",
+      "responsibility": "Looks up a file specification",
+      "source_mapping": [
+        "COBOL/Telon paragraph, section, screen, or chunk reference"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "verifyAtLeastString",
+      "owning_class": "CcheckParagraphspdService",
+      "responsibility": "Verifies that a file specification has at least one access",
+      "source_mapping": [
+        "COBOL/Telon paragraph, section, screen, or chunk reference"
+      ],
+      "inputs": [
+        "==UT==TEST-CASE-NUMBER",
+        "==UT==MOCK-OPERATION"
+      ],
+      "outputs": [
+        "==UT==DISPLAY-MESSAGE"
+      ]
+    },
+    {
+      "method_name": "verifyNoMoreThanString",
+      "owning_class": "CcheckParagraphspdService",
+      "responsibility": "Verifies that a file specification has no more than one access",
+      "source_mapping": [
+        "COBOL/Telon paragraph, section, screen, or chunk reference"
+      ],
+      "inputs": [
+        "==UT==TEST-CASE-NUMBER",
+        "==UT==MOCK-OPERATION"
+      ],
+      "outputs": [
+        "==UT==DISPLAY-MESSAGE"
+      ]
+    },
+    {
+      "method_name": "verifyExactString",
+      "owning_class": "CcheckParagraphspdService",
+      "responsibility": "Verifies that a file specification has an exact match",
+      "source_mapping": [
+        "COBOL/Telon paragraph, section, screen, or chunk reference"
+      ],
+      "inputs": [
+        "==UT==TEST-CASE-NUMBER",
+        "==UT==MOCK-OPERATION"
+      ],
+      "outputs": [
+        "==UT==DISPLAY-MESSAGE"
+      ]
+    }
+  ],
+  "data_models": [],
+  "external_dependencies": [
+    "{\"source_file\": \"src/main/resources/org/openmainframeproject/cobolcheck/copybooks/CCHECKPARAGRAPHSPD.CPY\", \"target_item\": \"LENGTH\", \"relation_type\": \"READS\", \"context\": \"\", \"resolved\": true}",
+    "{\"source_file\": \"src/main/resources/org/openmainframeproject/cobolcheck/copybooks/CCHECKPARAGRAPHSPD.CPY\", \"target_item\": \"1\", \"relation_type\": \"READS\", \"context\": \"\", \"resolved\": true}"
+  ],
+  "unresolved_items": [
+    "Format string for ==UT==ACTUAL-ACCESSES",
+    "Format string for ==UT==EXPECTED-ACCESSES"
+  ],
+  "assumptions": [],
+  "raw_plan": {
+    "summary": "Conversion Plan for CCHECKPARAGRAPHSPD.CPY",
+    "target_package_or_namespace": "com.modernizer.migration",
+    "classes": [
+      {
+        "class_name": "CcheckParagraphspdService",
+        "file_path": "src/main/java/com/modernizer/migration/CcheckparagraphspdService.java",
+        "layer": "resource",
+        "responsibility": "Handles business logic for CCHECKPARAGRAPHSPD.CPY component",
+        "source_mapping": [
+          "COBOL/Telon paragraph, section, screen, or chunk reference"
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "assertAccesses",
+        "owning_class": "CcheckParagraphspdService",
+        "responsibility": "Verifies access to a file specification",
+        "source_mapping": [
+          "COBOL/Telon paragraph, section, screen, or chunk reference"
+        ],
+        "inputs": [
+          "==UT==TEST-CASE-NUMBER",
+          "==UT==MOCK-OPERATION"
+        ],
+        "outputs": [
+          "==UT==DISPLAY-MESSAGE"
+        ]
+      },
+      {
+        "method_name": "checkExpectation",
+        "owning_class": "CcheckParagraphspdService",
+        "responsibility": "Compares expected and actual values for equality",
+        "source_mapping": [
+          "COBOL/Telon paragraph, section, screen, or chunk reference"
+        ],
+        "inputs": [
+          "==UT==EXPECTED-ACCESSES",
+          "==UT==ACTUAL-ACCESSES"
+        ],
+        "outputs": [
+          "==UT==COMPARE-PASSED"
+        ]
+      },
+      {
+        "method_name": "compare",
+        "owning_class": "CcheckParagraphspdService",
+        "responsibility": "Compares two values for equality",
+        "source_mapping": [
+          "COBOL/Telon paragraph, section, screen, or chunk reference"
+        ],
+        "inputs": [
+          "==UT==EXPECTED-ACCESSES",
+          "==UT==ACTUAL-ACCESSES"
+        ],
+        "outputs": [
+          "==UT==COMPARE-PASSED"
+        ]
+      },
+      {
+        "method_name": "displayFailed",
+        "owning_class": "CcheckParagraphspdService",
+        "responsibility": "Displays a failed message to the business user",
+        "source_mapping": [
+          "COBOL/Telon paragraph, section, screen, or chunk reference"
+        ],
+        "inputs": [
+          "==UT==TEST-CASE-NUMBER",
+          "==UT==MOCK-OPERATION",
+          "==UT==EXPECTED-ACCESSES"
+        ],
+        "outputs": [
+          "==UT==DISPLAY-MESSAGE"
+        ]
+      },
+      {
+        "method_name": "displayPassed",
+        "owning_class": "CcheckParagraphspdService",
+        "responsibility": "Displays a passed message to the business user",
+        "source_mapping": [
+          "COBOL/Telon paragraph, section, screen, or chunk reference"
+        ],
+        "inputs": [
+          "==UT==TEST-CASE-NUMBER",
+          "==UT==MOCK-OPERATION",
+          "==UT==EXPECTED-ACCESSES"
+        ],
+        "outputs": [
+          "==UT==DISPLAY-MESSAGE"
+        ]
+      },
+      {
+        "method_name": "end",
+        "owning_class": "CcheckParagraphspdService",
+        "responsibility": "Ends the CCHECKPARAGRAPHSPD.CPY component",
+        "source_mapping": [
+          "COBOL/Telon paragraph, section, screen, or chunk reference"
+        ]
+      },
+      {
+        "method_name": "initialize",
+        "owning_class": "CcheckParagraphspdService",
+        "responsibility": "Initializes the CCHECKPARAGRAPHSPD.CPY component",
+        "source_mapping": [
+          "COBOL/Telon paragraph, section, screen, or chunk reference"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "reverseResult",
+        "owning_class": "CcheckParagraphspdService",
+        "responsibility": "Reverses the result of a test case",
+        "source_mapping": [
+          "COBOL/Telon paragraph, section, screen, or chunk reference"
+        ],
+        "inputs": [
+          "==UT==TEST-CASE-NUMBER",
+          "==UT==MOCK-OPERATION"
+        ],
+        "outputs": []
+      },
+      {
+        "method_name": "verifyAtLeast",
+        "owning_class": "CcheckParagraphspdService",
+        "responsibility": "Verifies that a file specification has at least one access",
+        "source_mapping": [
+          "COBOL/Telon paragraph, section, screen, or chunk reference"
+        ],
+        "inputs": [
+          "==UT==TEST-CASE-NUMBER",
+          "==UT==MOCK-OPERATION"
+        ],
+        "outputs": [
+          "==UT==DISPLAY-MESSAGE"
+        ]
+      },
+      {
+        "method_name": "verifyNoMoreThan",
+        "owning_class": "CcheckParagraphspdService",
+        "responsibility": "Verifies that a file specification has no more than one access",
+        "source_mapping": [
+          "COBOL/Telon paragraph, section, screen, or chunk reference"
+        ],
+        "inputs": [
+          "==UT==TEST-CASE-NUMBER",
+          "==UT==MOCK-OPERATION"
+        ],
+        "outputs": [
+          "==UT==DISPLAY-MESSAGE"
+        ]
+      },
+      {
+        "method_name": "verifyExact",
+        "owning_class": "CcheckParagraphspdService",
+        "responsibility": "Verifies that a file specification has an exact match",
+        "source_mapping": [
+          "COBOL/Telon paragraph, section, screen, or chunk reference"
+        ],
+        "inputs": [
+          "==UT==TEST-CASE-NUMBER",
+          "==UT==MOCK-OPERATION"
+        ],
+        "outputs": [
+          "==UT==DISPLAY-MESSAGE"
+        ]
+      },
+      {
+        "method_name": "lookupFile",
+        "owning_class": "CcheckParagraphspdService",
+        "responsibility": "Looks up a file specification",
+        "source_mapping": [
+          "COBOL/Telon paragraph, section, screen, or chunk reference"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "verifyAtLeastString",
+        "owning_class": "CcheckParagraphspdService",
+        "responsibility": "Verifies that a file specification has at least one access",
+        "source_mapping": [
+          "COBOL/Telon paragraph, section, screen, or chunk reference"
+        ],
+        "inputs": [
+          "==UT==TEST-CASE-NUMBER",
+          "==UT==MOCK-OPERATION"
+        ],
+        "outputs": [
+          "==UT==DISPLAY-MESSAGE"
+        ]
+      },
+      {
+        "method_name": "verifyNoMoreThanString",
+        "owning_class": "CcheckParagraphspdService",
+        "responsibility": "Verifies that a file specification has no more than one access",
+        "source_mapping": [
+          "COBOL/Telon paragraph, section, screen, or chunk reference"
+        ],
+        "inputs": [
+          "==UT==TEST-CASE-NUMBER",
+          "==UT==MOCK-OPERATION"
+        ],
+        "outputs": [
+          "==UT==DISPLAY-MESSAGE"
+        ]
+      },
+      {
+        "method_name": "verifyExactString",
+        "owning_class": "CcheckParagraphspdService",
+        "responsibility": "Verifies that a file specification has an exact match",
+        "source_mapping": [
+          "COBOL/Telon paragraph, section, screen, or chunk reference"
+        ],
+        "inputs": [
+          "==UT==TEST-CASE-NUMBER",
+          "==UT==MOCK-OPERATION"
+        ],
+        "outputs": [
+          "==UT==DISPLAY-MESSAGE"
+        ]
+      }
+    ],
+    "data_models": [],
+    "external_dependencies": [
+      {
+        "source_file": "src/main/resources/org/openmainframeproject/cobolcheck/copybooks/CCHECKPARAGRAPHSPD.CPY",
+        "target_item": "LENGTH",
+        "relation_type": "READS",
+        "context": "",
+        "resolved": true
+      },
+      {
+        "source_file": "src/main/resources/org/openmainframeproject/cobolcheck/copybooks/CCHECKPARAGRAPHSPD.CPY",
+        "target_item": "1",
+        "relation_type": "READS",
+        "context": "",
+        "resolved": true
+      }
+    ],
+    "unresolved_items": [
+      {
+        "item_name": "==UT==ACTUAL-ACCESSES-FMT",
+        "description": "Format string for ==UT==ACTUAL-ACCESSES"
+      },
+      {
+        "item_name": "==UT==EXPECTED-ACCESSES-FMT",
+        "description": "Format string for ==UT==EXPECTED-ACCESSES"
+      }
+    ],
+    "assumptions": []
+  }
+}

@@ -1,0 +1,126 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 46,
+  "source_file": "OUTREC2.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "Convert COBOL to Java Quarkus backend service",
+  "classes": [
+    {
+      "class_name": "OutField2Service",
+      "file_path": "OutField2Service.java",
+      "layer": "resource",
+      "responsibility": "Handles OUT-FIELD-2 data",
+      "source_mapping": [
+        "OUTREC2.CBL:05 OUT-FIELD-2 PIC X(16)."
+      ]
+    },
+    {
+      "class_name": "OutField3Service",
+      "file_path": "OutField3Service.java",
+      "layer": "resource",
+      "responsibility": "Handles OUT-FIELD-3 data",
+      "source_mapping": [
+        "OUTREC2.CBL:05 OUT-FIELD-3 PIC X(14)."
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "getOutField2",
+      "owning_class": "OutField2Service",
+      "responsibility": "Returns OUT-FIELD-2 value",
+      "source_mapping": [
+        "OUTREC2.CBL:05 OUT-FIELD-2 PIC X(16)."
+      ],
+      "inputs": [],
+      "outputs": [
+        "String"
+      ]
+    },
+    {
+      "method_name": "getOutField3",
+      "owning_class": "OutField3Service",
+      "responsibility": "Returns OUT-FIELD-3 value",
+      "source_mapping": [
+        "OUTREC2.CBL:05 OUT-FIELD-3 PIC X(14)."
+      ],
+      "inputs": [],
+      "outputs": [
+        "String"
+      ]
+    }
+  ],
+  "data_models": [],
+  "external_dependencies": [],
+  "unresolved_items": [
+    "OutField2Repository",
+    "OutField3Repository"
+  ],
+  "assumptions": [],
+  "raw_plan": {
+    "summary": "Convert COBOL to Java Quarkus backend service",
+    "target_package_or_namespace": "com.modernizer.migration",
+    "classes": [
+      {
+        "class_name": "OutField2Service",
+        "file_path": "OutField2Service.java",
+        "layer": "resource",
+        "responsibility": "Handles OUT-FIELD-2 data",
+        "source_mapping": [
+          "OUTREC2.CBL:05 OUT-FIELD-2 PIC X(16)."
+        ]
+      },
+      {
+        "class_name": "OutField3Service",
+        "file_path": "OutField3Service.java",
+        "layer": "resource",
+        "responsibility": "Handles OUT-FIELD-3 data",
+        "source_mapping": [
+          "OUTREC2.CBL:05 OUT-FIELD-3 PIC X(14)."
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "getOutField2",
+        "owning_class": "OutField2Service",
+        "responsibility": "Returns OUT-FIELD-2 value",
+        "source_mapping": [
+          "OUTREC2.CBL:05 OUT-FIELD-2 PIC X(16)."
+        ],
+        "inputs": [],
+        "outputs": [
+          "String"
+        ]
+      },
+      {
+        "method_name": "getOutField3",
+        "owning_class": "OutField3Service",
+        "responsibility": "Returns OUT-FIELD-3 value",
+        "source_mapping": [
+          "OUTREC2.CBL:05 OUT-FIELD-3 PIC X(14)."
+        ],
+        "inputs": [],
+        "outputs": [
+          "String"
+        ]
+      }
+    ],
+    "data_models": [],
+    "external_dependencies": [],
+    "unresolved_items": [
+      {
+        "name": "OutField2Repository",
+        "type": "repository"
+      },
+      {
+        "name": "OutField3Repository",
+        "type": "repository"
+      }
+    ],
+    "assumptions": []
+  }
+}

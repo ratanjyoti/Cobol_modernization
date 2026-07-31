@@ -1,0 +1,62 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 47,
+  "source_file": "SQLCA.cpy",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "SQLCA.cpy is a data copybook and will be migrated as a shared model/DTO class.",
+  "classes": [
+    {
+      "class_name": "Sqlca",
+      "file_path": "src/main/java/com/modernizer/migration/model/Sqlca.java",
+      "layer": "model",
+      "responsibility": "Represent the shared COBOL copybook fields as typed target-language fields.",
+      "source_mapping": [
+        "SQLCA.cpy"
+      ]
+    }
+  ],
+  "methods": [],
+  "data_models": [
+    {
+      "class_name": "Sqlca",
+      "source_file": "SQLCA.cpy",
+      "field_count": 19
+    }
+  ],
+  "external_dependencies": [],
+  "unresolved_items": [],
+  "assumptions": [
+    "Data copybook model plan created deterministically from COBOL PIC fields."
+  ],
+  "raw_plan": {
+    "target_package_or_namespace": "com.modernizer.migration",
+    "summary": "SQLCA.cpy is a data copybook and will be migrated as a shared model/DTO class.",
+    "classes": [
+      {
+        "class_name": "Sqlca",
+        "file_path": "src/main/java/com/modernizer/migration/model/Sqlca.java",
+        "layer": "model",
+        "responsibility": "Represent the shared COBOL copybook fields as typed target-language fields.",
+        "source_mapping": [
+          "SQLCA.cpy"
+        ]
+      }
+    ],
+    "methods": [],
+    "data_models": [
+      {
+        "class_name": "Sqlca",
+        "source_file": "SQLCA.cpy",
+        "field_count": 19
+      }
+    ],
+    "external_dependencies": [],
+    "unresolved_items": [],
+    "assumptions": [
+      "Data copybook model plan created deterministically from COBOL PIC fields."
+    ]
+  }
+}

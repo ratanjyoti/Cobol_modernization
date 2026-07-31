@@ -1,0 +1,228 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 75,
+  "source_file": "PARA-MOCK-AFTER.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "Conversion plan for COBOL to Java Quarkus backend service",
+  "classes": [
+    {
+      "class_name": "ParaMockAfterService",
+      "file_path": "src/main/java/com/modernizer/migration/ParaMockAfterService.java",
+      "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+      "responsibility": "Handles business logic for MOCKDEMO component",
+      "source_mapping": [
+        "COBOL/PROCEDURE DIVISION",
+        "COBOL/UT-BEFORE",
+        "COBOL/UT-AFTER"
+      ]
+    },
+    {
+      "class_name": "ParaMockAfterController",
+      "file_path": "src/main/java/com/modernizer/migration/ParaMockAfterController.java",
+      "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+      "responsibility": "Handles HTTP requests for MOCKDEMO component",
+      "source_mapping": [
+        "COBOL/PROCEDURE DIVISION",
+        "COBOL/UT-BEFORE",
+        "COBOL/UT-AFTER"
+      ]
+    },
+    {
+      "class_name": "MockDemoConfig",
+      "file_path": "src/main/java/com/modernizer/migration/MockDemoConfig.java",
+      "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+      "responsibility": "Configures MOCKDEMO component",
+      "source_mapping": [
+        "COBOL/PROCEDURE DIVISION",
+        "COBOL/UT-BEFORE",
+        "COBOL/UT-AFTER"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "utInitialize",
+      "owning_class": "ParaMockAfterService",
+      "responsibility": "Initializes MOCKDEMO component",
+      "source_mapping": [
+        "COBOL/UT-INITIALIZE"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "utBefore",
+      "owning_class": "ParaMockAfterService",
+      "responsibility": "Performs business logic before MOCKDEMO component execution",
+      "source_mapping": [
+        "COBOL/UT-BEFORE"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "utAfter",
+      "owning_class": "ParaMockAfterService",
+      "responsibility": "Performs business logic after MOCKDEMO component execution",
+      "source_mapping": [
+        "COBOL/UT-AFTER"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "utAssertEquals",
+      "owning_class": "ParaMockAfterService",
+      "responsibility": "Verifies equality between expected and actual values",
+      "source_mapping": [
+        "COBOL/UT-ASSERT-EQUAL"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "utAssertAccesses",
+      "owning_class": "ParaMockAfterService",
+      "responsibility": "Verifies access counts for MOCKDEMO component",
+      "source_mapping": [
+        "COBOL/UT-ASSERT-ACCESSES"
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [
+    {
+      "model_name": "MockDemoComponent",
+      "data_type": "domain"
+    },
+    {
+      "model_name": "MockDemoRecord",
+      "data_type": "dto"
+    }
+  ],
+  "external_dependencies": [],
+  "unresolved_items": [
+    "ZUTZCWS",
+    "ZUTZCPD"
+  ],
+  "assumptions": [],
+  "raw_plan": {
+    "summary": "Conversion plan for COBOL to Java Quarkus backend service",
+    "target_package_or_namespace": "com.modernizer.migration",
+    "classes": [
+      {
+        "class_name": "ParaMockAfterService",
+        "file_path": "src/main/java/com/modernizer/migration/ParaMockAfterService.java",
+        "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+        "responsibility": "Handles business logic for MOCKDEMO component",
+        "source_mapping": [
+          "COBOL/PROCEDURE DIVISION",
+          "COBOL/UT-BEFORE",
+          "COBOL/UT-AFTER"
+        ]
+      },
+      {
+        "class_name": "ParaMockAfterController",
+        "file_path": "src/main/java/com/modernizer/migration/ParaMockAfterController.java",
+        "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+        "responsibility": "Handles HTTP requests for MOCKDEMO component",
+        "source_mapping": [
+          "COBOL/PROCEDURE DIVISION",
+          "COBOL/UT-BEFORE",
+          "COBOL/UT-AFTER"
+        ]
+      },
+      {
+        "class_name": "MockDemoConfig",
+        "file_path": "src/main/java/com/modernizer/migration/MockDemoConfig.java",
+        "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+        "responsibility": "Configures MOCKDEMO component",
+        "source_mapping": [
+          "COBOL/PROCEDURE DIVISION",
+          "COBOL/UT-BEFORE",
+          "COBOL/UT-AFTER"
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "utInitialize",
+        "owning_class": "ParaMockAfterService",
+        "responsibility": "Initializes MOCKDEMO component",
+        "source_mapping": [
+          "COBOL/UT-INITIALIZE"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "utBefore",
+        "owning_class": "ParaMockAfterService",
+        "responsibility": "Performs business logic before MOCKDEMO component execution",
+        "source_mapping": [
+          "COBOL/UT-BEFORE"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "utAfter",
+        "owning_class": "ParaMockAfterService",
+        "responsibility": "Performs business logic after MOCKDEMO component execution",
+        "source_mapping": [
+          "COBOL/UT-AFTER"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "utAssertEquals",
+        "owning_class": "ParaMockAfterService",
+        "responsibility": "Verifies equality between expected and actual values",
+        "source_mapping": [
+          "COBOL/UT-ASSERT-EQUAL"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "utAssertAccesses",
+        "owning_class": "ParaMockAfterService",
+        "responsibility": "Verifies access counts for MOCKDEMO component",
+        "source_mapping": [
+          "COBOL/UT-ASSERT-ACCESSES"
+        ],
+        "inputs": [],
+        "outputs": []
+      }
+    ],
+    "data_models": [
+      {
+        "model_name": "MockDemoComponent",
+        "data_type": "domain"
+      },
+      {
+        "model_name": "MockDemoRecord",
+        "data_type": "dto"
+      }
+    ],
+    "external_dependencies": [],
+    "unresolved_items": [
+      {
+        "item_name": "ZUTZCWS",
+        "relation_type": "INCLUDES",
+        "context": ""
+      },
+      {
+        "item_name": "ZUTZCPD",
+        "relation_type": "INCLUDES",
+        "context": ""
+      }
+    ],
+    "assumptions": []
+  }
+}

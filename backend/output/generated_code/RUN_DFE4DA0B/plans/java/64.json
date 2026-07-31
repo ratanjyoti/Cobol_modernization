@@ -1,0 +1,124 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 64,
+  "source_file": "CCHECKRESULTPD.CPY",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "Conversion Plan for CCHECKRESULTPD.CPY to Java Quarkus",
+  "classes": [
+    {
+      "class_name": "TestResultProcessor",
+      "file_path": "src/main/java/com/modernizer/migration/processor/TestResultProcessor.java",
+      "layer": "resource",
+      "responsibility": "Processes test result data",
+      "source_mapping": [
+        "COBOL/Telon paragraph, section, screen, or chunk reference"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "processTestResult",
+      "owning_class": "TestResultProcessor",
+      "responsibility": "Processes a single test result record",
+      "source_mapping": [
+        "COBOL/Telon instruction"
+      ],
+      "inputs": [
+        "==UT==TEST-CASE-NUMBER",
+        "==UT==NUMBER-PASSED",
+        "==UT==NUMBER-FAILED",
+        "==UT==NUMBER-UNMOCK-CALL"
+      ],
+      "outputs": [
+        "==UT==RETCODE"
+      ]
+    }
+  ],
+  "data_models": [],
+  "external_dependencies": [
+    "TO"
+  ],
+  "unresolved_items": [
+    "==UT==TEST-CASE-NUMBER",
+    "==UT==NUMBER-PASSED",
+    "==UT==NUMBER-FAILED",
+    "==UT==NUMBER-UNMOCK-CALL",
+    "==UT==RETCODE"
+  ],
+  "assumptions": [
+    "Assuming ==UT==TEST-CASE-NUMBER is a unique identifier for each test case."
+  ],
+  "raw_plan": {
+    "summary": "Conversion Plan for CCHECKRESULTPD.CPY to Java Quarkus",
+    "target_package_or_namespace": "com.modernizer.migration",
+    "classes": [
+      {
+        "class_name": "TestResultProcessor",
+        "file_path": "src/main/java/com/modernizer/migration/processor/TestResultProcessor.java",
+        "layer": "resource",
+        "responsibility": "Processes test result data",
+        "source_mapping": [
+          "COBOL/Telon paragraph, section, screen, or chunk reference"
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "processTestResult",
+        "owning_class": "TestResultProcessor",
+        "responsibility": "Processes a single test result record",
+        "source_mapping": [
+          "COBOL/Telon instruction"
+        ],
+        "inputs": [
+          "==UT==TEST-CASE-NUMBER",
+          "==UT==NUMBER-PASSED",
+          "==UT==NUMBER-FAILED",
+          "==UT==NUMBER-UNMOCK-CALL"
+        ],
+        "outputs": [
+          "==UT==RETCODE"
+        ]
+      }
+    ],
+    "data_models": [],
+    "external_dependencies": [
+      {
+        "name": "TO",
+        "relation_type": "CALLS",
+        "context": "",
+        "resolved": true
+      }
+    ],
+    "unresolved_items": [
+      {
+        "name": "==UT==TEST-CASE-NUMBER",
+        "type": "BigDecimal"
+      },
+      {
+        "name": "==UT==NUMBER-PASSED",
+        "type": "Integer"
+      },
+      {
+        "name": "==UT==NUMBER-FAILED",
+        "type": "Integer"
+      },
+      {
+        "name": "==UT==NUMBER-UNMOCK-CALL",
+        "type": "Integer"
+      },
+      {
+        "name": "==UT==RETCODE",
+        "type": "Integer"
+      }
+    ],
+    "assumptions": [
+      {
+        "description": "Assuming ==UT==TEST-CASE-NUMBER is a unique identifier for each test case."
+      }
+    ]
+  }
+}

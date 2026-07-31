@@ -1,0 +1,114 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 17,
+  "source_file": "COPY004.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "Convert COBOL to Java Quarkus backend service",
+  "classes": [
+    {
+      "class_name": "Copy004Service",
+      "file_path": "com/modernizer/migration/Copy004Service.java",
+      "layer": "service",
+      "responsibility": "Handles business logic for COPY004",
+      "source_mapping": [
+        "COPY004.CBL"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "handleCopy004Item1",
+      "owning_class": "Copy004Service",
+      "responsibility": "Processes COPY004-ITEM-1 data",
+      "source_mapping": [
+        "COPY004.CBL",
+        "05  COPY004-ITEM-1 PIC X."
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "handleCopy004Item2",
+      "owning_class": "Copy004Service",
+      "responsibility": "Processes COPY004-ITEM-2 data",
+      "source_mapping": [
+        "COPY004.CBL",
+        "05  COPY004-ITEM-2 PIC X."
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [
+    {
+      "model_name": "Copy004Item1",
+      "type": "String"
+    },
+    {
+      "model_name": "Copy004Item2",
+      "type": "String"
+    }
+  ],
+  "external_dependencies": [],
+  "unresolved_items": [
+    "adapter-stub"
+  ],
+  "assumptions": [],
+  "raw_plan": {
+    "summary": "Convert COBOL to Java Quarkus backend service",
+    "target_package_or_namespace": "com.modernizer.migration",
+    "classes": [
+      {
+        "class_name": "Copy004Service",
+        "file_path": "com/modernizer/migration/Copy004Service.java",
+        "layer": "service",
+        "responsibility": "Handles business logic for COPY004",
+        "source_mapping": [
+          "COPY004.CBL"
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "handleCopy004Item1",
+        "owning_class": "Copy004Service",
+        "responsibility": "Processes COPY004-ITEM-1 data",
+        "source_mapping": [
+          "COPY004.CBL",
+          "05  COPY004-ITEM-1 PIC X."
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "handleCopy004Item2",
+        "owning_class": "Copy004Service",
+        "responsibility": "Processes COPY004-ITEM-2 data",
+        "source_mapping": [
+          "COPY004.CBL",
+          "05  COPY004-ITEM-2 PIC X."
+        ],
+        "inputs": [],
+        "outputs": []
+      }
+    ],
+    "data_models": [
+      {
+        "model_name": "Copy004Item1",
+        "type": "String"
+      },
+      {
+        "model_name": "Copy004Item2",
+        "type": "String"
+      }
+    ],
+    "external_dependencies": [],
+    "unresolved_items": [
+      "adapter-stub"
+    ],
+    "assumptions": []
+  }
+}

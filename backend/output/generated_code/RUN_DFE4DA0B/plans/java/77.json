@@ -1,0 +1,113 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 77,
+  "source_file": "REPLACE2.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration.Replace2Service",
+  "summary": "COBOL to Java Quarkus conversion plan",
+  "classes": [
+    {
+      "class_name": "Replace2Service",
+      "file_path": "src/main/java/com/modernizer/migration/Replace2Service.java",
+      "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+      "responsibility": "Handles business logic and interactions with external services.",
+      "source_mapping": [
+        "REPLACE2.CBL"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "dynamicCall",
+      "owning_class": "Replace2Service",
+      "responsibility": "Invokes the dynamic call to perform specific business actions.",
+      "source_mapping": [
+        "3000-DYNAMIC-CALL"
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "end",
+      "owning_class": "Replace2Service",
+      "responsibility": "Marks the end of the program execution.",
+      "source_mapping": [
+        "9999-END"
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [],
+  "external_dependencies": [
+    "wsGamma",
+    "wsOmega",
+    "wsSubprogramName"
+  ],
+  "unresolved_items": [
+    "WS-SUBPROGRAM-NAME"
+  ],
+  "assumptions": [],
+  "raw_plan": {
+    "summary": "COBOL to Java Quarkus conversion plan",
+    "target_package_or_namespace": "com.modernizer.migration.Replace2Service",
+    "classes": [
+      {
+        "class_name": "Replace2Service",
+        "file_path": "src/main/java/com/modernizer/migration/Replace2Service.java",
+        "layer": "resource|controller|router|service|repository|dto|domain|exception|config|test|other",
+        "responsibility": "Handles business logic and interactions with external services.",
+        "source_mapping": [
+          "REPLACE2.CBL"
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "dynamicCall",
+        "owning_class": "Replace2Service",
+        "responsibility": "Invokes the dynamic call to perform specific business actions.",
+        "source_mapping": [
+          "3000-DYNAMIC-CALL"
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "end",
+        "owning_class": "Replace2Service",
+        "responsibility": "Marks the end of the program execution.",
+        "source_mapping": [
+          "9999-END"
+        ],
+        "inputs": [],
+        "outputs": []
+      }
+    ],
+    "data_models": [],
+    "external_dependencies": [
+      {
+        "name": "wsGamma",
+        "type": "String"
+      },
+      {
+        "name": "wsOmega",
+        "type": "String"
+      },
+      {
+        "name": "wsSubprogramName",
+        "type": "String"
+      }
+    ],
+    "unresolved_items": [
+      {
+        "name": "WS-SUBPROGRAM-NAME",
+        "relation_type": "CALLS",
+        "context": ""
+      }
+    ],
+    "assumptions": []
+  }
+}

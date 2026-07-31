@@ -1,0 +1,62 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 3,
+  "source_file": "DFHEIBLK.CPY",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "DFHEIBLK.CPY is a data copybook and will be migrated as a shared model/DTO class.",
+  "classes": [
+    {
+      "class_name": "Dfheiblk",
+      "file_path": "src/main/java/com/modernizer/migration/model/Dfheiblk.java",
+      "layer": "model",
+      "responsibility": "Represent the shared COBOL copybook fields as typed target-language fields.",
+      "source_mapping": [
+        "DFHEIBLK.CPY"
+      ]
+    }
+  ],
+  "methods": [],
+  "data_models": [
+    {
+      "class_name": "Dfheiblk",
+      "source_file": "DFHEIBLK.CPY",
+      "field_count": 23
+    }
+  ],
+  "external_dependencies": [],
+  "unresolved_items": [],
+  "assumptions": [
+    "Data copybook model plan created deterministically from COBOL PIC fields."
+  ],
+  "raw_plan": {
+    "target_package_or_namespace": "com.modernizer.migration",
+    "summary": "DFHEIBLK.CPY is a data copybook and will be migrated as a shared model/DTO class.",
+    "classes": [
+      {
+        "class_name": "Dfheiblk",
+        "file_path": "src/main/java/com/modernizer/migration/model/Dfheiblk.java",
+        "layer": "model",
+        "responsibility": "Represent the shared COBOL copybook fields as typed target-language fields.",
+        "source_mapping": [
+          "DFHEIBLK.CPY"
+        ]
+      }
+    ],
+    "methods": [],
+    "data_models": [
+      {
+        "class_name": "Dfheiblk",
+        "source_file": "DFHEIBLK.CPY",
+        "field_count": 23
+      }
+    ],
+    "external_dependencies": [],
+    "unresolved_items": [],
+    "assumptions": [
+      "Data copybook model plan created deterministically from COBOL PIC fields."
+    ]
+  }
+}

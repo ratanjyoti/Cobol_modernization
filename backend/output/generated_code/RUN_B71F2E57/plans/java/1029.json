@@ -1,0 +1,80 @@
+{
+  "run_id": "RUN_B71F2E57",
+  "file_id": 1029,
+  "source_file": "CONVERT-TEST-AFTER.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "Deterministic conversion plan for CONVERT-TEST-AFTER.CBL. The source will be migrated as a service/data-definition component using extracted business rules and source evidence.",
+  "classes": [
+    {
+      "class_name": "ConvertTestAfterService",
+      "file_path": "src/main/java/com/modernizer/migration/ConvertTestAfterService.java",
+      "layer": "service",
+      "responsibility": "Preserve the business behavior, validations, calculations, messages, and shared data semantics identified in CONVERT-TEST-AFTER.CBL.",
+      "source_mapping": [
+        "CONVERT-TEST-AFTER.CBL"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "executeBusinessRule",
+      "owning_class": "ConvertTestAfterService",
+      "responsibility": "Execute the preserved business rule path for this legacy source file.",
+      "source_mapping": [
+        "CONVERT-TEST-AFTER.CBL"
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [],
+  "external_dependencies": [
+    "OUTPUT",
+    "COMMAND-LINE"
+  ],
+  "unresolved_items": [],
+  "assumptions": [
+    "Fallback plan created because the configured LLM did not return a usable conversion plan.",
+    "Local OpenAI-compatible planning failed: {\"error\":\"The number of tokens to keep from the initial prompt is greater than the context length (n_keep: 62577>= n_ctx: 8192). Try to load the model with a larger context length, or provide a shorter input.\"}"
+  ],
+  "raw_plan": {
+    "target_package_or_namespace": "com.modernizer.migration",
+    "summary": "Deterministic conversion plan for CONVERT-TEST-AFTER.CBL. The source will be migrated as a service/data-definition component using extracted business rules and source evidence.",
+    "classes": [
+      {
+        "class_name": "ConvertTestAfterService",
+        "file_path": "src/main/java/com/modernizer/migration/ConvertTestAfterService.java",
+        "layer": "service",
+        "responsibility": "Preserve the business behavior, validations, calculations, messages, and shared data semantics identified in CONVERT-TEST-AFTER.CBL.",
+        "source_mapping": [
+          "CONVERT-TEST-AFTER.CBL"
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "executeBusinessRule",
+        "owning_class": "ConvertTestAfterService",
+        "responsibility": "Execute the preserved business rule path for this legacy source file.",
+        "source_mapping": [
+          "CONVERT-TEST-AFTER.CBL"
+        ],
+        "inputs": [],
+        "outputs": []
+      }
+    ],
+    "data_models": [],
+    "external_dependencies": [
+      "OUTPUT",
+      "COMMAND-LINE"
+    ],
+    "unresolved_items": [],
+    "assumptions": [
+      "Fallback plan created because the configured LLM did not return a usable conversion plan.",
+      "Local OpenAI-compatible planning failed: {\"error\":\"The number of tokens to keep from the initial prompt is greater than the context length (n_keep: 62577>= n_ctx: 8192). Try to load the model with a larger context length, or provide a shorter input.\"}"
+    ]
+  }
+}

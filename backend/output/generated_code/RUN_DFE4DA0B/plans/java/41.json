@@ -1,0 +1,133 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 41,
+  "source_file": "mixed006-padded.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "Conversion Plan for mixed006-padded.CBL to Java Quarkus",
+  "classes": [
+    {
+      "class_name": "Mixed006Item1",
+      "file_path": "src/main/java/com/modernizer/migration/Mixed006Item1.java",
+      "layer": "resource",
+      "responsibility": "Resource class for mixed006-item-1",
+      "source_mapping": [
+        "mixed006-padded.CBL:05 MIXED006-ITEM-1 PIC X."
+      ]
+    },
+    {
+      "class_name": "Mixed006Item2",
+      "file_path": "src/main/java/com/modernizer/migration/Mixed006Item2.java",
+      "layer": "resource",
+      "responsibility": "Resource class for mixed006-item-2",
+      "source_mapping": [
+        "mixed006-padded.CBL:05 MIXED006-ITEM-2 PIC X."
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "getMixed006Item1",
+      "owning_class": "Mixed006Item1",
+      "responsibility": "Getter method for mixed006-item-1",
+      "source_mapping": [
+        "mixed006-padded.CBL:05 MIXED006-ITEM-1 PIC X."
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "getMixed006Item2",
+      "owning_class": "Mixed006Item2",
+      "responsibility": "Getter method for mixed006-item-2",
+      "source_mapping": [
+        "mixed006-padded.CBL:05 MIXED006-ITEM-2 PIC X."
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [],
+  "external_dependencies": [
+    "mixed003",
+    "mixed004"
+  ],
+  "unresolved_items": [
+    "adapter-stub"
+  ],
+  "assumptions": [],
+  "raw_plan": {
+    "summary": "Conversion Plan for mixed006-padded.CBL to Java Quarkus",
+    "target_package_or_namespace": "com.modernizer.migration",
+    "classes": [
+      {
+        "class_name": "Mixed006Item1",
+        "file_path": "src/main/java/com/modernizer/migration/Mixed006Item1.java",
+        "layer": "resource",
+        "responsibility": "Resource class for mixed006-item-1",
+        "source_mapping": [
+          "mixed006-padded.CBL:05 MIXED006-ITEM-1 PIC X."
+        ]
+      },
+      {
+        "class_name": "Mixed006Item2",
+        "file_path": "src/main/java/com/modernizer/migration/Mixed006Item2.java",
+        "layer": "resource",
+        "responsibility": "Resource class for mixed006-item-2",
+        "source_mapping": [
+          "mixed006-padded.CBL:05 MIXED006-ITEM-2 PIC X."
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "getMixed006Item1",
+        "owning_class": "Mixed006Item1",
+        "responsibility": "Getter method for mixed006-item-1",
+        "source_mapping": [
+          "mixed006-padded.CBL:05 MIXED006-ITEM-1 PIC X."
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "getMixed006Item2",
+        "owning_class": "Mixed006Item2",
+        "responsibility": "Getter method for mixed006-item-2",
+        "source_mapping": [
+          "mixed006-padded.CBL:05 MIXED006-ITEM-2 PIC X."
+        ],
+        "inputs": [],
+        "outputs": []
+      }
+    ],
+    "data_models": [],
+    "external_dependencies": [
+      {
+        "name": "mixed003",
+        "type": "copybook",
+        "relation_type": "CALLS",
+        "context": "",
+        "resolved": true
+      },
+      {
+        "name": "mixed004",
+        "type": "copybook",
+        "relation_type": "CALLS",
+        "context": "",
+        "resolved": true
+      }
+    ],
+    "unresolved_items": [
+      {
+        "name": "adapter-stub",
+        "type": "dependency",
+        "relation_type": "UNRESOLVED",
+        "context": ""
+      }
+    ],
+    "assumptions": []
+  }
+}

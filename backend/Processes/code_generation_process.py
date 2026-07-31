@@ -94,12 +94,41 @@ class CodeGenerationProcess:
 
         return result
 
+    def _planned_file_ids(
+        self,
+        run_id: str,
+        target_language: str,
+    ) -> list[int]:
+        plan_dir = self._output_root(run_id) / "plans" / target_language
+
+        if not plan_dir.exists():
+            return []
+
+        file_ids: list[int] = []
+
+        for path in sorted(plan_dir.glob("*.json")):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                file_id = payload.get("file_id")
+
+                if file_id is not None:
+                    file_ids.append(int(file_id))
+                    continue
+
+                # fallback: filename itself is usually {file_id}.json
+                file_ids.append(int(path.stem))
+            except Exception:
+                continue
+
+        return sorted(set(file_ids))
+
     def generate(
         self,
         run_id: str,
         target_language: str = "java",
         file_id: int | None = None,
         project_id: str | None = None,
+        clean_output: bool = True,
     ) -> dict[str, Any]:
         project = self.db.query(Project).filter(Project.run_id == run_id).first()
 
@@ -107,10 +136,10 @@ class CodeGenerationProcess:
             raise ValueError(f"Project not found for run_id={run_id}")
 
         llm_config = self._project_ai_config(project)
-        target = self._normalize_target(target_language)
+
         registry = SymbolRegistryService(self.db).get_registry(
             run_id=run_id,
-            target_language=target.value,
+            target_language=target_language,
         )
 
         if registry["type_mapping_count"] == 0 and registry["signature_count"] == 0:
@@ -118,13 +147,30 @@ class CodeGenerationProcess:
                 "Symbol registry is empty. Finalize registry before code generation."
             )
 
+        target = self._normalize_target(target_language)
         generator = CodeGeneratorAgent(llm_config=llm_config)
 
-        file_contexts = (
-            [self.context_builder.build_single_file_context(run_id, file_id)]
-            if file_id is not None
-            else self.context_builder.build_file_contexts(run_id)
-        )
+        if file_id is not None:
+            file_contexts = [
+                self.context_builder.build_single_file_context(run_id, file_id)
+            ]
+        else:
+            planned_ids = self._planned_file_ids(run_id, target.value)
+
+            if planned_ids:
+                file_contexts = []
+                for planned_file_id in planned_ids:
+                    try:
+                        file_contexts.append(
+                            self.context_builder.build_single_file_context(
+                                run_id,
+                                planned_file_id,
+                            )
+                        )
+                    except Exception:
+                        continue
+            else:
+                file_contexts = self.context_builder.build_file_contexts(run_id)
 
         if not file_contexts:
             return {
@@ -137,28 +183,31 @@ class CodeGenerationProcess:
             }
 
         effective_project_id = project_id or run_id or "default"
-        plan_warnings = self._ensure_conversion_plans(
-            run_id=run_id,
-            target_language=target.value,
-            file_contexts=file_contexts,
-            project_id=effective_project_id,
-        )
         results: list[CodeGenerationResult] = []
         generated_files: list[GeneratedFile] = []
         errors: list[dict[str, Any]] = []
+        processed_source_files: list[dict[str, Any]] = []
 
-        if file_id is None:
+        if clean_output:
             self._clean_project_output(run_id, target.value)
             self._clean_result_output(run_id, target.value)
-        else:
-            self._project_dir(run_id, target.value).mkdir(parents=True, exist_ok=True)
+
+        project_dir = self._project_dir(run_id, target.value)
+        project_dir.mkdir(parents=True, exist_ok=True)
 
         self.scaffold_service.ensure_scaffold(
-        self._project_dir(run_id, target.value),
-        target.value,
-    )
+            project_dir,
+            target.value,
+        )
 
         for file_context in file_contexts:
+            processed_source_files.append(
+                {
+                    "file_id": file_context.file_id,
+                    "filename": file_context.filename,
+                }
+            )
+
             try:
                 plan = self._load_plan(run_id, file_context.file_id, target.value)
 
@@ -174,14 +223,7 @@ class CodeGenerationProcess:
                     self._write_generated_file(run_id, target.value, generated_file)
                     generated_files.append(generated_file)
 
-                if result.status.value == "GENERATED" and not result.errors:
-                    results.append(result)
-                else:
-                    errors.append({
-                        "file_id": file_context.file_id,
-                        "filename": file_context.filename,
-                        "error": "; ".join(result.errors or ["Code generation failed."]),
-                    })
+                results.append(result)
 
             except Exception as exc:
                 errors.append({
@@ -190,59 +232,209 @@ class CodeGenerationProcess:
                     "error": str(exc),
                 })
 
-        all_results, all_generated_files = self._load_saved_generation_results(
-            run_id=run_id,
-            target_language=target.value,
-        )
-        if all_generated_files:
-            self._clean_project_output(run_id, target.value)
-            self._sync_project_from_generated_files(
-                run_id=run_id,
-                target_language=target.value,
-                generated_files=all_generated_files,
-            )
-            results = all_results
-            generated_files = all_generated_files
-
         manifest = self._write_manifest(
             run_id=run_id,
             target_language=target.value,
             results=results,
             generated_files=generated_files,
             errors=errors,
-        )
-        quality = self.quality_service.evaluate(
-            run_id=run_id,
-            target_language=target.value,
-            project_dir=self._project_dir(run_id, target.value),
+            processed_source_files=processed_source_files,
         )
 
-        if not quality.get("success"):
-            errors.append({
-                "file_id": 0,
-                "filename": "GENERATION_QUALITY_GATE",
-                "error": "\n".join(quality.get("failures") or []),
-            })
-        manifest = self._write_manifest(
+        quality_report = self.quality_service.evaluate(
             run_id=run_id,
             target_language=target.value,
-            results=results,
-            generated_files=generated_files,
-            errors=errors,
-            quality_gate=quality,
         )
 
         return {
             "run_id": run_id,
             "target_language": target.value,
             "count": len(generated_files),
+            "processed_source_file_count": len(processed_source_files),
+            "processed_source_files": processed_source_files,
             "project_dir": str(self._project_dir(run_id, target.value)),
             "manifest": manifest,
             "generated_files": [model_to_dict(file) for file in generated_files],
-            "warnings": plan_warnings,
-            "quality_gate": quality,
             "errors": errors,
+            "quality_gate": quality_report,
         }
+
+    def _extract_missing_planned_files(
+        self,
+        quality_report: dict[str, Any] | None,
+    ) -> list[str]:
+        if not quality_report:
+            return []
+
+        missing = quality_report.get("missing_planned_files")
+
+        if isinstance(missing, list):
+            return [str(item).replace("\\", "/") for item in missing if item]
+
+        failures = quality_report.get("failures") or []
+        extracted: list[str] = []
+
+        for failure in failures:
+            text = str(failure)
+
+            marker = "Generated project is missing planned class files:"
+            if marker not in text:
+                continue
+
+            right = text.split(marker, 1)[1]
+            for item in right.split(","):
+                clean = item.strip().replace("\\", "/")
+                if clean:
+                    extracted.append(clean)
+
+        return sorted(set(extracted))
+
+    def _latest_quality_report(
+        self,
+        run_id: str,
+        target_language: str,
+    ) -> dict[str, Any]:
+        path = (
+            self._output_root(run_id)
+            / "quality"
+            / target_language
+            / "latest_quality.json"
+        )
+
+        if not path.exists():
+            return {}
+
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+
+    def regenerate_missing_files(
+        self,
+        run_id: str,
+        target_language: str = "java",
+        missing_files: list[str] | None = None,
+        project_id: str | None = None,
+        max_files: int = 20,
+    ) -> dict[str, Any]:
+        target = self._normalize_target(target_language)
+
+        latest_quality = self._latest_quality_report(run_id, target.value)
+        missing = missing_files or self._extract_missing_planned_files(latest_quality)
+
+        missing = [item.replace("\\", "/") for item in missing if item]
+        missing = sorted(set(missing))
+
+        if not missing:
+            return {
+                "run_id": run_id,
+                "target_language": target.value,
+                "regenerated": 0,
+                "message": "No missing planned files found.",
+                "missing_files": [],
+            }
+
+        plan_index = self._plan_index_by_expected_file(run_id, target.value)
+
+        file_ids: list[int] = []
+        unresolved_missing: list[str] = []
+
+        for missing_file in missing:
+            file_id = plan_index.get(missing_file)
+
+            if file_id is None:
+                unresolved_missing.append(missing_file)
+                continue
+
+            file_ids.append(file_id)
+
+        file_ids = sorted(set(file_ids))[:max_files]
+
+        regenerated_results: list[dict[str, Any]] = []
+        errors: list[dict[str, Any]] = []
+
+        for file_id in file_ids:
+            try:
+                result = self.generate(
+                    run_id=run_id,
+                    target_language=target.value,
+                    file_id=file_id,
+                    project_id=project_id,
+                    clean_output=False,
+                )
+
+                regenerated_results.append(
+                    {
+                        "file_id": file_id,
+                        "generated_count": result.get("count", 0),
+                        "errors": result.get("errors", []),
+                    }
+                )
+
+            except Exception as exc:
+                errors.append(
+                    {
+                        "file_id": file_id,
+                        "error": str(exc),
+                    }
+                )
+
+        quality_report = self.quality_service.run_quality_gate(
+            run_id=run_id,
+            target_language=target.value,
+        )
+
+        return {
+            "run_id": run_id,
+            "target_language": target.value,
+            "requested_missing_files": missing,
+            "unresolved_missing_files": unresolved_missing,
+            "regenerated_file_ids": file_ids,
+            "regenerated": len(regenerated_results),
+            "results": regenerated_results,
+            "errors": errors,
+            "quality_gate": quality_report,
+        }
+
+    def _plan_index_by_expected_file(
+        self,
+        run_id: str,
+        target_language: str,
+    ) -> dict[str, int]:
+        plan_dir = self._output_root(run_id) / "plans" / target_language
+
+        if not plan_dir.exists():
+            return {}
+
+        index: dict[str, int] = {}
+
+        for path in sorted(plan_dir.glob("*.json")):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                file_id = payload.get("file_id")
+
+                if file_id is None:
+                    file_id = int(path.stem)
+
+                for cls in payload.get("classes", []) or []:
+                    if not isinstance(cls, dict):
+                        continue
+
+                    expected = (
+                        cls.get("file_path")
+                        or cls.get("path")
+                        or ""
+                    )
+
+                    expected = str(expected).replace("\\", "/").strip()
+
+                    if expected:
+                        index[expected] = int(file_id)
+
+            except Exception:
+                continue
+
+        return index
 
     def _ensure_conversion_plans(
         self,

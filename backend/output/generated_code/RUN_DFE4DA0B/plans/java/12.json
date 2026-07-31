@@ -1,0 +1,205 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 12,
+  "source_file": "COPY001-padded.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "Conversion Plan for Java Quarkus Backend Service Generation",
+  "classes": [
+    {
+      "class_name": "TestDataElement001A1Service",
+      "file_path": "com/modernizer/migration/testDataElement001A1Service.java",
+      "layer": "resource",
+      "responsibility": "Handles test data element 001 A1",
+      "source_mapping": [
+        "COPY001-padded.CBL",
+        "TEST-DATA-ELEMENT-001-A1 PIC X(05)."
+      ]
+    },
+    {
+      "class_name": "TestDataElement001A2Service",
+      "file_path": "com/modernizer/migration/testDataElement001A2Service.java",
+      "layer": "resource",
+      "responsibility": "Handles test data element 001 A2",
+      "source_mapping": [
+        "COPY001-padded.CBL",
+        "TEST-DATA-ELEMENT-001-A2 PIC ZZ9."
+      ]
+    },
+    {
+      "class_name": "TestDataElement001B1Service",
+      "file_path": "com/modernizer/migration/testDataElement001B1Service.java",
+      "layer": "resource",
+      "responsibility": "Handles test data element 001 B1",
+      "source_mapping": [
+        "COPY001-padded.CBL",
+        "TEST-DATA-ELEMENT-001-B1 PIC X(18)."
+      ]
+    },
+    {
+      "class_name": "TestDataElement001B2Service",
+      "file_path": "com/modernizer/migration/testDataElement001B2Service.java",
+      "layer": "resource",
+      "responsibility": "Handles test data element 001 B2",
+      "source_mapping": [
+        "COPY001-padded.CBL",
+        "TEST-DATA-ELEMENT-001-B2 PIC S9(05) COMP-3."
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "getTestDataElement001A1",
+      "owning_class": "TestDataElement001A1Service",
+      "responsibility": "Returns test data element 001 A1",
+      "source_mapping": [
+        "COPY001-padded.CBL",
+        "TEST-DATA-ELEMENT-001-A1 PIC X(05)."
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "getTestDataElement001A2",
+      "owning_class": "TestDataElement001A2Service",
+      "responsibility": "Returns test data element 001 A2",
+      "source_mapping": [
+        "COPY001-padded.CBL",
+        "TEST-DATA-ELEMENT-001-A2 PIC ZZ9."
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "getTestDataElement001B1",
+      "owning_class": "TestDataElement001B1Service",
+      "responsibility": "Returns test data element 001 B1",
+      "source_mapping": [
+        "COPY001-padded.CBL",
+        "TEST-DATA-ELEMENT-001-B1 PIC X(18)."
+      ],
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "method_name": "getTestDataElement001B2",
+      "owning_class": "TestDataElement001B2Service",
+      "responsibility": "Returns test data element 001 B2",
+      "source_mapping": [
+        "COPY001-padded.CBL",
+        "TEST-DATA-ELEMENT-001-B2 PIC S9(05) COMP-3."
+      ],
+      "inputs": [],
+      "outputs": []
+    }
+  ],
+  "data_models": [],
+  "external_dependencies": [],
+  "unresolved_items": [
+    "Stub adapter for unresolved dependencies"
+  ],
+  "assumptions": [],
+  "raw_plan": {
+    "summary": "Conversion Plan for Java Quarkus Backend Service Generation",
+    "target_package_or_namespace": "com.modernizer.migration",
+    "classes": [
+      {
+        "class_name": "TestDataElement001A1Service",
+        "file_path": "com/modernizer/migration/testDataElement001A1Service.java",
+        "layer": "resource",
+        "responsibility": "Handles test data element 001 A1",
+        "source_mapping": [
+          "COPY001-padded.CBL",
+          "TEST-DATA-ELEMENT-001-A1 PIC X(05)."
+        ]
+      },
+      {
+        "class_name": "TestDataElement001A2Service",
+        "file_path": "com/modernizer/migration/testDataElement001A2Service.java",
+        "layer": "resource",
+        "responsibility": "Handles test data element 001 A2",
+        "source_mapping": [
+          "COPY001-padded.CBL",
+          "TEST-DATA-ELEMENT-001-A2 PIC ZZ9."
+        ]
+      },
+      {
+        "class_name": "TestDataElement001B1Service",
+        "file_path": "com/modernizer/migration/testDataElement001B1Service.java",
+        "layer": "resource",
+        "responsibility": "Handles test data element 001 B1",
+        "source_mapping": [
+          "COPY001-padded.CBL",
+          "TEST-DATA-ELEMENT-001-B1 PIC X(18)."
+        ]
+      },
+      {
+        "class_name": "TestDataElement001B2Service",
+        "file_path": "com/modernizer/migration/testDataElement001B2Service.java",
+        "layer": "resource",
+        "responsibility": "Handles test data element 001 B2",
+        "source_mapping": [
+          "COPY001-padded.CBL",
+          "TEST-DATA-ELEMENT-001-B2 PIC S9(05) COMP-3."
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "getTestDataElement001A1",
+        "owning_class": "TestDataElement001A1Service",
+        "responsibility": "Returns test data element 001 A1",
+        "source_mapping": [
+          "COPY001-padded.CBL",
+          "TEST-DATA-ELEMENT-001-A1 PIC X(05)."
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "getTestDataElement001A2",
+        "owning_class": "TestDataElement001A2Service",
+        "responsibility": "Returns test data element 001 A2",
+        "source_mapping": [
+          "COPY001-padded.CBL",
+          "TEST-DATA-ELEMENT-001-A2 PIC ZZ9."
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "getTestDataElement001B1",
+        "owning_class": "TestDataElement001B1Service",
+        "responsibility": "Returns test data element 001 B1",
+        "source_mapping": [
+          "COPY001-padded.CBL",
+          "TEST-DATA-ELEMENT-001-B1 PIC X(18)."
+        ],
+        "inputs": [],
+        "outputs": []
+      },
+      {
+        "method_name": "getTestDataElement001B2",
+        "owning_class": "TestDataElement001B2Service",
+        "responsibility": "Returns test data element 001 B2",
+        "source_mapping": [
+          "COPY001-padded.CBL",
+          "TEST-DATA-ELEMENT-001-B2 PIC S9(05) COMP-3."
+        ],
+        "inputs": [],
+        "outputs": []
+      }
+    ],
+    "data_models": [],
+    "external_dependencies": [],
+    "unresolved_items": [
+      {
+        "name": "adapter-stub",
+        "description": "Stub adapter for unresolved dependencies"
+      }
+    ],
+    "assumptions": []
+  }
+}

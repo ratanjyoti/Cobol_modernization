@@ -1,0 +1,30 @@
+{
+  "success": false,
+  "status": "FAILED",
+  "run_id": "RUN_B71F2E57",
+  "target_language": "java",
+  "download_allowed": false,
+  "metrics": {
+    "source_file_count": 74,
+    "conversion_plan_count": 78,
+    "manifest_source_file_count": 1,
+    "generated_code_file_count": 1,
+    "planned_class_count": 79,
+    "missing_planned_class_count": 78,
+    "implementation_signal_count": 88,
+    "locked_variable_total": 251,
+    "locked_variable_covered": 44,
+    "locked_variable_coverage_ratio": 0.1752988047808765,
+    "locked_method_total": 67,
+    "locked_method_covered": 0,
+    "locked_method_coverage_ratio": 0.0
+  },
+  "failures": [
+    "Only 1 source file(s) were generated, but 78 conversion plan(s) exist.",
+    "Generated project is missing planned class files: src/main/java/com/modernizer/migration/AlphaService.java, src/main/java/com/modernizer/migration/BadcopyPaddedService.java, src/main/java/com/modernizer/migration/BadcopyService.java, src/main/java/com/modernizer/migration/Bipm012Service.java, src/main/java/com/modernizer/migration/Bipm012iService.java, src/main/java/com/modernizer/migration/CallMockAfterService.java, src/main/java/com/modernizer/migration/CcheckparagraphspdService.java, src/main/java/com/modernizer/migration/CcheckpdDomainModel.java, src/main/java/com/modernizer/migration/CcheckpdDto.java, src/main/java/com/modernizer/migration/CcheckpdException.java, src/main/java/com/modernizer/migration/CcheckpdRepository.java, src/main/java/com/modernizer/migration/CcheckpdService.java, src/main/java/com/modernizer/migration/CcheckresultpdService.java, src/main/java/com/modernizer/migration/CcheckwsService.java, src/main/java/com/modernizer/migration/CicdemoAfterService.java, src/main/java/com/modernizer/migration/ConvertTestAfterService.java, src/main/java/com/modernizer/migration/Copy001PaddedService.java, src/main/java/com/modernizer/migration/Copy001Service.java, src/main/java/com/modernizer/migration/Copy002PaddedService.java, src/main/java/com/modernizer/migration/Copy002Service.java",
+    "Locked variable coverage is too low: 44/251 (18%).",
+    "Locked method coverage is too low: 0/67 (0%).",
+    "Fallback conversion plans must be regenerated with the selected LLM: mixed006-padded.CBL, mixed006.CBL, mixedex005-padded.CBL, mixedex005.CBL, OUTREC.CBL, OUTREC2.CBL, SQLCA.cpy, TEXE2.cpy, TEXEM.cpy, DB2PROG.cbl, DPICNUMBERS.CBL, FileCopy.cbl, GREETING.CBL, LONGLINESANDNUMBERS.CBL, MOCK.CBL, MOCKPARA.CBL, MOCKTEST.CBL, NUMBERS.CBL, REPLAC.CBL, RETURNCODE.CBL"
+  ],
+  "warnings": []
+}

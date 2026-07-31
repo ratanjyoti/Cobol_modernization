@@ -1,0 +1,139 @@
+{
+  "run_id": "RUN_DFE4DA0B",
+  "file_id": 35,
+  "source_file": "mixed003-padded.CBL",
+  "source_language": "cobol",
+  "target_language": "java",
+  "target_framework": "Quarkus",
+  "target_package_or_namespace": "com.modernizer.migration",
+  "summary": "Conversion Plan for mixed003-padded.CBL to Java Quarkus",
+  "classes": [
+    {
+      "class_name": "Mixed003Item1",
+      "file_path": "mixed003-padded.java",
+      "layer": "resource",
+      "responsibility": "Data Access and Business Logic",
+      "source_mapping": [
+        "MIXED003-ITEM-1 PIC X."
+      ]
+    },
+    {
+      "class_name": "Mixed003Item2",
+      "file_path": "mixed003-padded.java",
+      "layer": "resource",
+      "responsibility": "Data Access and Business Logic",
+      "source_mapping": [
+        "MIXED003-ITEM-2 PIC X."
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method_name": "accessMixed003Item1",
+      "owning_class": "Mixed003Item1",
+      "responsibility": "Data Access and Business Logic",
+      "source_mapping": [],
+      "inputs": [
+        "Mixed003Item1"
+      ],
+      "outputs": []
+    },
+    {
+      "method_name": "accessMixed003Item2",
+      "owning_class": "Mixed003Item2",
+      "responsibility": "Data Access and Business Logic",
+      "source_mapping": [],
+      "inputs": [
+        "Mixed003Item2"
+      ],
+      "outputs": []
+    }
+  ],
+  "data_models": [
+    {
+      "model_name": "Mixed003Item1Model",
+      "type_mappings": [
+        "MIXED003-ITEM-1 PIC X."
+      ]
+    },
+    {
+      "model_name": "Mixed003Item2Model",
+      "type_mappings": [
+        "MIXED003-ITEM-2 PIC X."
+      ]
+    }
+  ],
+  "external_dependencies": [
+    "Stub adapter for mixed003-padded"
+  ],
+  "unresolved_items": [],
+  "assumptions": [],
+  "raw_plan": {
+    "summary": "Conversion Plan for mixed003-padded.CBL to Java Quarkus",
+    "target_package_or_namespace": "com.modernizer.migration",
+    "classes": [
+      {
+        "class_name": "Mixed003Item1",
+        "file_path": "mixed003-padded.java",
+        "layer": "resource",
+        "responsibility": "Data Access and Business Logic",
+        "source_mapping": [
+          "MIXED003-ITEM-1 PIC X."
+        ]
+      },
+      {
+        "class_name": "Mixed003Item2",
+        "file_path": "mixed003-padded.java",
+        "layer": "resource",
+        "responsibility": "Data Access and Business Logic",
+        "source_mapping": [
+          "MIXED003-ITEM-2 PIC X."
+        ]
+      }
+    ],
+    "methods": [
+      {
+        "method_name": "accessMixed003Item1",
+        "owning_class": "Mixed003Item1",
+        "responsibility": "Data Access and Business Logic",
+        "source_mapping": [],
+        "inputs": [
+          "Mixed003Item1"
+        ],
+        "outputs": []
+      },
+      {
+        "method_name": "accessMixed003Item2",
+        "owning_class": "Mixed003Item2",
+        "responsibility": "Data Access and Business Logic",
+        "source_mapping": [],
+        "inputs": [
+          "Mixed003Item2"
+        ],
+        "outputs": []
+      }
+    ],
+    "data_models": [
+      {
+        "model_name": "Mixed003Item1Model",
+        "type_mappings": [
+          "MIXED003-ITEM-1 PIC X."
+        ]
+      },
+      {
+        "model_name": "Mixed003Item2Model",
+        "type_mappings": [
+          "MIXED003-ITEM-2 PIC X."
+        ]
+      }
+    ],
+    "external_dependencies": [
+      {
+        "dependency_id": "adapter-stub",
+        "description": "Stub adapter for mixed003-padded"
+      }
+    ],
+    "unresolved_items": [],
+    "assumptions": []
+  }
+}

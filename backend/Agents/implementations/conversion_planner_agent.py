@@ -4,7 +4,7 @@ import re
 from typing import Any
 
 import requests
-
+from services.plan_sanitizer_service import PlanSanitizerService
 from Agents.infrastructure.constitution_loader import ConstitutionLoader
 from Agents.infrastructure.codegen_context_builder import CodegenContextBuilder
 from Agents.infrastructure.prompt_store import PromptStore
@@ -36,6 +36,7 @@ class ConversionPlannerAgent:
         self.llm_config = llm_config or {}
         self.prompt_store = prompt_store or PromptStore()
         self.constitution_loader = constitution_loader or ConstitutionLoader()
+        self.plan_sanitizer = PlanSanitizerService()
 
     def create_plan(
         self,
@@ -93,6 +94,12 @@ class ConversionPlannerAgent:
             try:
                 response_text = self._call_llm(system_prompt, user_prompt)
                 raw_plan = self._parse_json(response_text)
+
+                raw_plan = self.plan_sanitizer.sanitize_plan(
+                    raw_plan=raw_plan,
+                    source_file=file_context.filepath or file_context.filename,
+                    target_language=target.value,
+                )
             except Exception as exc:
                 if self._allow_deterministic_fallback():
                     raw_plan = self._fallback_plan_payload(
@@ -106,12 +113,12 @@ class ConversionPlannerAgent:
                         f"LLM conversion planning failed for {file_context.filename}: {exc}"
                     ) from exc
 
-        return self._to_conversion_plan(
-            raw_plan=raw_plan,
-            file_context=file_context,
-            target_language=target,
-            target_framework=profile.framework,
-        )
+                return self._to_conversion_plan(
+                    raw_plan=raw_plan,
+                    file_context=file_context,
+                    target_language=target,
+                    target_framework=profile.framework,
+                )
 
     def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
         mode = (

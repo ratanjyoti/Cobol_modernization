@@ -1,0 +1,419 @@
+{
+  "run_id": "RUN_D603B751",
+  "target_language": "java",
+  "status": "FAILED",
+  "stage": "Pipeline failed: CodeGenerationProcess._write_manifest() got an unexpected keyword argument 'processed_source_files'",
+  "progress": 100,
+  "download_allowed": false,
+  "updated_at": "2026-07-30T19:46:46.498523Z",
+  "steps": [
+    {
+      "step": "registry",
+      "type_mapping_count": 440,
+      "signature_count": 150
+    },
+    {
+      "step": "planning",
+      "count": 0,
+      "errors": [
+        {
+          "file_id": 167,
+          "filename": "CCHECKPD.CPY",
+          "error": "LLM conversion planning failed for CCHECKPD.CPY: HTTPConnectionPool(host='192.168.1.7', port=1234): Read timed out. (read timeout=120)"
+        },
+        {
+          "file_id": 168,
+          "filename": "CCHECKWS.CPY",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 169,
+          "filename": "DFHEIBLK.CPY",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 173,
+          "filename": "ALPHA.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 174,
+          "filename": "BIPM012.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 175,
+          "filename": "BADCOPY-padded.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 176,
+          "filename": "BADCOPY.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 177,
+          "filename": "BIPM012I.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 178,
+          "filename": "COPY001-padded.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 179,
+          "filename": "COPY001.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 180,
+          "filename": "COPY002-padded.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 181,
+          "filename": "COPY002.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 182,
+          "filename": "COPY003.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 183,
+          "filename": "COPY004.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 184,
+          "filename": "COPY005-padded.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 185,
+          "filename": "COPY005.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 186,
+          "filename": "COPY006.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 187,
+          "filename": "COPYP001-padded.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 188,
+          "filename": "COPYP001.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 189,
+          "filename": "COPYP002-padded.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 190,
+          "filename": "COPYP002.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 191,
+          "filename": "COPYR001-padded.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 192,
+          "filename": "COPYR001.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 193,
+          "filename": "EX002-padded.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 194,
+          "filename": "EX002.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 195,
+          "filename": "EX005-padded.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 196,
+          "filename": "EX005.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 197,
+          "filename": "EXP01-padded.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 198,
+          "filename": "EXP01.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 199,
+          "filename": "EXR001-padded.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 200,
+          "filename": "EXR001.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 201,
+          "filename": "mixed003-padded.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 202,
+          "filename": "mixed003.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 203,
+          "filename": "mixed004-padded.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 204,
+          "filename": "mixed004.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 205,
+          "filename": "mixed005-padded.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 206,
+          "filename": "mixed005.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 207,
+          "filename": "mixed006-padded.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 208,
+          "filename": "mixed006.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 209,
+          "filename": "mixedex005-padded.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 210,
+          "filename": "mixedex005.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 211,
+          "filename": "OUTREC.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 212,
+          "filename": "OUTREC2.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 213,
+          "filename": "SQLCA.cpy",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 214,
+          "filename": "TEXE2.cpy",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 215,
+          "filename": "TEXEM.cpy",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 216,
+          "filename": "DB2PROG.cbl",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 217,
+          "filename": "DPICNUMBERS.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 218,
+          "filename": "FileCopy.cbl",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 219,
+          "filename": "GREETING.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 220,
+          "filename": "LONGLINESANDNUMBERS.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 221,
+          "filename": "MOCK.CBL",
+          "error": "LLM conversion planning failed for MOCK.CBL: HTTPConnectionPool(host='192.168.1.7', port=1234): Read timed out. (read timeout=120)"
+        },
+        {
+          "file_id": 222,
+          "filename": "MOCKPARA.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 223,
+          "filename": "MOCKTEST.CBL",
+          "error": "LLM conversion planning failed for MOCKTEST.CBL: HTTPConnectionPool(host='192.168.1.7', port=1234): Read timed out. (read timeout=120)"
+        },
+        {
+          "file_id": 224,
+          "filename": "NUMBERS.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 225,
+          "filename": "REPLAC.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 226,
+          "filename": "RETURNCODE.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 227,
+          "filename": "TESTNESTED.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 228,
+          "filename": "WS88LEVEL.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 229,
+          "filename": "CCHECKPARAGRAPHSPD.CPY",
+          "error": "LLM conversion planning failed for CCHECKPARAGRAPHSPD.CPY: HTTPConnectionPool(host='192.168.1.7', port=1234): Read timed out. (read timeout=120)"
+        },
+        {
+          "file_id": 230,
+          "filename": "CCHECKRESULTPD.CPY",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 231,
+          "filename": "CCHECKWS.CPY",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 232,
+          "filename": "DFHEIBLK.CPY",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 234,
+          "filename": "CALL-MOCK-AFTER.CBL",
+          "error": "LLM conversion planning failed for CALL-MOCK-AFTER.CBL: HTTPConnectionPool(host='192.168.1.7', port=1234): Read timed out. (read timeout=120)"
+        },
+        {
+          "file_id": 235,
+          "filename": "CICDEMO-AFTER.CBL",
+          "error": "LLM conversion planning failed for CICDEMO-AFTER.CBL: HTTPConnectionPool(host='192.168.1.7', port=1234): Read timed out. (read timeout=120)"
+        },
+        {
+          "file_id": 236,
+          "filename": "CONVERT-TEST-AFTER.CBL",
+          "error": "LLM conversion planning failed for CONVERT-TEST-AFTER.CBL: HTTPConnectionPool(host='192.168.1.7', port=1234): Read timed out. (read timeout=120)"
+        },
+        {
+          "file_id": 237,
+          "filename": "FILE-MOCK-AFTER.CBL",
+          "error": "LLM conversion planning failed for FILE-MOCK-AFTER.CBL: HTTPConnectionPool(host='192.168.1.7', port=1234): Read timed out. (read timeout=120)"
+        },
+        {
+          "file_id": 238,
+          "filename": "INVDATE-AFTER.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 239,
+          "filename": "MINIMAL-AFTER.CBL",
+          "error": "LLM conversion planning failed for MINIMAL-AFTER.CBL: HTTPConnectionPool(host='192.168.1.7', port=1234): Read timed out. (read timeout=120)"
+        },
+        {
+          "file_id": 240,
+          "filename": "MINIMAL-BEFORE.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 241,
+          "filename": "PARA-MOCK-AFTER.CBL",
+          "error": "LLM conversion planning failed for PARA-MOCK-AFTER.CBL: HTTPConnectionPool(host='192.168.1.7', port=1234): Read timed out. (read timeout=120)"
+        },
+        {
+          "file_id": 242,
+          "filename": "REPLACE.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 243,
+          "filename": "REPLACE2.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 244,
+          "filename": "REPLACE3.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 245,
+          "filename": "SUBPROG-AFTER.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        },
+        {
+          "file_id": 246,
+          "filename": "TESTPRG.CBL",
+          "error": "LLM conversion planning failed for TESTPRG.CBL: HTTPConnectionPool(host='192.168.1.7', port=1234): Read timed out. (read timeout=120)"
+        },
+        {
+          "file_id": 248,
+          "filename": "ALPHA.CBL",
+          "error": "LLM conversion planning failed for ALPHA.CBL: HTTPConnectionPool(host='192.168.1.7', port=1234): Read timed out. (read timeout=120)"
+        },
+        {
+          "file_id": 249,
+          "filename": "NUMBERS.CBL",
+          "error": "'NoneType' object has no attribute 'run_id'"
+        }
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "stage": "pipeline",
+      "error": "CodeGenerationProcess._write_manifest() got an unexpected keyword argument 'processed_source_files'",
+      "traceback": "Traceback (most recent call last):\n  File \"E:\\NEW_genai_projects\\cobol_legacy_main\\ollama\\legacy-modernizer\\backend\\Processes\\full_code_generation_pipeline.py\", line 90, in run\n    generate_result = generation_process.generate(\n                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"E:\\NEW_genai_projects\\cobol_legacy_main\\ollama\\legacy-modernizer\\backend\\Processes\\code_generation_process.py\", line 235, in generate\n    manifest = self._write_manifest(\n               ^^^^^^^^^^^^^^^^^^^^^\nTypeError: CodeGenerationProcess._write_manifest() got an unexpected keyword argument 'processed_source_files'\n"
+    }
+  ]
+}

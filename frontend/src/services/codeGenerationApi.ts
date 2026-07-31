@@ -158,6 +158,79 @@ export type MigrationReportResponse = {
   report?: unknown;
 };
 
+export interface PipelineStep {
+  step: string;
+  count?: number;
+  processed_source_file_count?: number;
+  regenerated?: number;
+  requested?: number;
+  repaired?: number;
+  before_count?: number;
+  after_count?: number;
+  errors?: unknown[];
+  [key: string]: unknown;
+}
+
+export interface PipelineStatusResponse {
+  run_id: string;
+  target_language: TargetLanguage;
+  status:
+    | 'NOT_STARTED'
+    | 'RUNNING'
+    | 'COMPLETED'
+    | 'QUALITY_GATE_FAILED'
+    | 'VALIDATION_FAILED'
+    | 'FAILED'
+    | 'STATUS_READ_FAILED'
+    | string;
+  stage: string;
+  progress: number;
+  download_allowed: boolean;
+  updated_at?: string;
+  steps?: PipelineStep[];
+  errors?: unknown[];
+  quality_gate?: unknown;
+  validation?: unknown;
+  report?: unknown;
+}
+export async function runFullCodeGeneration(
+  runId: string,
+  targetLanguage: TargetLanguage,
+): Promise<PipelineStatusResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/code-generation/${encodeURIComponent(
+      runId,
+    )}/run-full?target_language=${encodeURIComponent(targetLanguage)}`,
+    {
+      method: 'POST',
+    },
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || 'Failed to run full code generation pipeline');
+  }
+
+  return response.json();
+}
+
+export async function getCodeGenerationPipelineStatus(
+  runId: string,
+  targetLanguage: TargetLanguage,
+): Promise<PipelineStatusResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/code-generation/${encodeURIComponent(
+      runId,
+    )}/pipeline-status?target_language=${encodeURIComponent(targetLanguage)}`,
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || 'Failed to get code generation pipeline status');
+  }
+
+  return response.json();
+}
 export type ValidationResponse = {
   success: boolean;
   status?: string;
