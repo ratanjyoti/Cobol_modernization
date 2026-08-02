@@ -1,20 +1,27 @@
 ﻿import os
 import re
 from typing import Any
-
+import json
 from sqlalchemy.orm import Session
-
-from Agents.implementations.business_logic_extractor import BusinessLogicExtractorAgent
-from Agents.infrastructure.chat_client_factory import ChatClientFactory
 from Chunking.context.chunk_context_manager import ChunkContextManager
-from Persistence.sqlite.models import BusinessRule, ChunkAnalysis, FileChunk, ProjectFile
+from Persistence.sqlite.models import BusinessRule, ChunkAnalysis, FileChunk, FileRelation, ProjectFile
 from paths import UPLOADS_DIR
+from Agents.infrastructure.chat_client_factory import ChatClientFactory
 
+from pathlib import Path
+
+from Agents.implementations.agentic_business_logic_extractor import (
+    AgenticBusinessLogicExtractor,
+    BusinessLogicFileContext,
+)
 
 class LogicExtractionProcess:
     """
-    Runs business rule extraction across all completed COBOL chunks in a project run.
-    Uses chunk technical YAML + raw COBOL + context packet as evidence.
+    Runs agentic business-rule extraction across supported legacy files.
+
+    The process loads chunks and database context, while the LangGraph
+    orchestrator selects the correct language prompt, performs technical
+    analysis, extracts rules, validates the output and repairs invalid output.
     """
 
     LOGIC_RE = re.compile(
@@ -26,14 +33,23 @@ class LogicExtractionProcess:
         re.IGNORECASE,
     )
 
-    def __init__(self, db_session: Session, llm_provider: str | dict, api_key: str | None = None):
+    def __init__(
+        self,
+        db_session: Session,
+        llm_provider: str | dict,
+        api_key: str | None = None,
+    ):
         self.db = db_session
         self.context_mgr = ChunkContextManager(db_session)
 
         self.config = (
             llm_provider
             if isinstance(llm_provider, dict)
-            else {"mode": llm_provider, "provider": llm_provider, "key": api_key}
+            else {
+                "mode": llm_provider,
+                "provider": llm_provider,
+                "key": api_key,
+            }
         )
 
         self.llm_provider = (
@@ -42,80 +58,375 @@ class LogicExtractionProcess:
             or "local"
         ).lower()
 
-        self.max_llm_chunks = int(os.getenv("OPENROUTER_MAX_RULE_CHUNKS", "12"))
+        self.max_llm_chunks = int(
+            os.getenv("OPENROUTER_MAX_RULE_CHUNKS", "12")
+        )
 
         try:
-            self.llm_client = ChatClientFactory.get_client(self.config)
+            self.llm_client = ChatClientFactory.get_client(
+                self.config
+            )
         except Exception as exc:
-            print(f"Cloud/API client unavailable; using local fallback: {exc}")
+            print(
+                "Cloud/API client unavailable; "
+                f"using local fallback: {exc}"
+            )
+
             self.llm_provider = "local"
-            self.llm_client = ChatClientFactory.get_client({"mode": "local", "provider": "local"})
 
-        self.agent = BusinessLogicExtractorAgent(self.llm_client)
+            self.llm_client = ChatClientFactory.get_client(
+                {
+                    "mode": "local",
+                    "provider": "local",
+                }
+            )
 
-    async def extract_all_rules(self, run_id: str) -> int:
-        analyses = (
-            self.db.query(ChunkAnalysis)
-            .filter_by(run_id=run_id, analysis_status="COMPLETED")
+    async def extract_all_rules(self, run_id: str) -> dict:
+        from Persistence.sqlite.models import Project, ProjectFile
+
+        project = self.db.query(Project).filter_by(run_id=run_id).first()
+
+        if not project:
+            raise ValueError(f"Project not found for run_id={run_id}")
+
+        extractor = self._build_agentic_extractor(project)
+
+        files = (
+            self.db.query(ProjectFile)
+            .filter(ProjectFile.run_id == run_id)
             .all()
         )
 
-        analysis_map = {
-            analysis.chunk_id: analysis.technical_yaml or ""
-            for analysis in analyses
+        total = len(files)
+        completed = 0
+        failed = 0
+        results = []
+
+        self.db.query(BusinessRule).filter_by(run_id=run_id).delete(
+            synchronize_session=False
+        )
+        self.db.commit()
+
+        for project_file in files:
+            try:
+                technical_yaml = self._load_technical_yaml_for_file(
+                    run_id=run_id,
+                    file_id=project_file.id,
+                )
+
+                source_code = self._load_source_code_for_file(project_file)
+
+                if not self._is_legacy_source_chunk(project_file, source_code):
+                    results.append(
+                        {
+                            "file_id": project_file.id,
+                            "file_name": project_file.filename,
+                            "detected_language": project_file.detected_lang or "",
+                            "status": "skipped",
+                            "reason": "unsupported_or_empty_source",
+                        }
+                    )
+                    continue
+
+                dependency_context = self._build_dependency_context_for_file(
+                    run_id=run_id,
+                    file_id=project_file.id,
+                )
+
+                glossary_context = self._build_glossary_context(run_id)
+
+                context = self._build_business_file_context(
+                    project_file=project_file,
+                    technical_yaml=technical_yaml,
+                    source_code=source_code,
+                    dependency_context=dependency_context,
+                    glossary_context=glossary_context,
+                )
+
+                result = extractor.extract(context)
+
+                self._persist_agentic_business_logic_result(
+                    run_id=run_id,
+                    project_file=project_file,
+                    result=result,
+                )
+
+                completed += 1
+                results.append(
+                    {
+                        "file_id": project_file.id,
+                        "file_name": context.file_name,
+                        "detected_language": context.detected_language,
+                        "agent_name": result.get("agent_name"),
+                        "fallback_used": result.get("fallback_used", False),
+                        "business_rules_count": len(result.get("business_rules") or []),
+                        "status": "completed",
+                    }
+                )
+
+            except Exception as exc:
+                failed += 1
+                results.append(
+                    {
+                        "file_id": getattr(project_file, "id", None),
+                        "file_name": getattr(project_file, "filename", ""),
+                        "detected_language": getattr(project_file, "detected_language", ""),
+                        "status": "failed",
+                        "error": str(exc),
+                    }
+                )
+
+        return {
+            "run_id": run_id,
+            "total_files": total,
+            "completed_files": completed,
+            "failed_files": failed,
+            "results": results,
         }
 
-        chunks = self._load_or_create_chunks(run_id)
+    def _persist_agentic_business_logic_result(
+        self,
+        run_id: str,
+        project_file,
+        result: dict,
+    ) -> None:
+        """
+        Store normalized business rules in your existing BusinessRule table.
 
-        files = {
-            file.id: file
-            for file in self.db.query(ProjectFile).filter_by(run_id=run_id).all()
-        }
+        Adjust field names if your BusinessRule model uses different columns.
+        """
 
-        prepared_rules = []
-        llm_used_count = 0
+        from Persistence.sqlite.models import BusinessRule
 
-        for chunk in chunks:
-            project_file = files.get(chunk.file_id)
+        file_id = getattr(project_file, "id", None)
 
-            if not self._is_legacy_source_chunk(project_file, chunk.content):
+        rules = result.get("business_rules") or []
+
+        # Store purpose as a rule also, so existing UI can show something immediately.
+        business_purpose = result.get("business_purpose") or ""
+        functional_logic = self._format_functional_logic(
+            result.get("functional_logic") or []
+        )
+        technical_yaml = result.get("technical_yaml") or ""
+
+        if business_purpose.strip():
+            purpose_rule = BusinessRule(
+                run_id=run_id,
+                file_id=file_id,
+                rule_id=f"PURPOSE-{file_id}",
+                rule_text=business_purpose,
+                business_purpose=business_purpose,
+                functional_logic=functional_logic,
+                business_logic=functional_logic or business_purpose,
+                technical_ref=result.get("file_name", ""),
+                technical_yaml=technical_yaml,
+                status="PENDING",
+            )
+            self.db.add(purpose_rule)
+
+        for index, item in enumerate(rules, start=1):
+            if not isinstance(item, dict):
                 continue
 
-            technical_yaml = analysis_map.get(chunk.id) or self._generate_local_yaml(chunk)
-
-            context_packet = self.context_mgr.build_context_for_chunk(
-                run_id,
-                chunk.file_id,
-                chunk.chunk_index,
+            rule_text = (
+                item.get("rule_text")
+                or item.get("description")
+                or item.get("business_meaning")
+                or ""
             )
 
-            use_llm = (
-                self.llm_provider in {"openrouter", "api", "custom", "cloud"}
-                and llm_used_count < self.max_llm_chunks
-            )
+            if not str(rule_text).strip():
+                continue
 
-            if use_llm:
-                llm_used_count += 1
-
-            result = self.agent.extract_rules(
+            rule = BusinessRule(
+                run_id=run_id,
+                file_id=file_id,
+                rule_id=f"BR-{file_id}-{index}",
+                rule_text=str(rule_text).strip(),
+                technical_ref=str(
+                    item.get("technical_reference")
+                    or item.get("technical_ref")
+                    or ""
+                ),
                 technical_yaml=technical_yaml,
-                raw_code=chunk.content or "",
-                context_packet=context_packet,
-                use_llm=use_llm,
-                source_name=project_file.filename if project_file else "Unknown",
+                business_purpose=business_purpose,
+                functional_logic=functional_logic,
+                business_logic=str(rule_text).strip(),
+                status="PENDING",
             )
 
-            prepared_rules.extend(
-                self._prepare_agent_result(
-                    result=result,
-                    chunk=chunk,
-                    technical_yaml=technical_yaml,
+            self.db.add(rule)
+
+        self.db.commit()
+
+    def _build_business_file_context(
+        self,
+        project_file,
+        technical_yaml: str,
+        source_code: str,
+        dependency_context: str = "",
+        glossary_context: str = "",
+    ) -> BusinessLogicFileContext:
+        detected_language = (
+            getattr(project_file, "detected_language", None)
+            or getattr(project_file, "detected_lang", None)
+            or getattr(project_file, "language", None)
+            or "unknown"
+        )
+
+        file_name = (
+            getattr(project_file, "filename", None)
+            or getattr(project_file, "file_name", None)
+            or getattr(project_file, "relative_path", None)
+            or f"file_{getattr(project_file, 'id', '')}"
+        )
+
+        return BusinessLogicFileContext(
+            file_id=getattr(project_file, "id", ""),
+            file_name=file_name,
+            detected_language=detected_language,
+            source_code=source_code or "",
+            technical_yaml=technical_yaml or "",
+            dependency_context=dependency_context or "",
+            glossary_context=glossary_context or "",
+        )
+
+    def _build_agentic_extractor(self, project) -> AgenticBusinessLogicExtractor:
+        """Build LLM config from project settings.
+        
+                    This keeps the business logic orchestrator independent from DB/project models."""
+
+        llm_config = {
+            "mode": getattr(project, "ai_mode", None)
+            or getattr(project, "llm_provider", None)
+            or self.config.get("mode")
+            or self.config.get("provider")
+            or "local",
+            "provider": getattr(project, "llm_provider", None)
+            or getattr(project, "ai_mode", None)
+            or self.config.get("provider")
+            or self.config.get("mode")
+            or "local",
+            "model": getattr(project, "llm_model", None)
+            or getattr(project, "model", None)
+            or self.config.get("model")
+            or "llama3",
+            "url": getattr(project, "custom_api_base_url", None)
+            or getattr(project, "api_base_url", None)
+            or self.config.get("url")
+            or self.config.get("base_url")
+            or "http://127.0.0.1:11434",
+            "key": getattr(project, "custom_api_key", None)
+            or getattr(project, "api_key", None)
+            or self.config.get("key")
+            or self.config.get("api_key")
+            or None,
+            "timeout": self.config.get("timeout") or 60,
+        }
+
+        return AgenticBusinessLogicExtractor(llm_config=llm_config)
+
+    def _load_source_code_for_file(self, project_file) -> str:
+        content = self._read_project_file(project_file)
+        if content:
+            return content
+
+        for attr_name in ("file_path", "path", "storage_path", "absolute_path"):
+            item = getattr(project_file, attr_name, None)
+            if not item:
+                continue
+
+            try:
+                path = Path(item)
+                if path.exists() and path.is_file():
+                    return path.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+
+        return str(getattr(project_file, "content", "") or "")
+
+    def _load_technical_yaml_for_file(self, run_id: str, file_id: int) -> str:
+        rows = (
+            self.db.query(ChunkAnalysis, FileChunk)
+            .join(FileChunk, ChunkAnalysis.chunk_id == FileChunk.id)
+            .filter(
+                ChunkAnalysis.run_id == run_id,
+                FileChunk.file_id == file_id,
+            )
+            .order_by(FileChunk.chunk_index)
+            .all()
+        )
+
+        yaml_parts = []
+        for analysis, chunk in rows:
+            technical_yaml = getattr(analysis, "technical_yaml", "") or ""
+            if technical_yaml.strip():
+                yaml_parts.append(
+                    f"# chunk_id: {chunk.id}, chunk_index: {chunk.chunk_index}\n"
+                    f"{technical_yaml}"
                 )
+
+        return "\n\n---\n\n".join(yaml_parts)
+
+    def _build_dependency_context_for_file(self, run_id: str, file_id: int) -> str:
+        project_file = self.db.query(ProjectFile).filter_by(id=file_id).first()
+        if not project_file:
+            return ""
+
+        source_names = {
+            item
+            for item in (
+                project_file.filename,
+                project_file.filepath,
+                (project_file.filepath or "").replace("\\", "/"),
             )
+            if item
+        }
 
-        self._replace_rules(run_id, prepared_rules)
+        rows = (
+            self.db.query(FileRelation)
+            .filter(
+                FileRelation.run_id == run_id,
+                FileRelation.source_file.in_(source_names),
+            )
+            .limit(100)
+            .all()
+        )
 
-        return len(prepared_rules)
+        items = [
+            {
+                "source_file": row.source_file,
+                "relation_type": row.relation_type,
+                "target": row.target_item,
+            }
+            for row in rows
+        ]
+
+        return json.dumps(items, indent=2)
+
+    def _build_glossary_context(self, run_id: str) -> str:
+        return ""
+
+    def _format_functional_logic(self, items: Any) -> str:
+        if isinstance(items, str):
+            return items.strip()
+
+        if not isinstance(items, list):
+            return ""
+
+        parts = []
+        for item in items:
+            if isinstance(item, dict):
+                title = str(item.get("title") or "").strip()
+                description = str(item.get("description") or "").strip()
+                text = f"{title}: {description}".strip(": ").strip()
+            else:
+                text = str(item or "").strip()
+
+            if text:
+                parts.append(text)
+
+        return "\n".join(parts)
 
     def _replace_rules(self, run_id: str, prepared_rules: list[dict]) -> None:
         """
@@ -262,22 +573,61 @@ class LogicExtractionProcess:
 
         return prepared
 
-    def _is_legacy_source_chunk(self, project_file: ProjectFile | None, content: str | None) -> bool:
+    def _is_legacy_source_chunk(
+        self,
+        project_file: ProjectFile | None,
+        content: str | None,
+    ) -> bool:
         if not project_file:
             return False
 
-        filename = (project_file.filename or "").lower()
-        language = (project_file.detected_lang or "").lower()
+        filename = (
+            project_file.filepath
+            or project_file.filename
+            or ""
+        ).lower()
 
-        is_cobol_file = (
-            filename.endswith((".cob", ".cbl", ".cpy", ".jcl"))
-            or ".cob." in filename
-            or ".cbl." in filename
+        language = (
+            project_file.detected_lang
+            or ""
+        ).lower()
+
+        supported_extensions = (
+            ".cob",
+            ".cbl",
+            ".cpy",
+            ".jcl",
+            ".job",
+            ".telon",
+            ".tps",
+            ".pli",
+            ".pl1",
         )
 
-        is_cobol_language = language.startswith("cobol") or language in {"jcl", "copybook"}
+        supported_languages = {
+            "cobol",
+            "copybook",
+            "jcl",
+            "telon",
+            "pli",
+            "pl/i",
+            "pl1",
+        }
 
-        return (is_cobol_file or is_cobol_language) and self._is_logic_candidate(content)
+        has_supported_extension = filename.endswith(
+            supported_extensions
+        )
+
+        has_supported_language = (
+            language in supported_languages
+            or language.startswith("cobol")
+            or language.startswith("telon")
+        )
+
+        return (
+            has_supported_extension
+            or has_supported_language
+        ) and bool(content and content.strip())
 
     def _is_logic_candidate(self, content: str | None) -> bool:
         return bool(content and self.LOGIC_RE.search(content))
