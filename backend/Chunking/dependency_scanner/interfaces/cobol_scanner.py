@@ -7,8 +7,10 @@ class CobolScanner(IDependencyScanner):
         relations = []
         source = self._strip_comments(content)
 
-        calls = re.findall(r"\bCALL\s+(?:['\"])?([A-Z0-9#@$_-]+)(?:['\"])?", source, re.IGNORECASE)
+        calls = re.findall(r"(?<!-)\bCALL\s+(?:['\"])?([A-Z0-9#@$_-]+)(?:['\"])?", source, re.IGNORECASE)
         for target in calls:
+            if target.upper() in {"CALL", "END-CALL", "MOVE", "USING"}:
+                continue
             relations.append({"target": target, "type": "CALLS"})
 
         copies = re.findall(r"\bCOPY\s+(?:['\"])?([A-Z0-9#@$_-]+)(?:['\"])?", source, re.IGNORECASE)

@@ -73,16 +73,25 @@ class ConversionPlannerAgent:
                 locked_symbols_json = "{}"
 
         variables = {
-            "constitution": ConstitutionLoader.to_prompt_block(profile),
+            "constitution": self._trim_text(
+                ConstitutionLoader.to_prompt_block(profile),
+                3500,
+            ),
             "source_file": file_context.filename,
-            "locked_symbols_json": locked_symbols_json,
+            "locked_symbols_json": self._trim_text(locked_symbols_json, 3000),
             "source_language": file_context.source_language.value,
             "target_language": profile.target_language.value,
             "target_framework": profile.framework,
-            "technical_yaml": file_context.technical_yaml,
-            "business_rules_json": CodegenContextBuilder.to_pretty_json(file_context.business_rules),
-            "dependencies_json": CodegenContextBuilder.to_pretty_json(file_context.dependencies),
-            "raw_code": self._trim_raw_code(file_context.raw_code),
+            "technical_yaml": self._trim_text(file_context.technical_yaml, 5000),
+            "business_rules_json": self._trim_text(
+                CodegenContextBuilder.to_pretty_json(file_context.business_rules),
+                3500,
+            ),
+            "dependencies_json": self._trim_text(
+                CodegenContextBuilder.to_pretty_json(file_context.dependencies),
+                2500,
+            ),
+            "raw_code": self._trim_raw_code(file_context.raw_code, max_chars=5000),
         }
 
         system_prompt = self.prompt_store.render(system_template, variables)
@@ -101,12 +110,17 @@ class ConversionPlannerAgent:
                     target_language=target.value,
                 )
             except Exception as exc:
-                if self._allow_deterministic_fallback():
+                if self._allow_deterministic_fallback() or self._is_local_mode():
                     raw_plan = self._fallback_plan_payload(
                         file_context=file_context,
                         target_language=target,
                         target_framework=profile.framework,
                         reason=str(exc),
+                    )
+                    raw_plan = self.plan_sanitizer.sanitize_plan(
+                        raw_plan=raw_plan,
+                        source_file=file_context.filepath or file_context.filename,
+                        target_language=target.value,
                     )
                 else:
                     raise RuntimeError(
@@ -119,6 +133,13 @@ class ConversionPlannerAgent:
                     target_language=target,
                     target_framework=profile.framework,
                 )
+
+        return self._to_conversion_plan(
+            raw_plan=raw_plan,
+            file_context=file_context,
+            target_language=target,
+            target_framework=profile.framework,
+        )
 
     def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
         mode = (
@@ -519,6 +540,14 @@ class ConversionPlannerAgent:
             "yes",
         }
 
+    def _is_local_mode(self) -> bool:
+        mode = (
+            self.llm_config.get("mode")
+            or self.llm_config.get("provider")
+            or ""
+        ).lower()
+        return mode == "local" or str(self.llm_config.get("url") or "").rstrip("/").endswith("/v1")
+
     @staticmethod
     def _list_of_strings(value: Any) -> list[str]:
         if value is None:
@@ -569,6 +598,13 @@ class ConversionPlannerAgent:
             + "\n\n... [TRUNCATED FOR PLANNING PROMPT] ...\n\n"
             + tail
         )
+
+    @staticmethod
+    def _trim_text(value: str, max_chars: int) -> str:
+        text = str(value or "")
+        if len(text) <= max_chars:
+            return text
+        return text[:max_chars] + "\n\n... [TRUNCATED FOR LOCAL MODEL CONTEXT] ..."
 
     @staticmethod
     def _api_error_message(response: requests.Response) -> str:

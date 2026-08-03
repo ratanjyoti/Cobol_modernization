@@ -25,7 +25,7 @@ class SymbolRegistryService:
     )
 
     COBOL_PARAGRAPH_RE = re.compile(
-        r"^\s*([A-Z0-9][A-Z0-9-]{1,80})\.\s*$",
+        r"^\s*([A-Z0-9][A-Z0-9-]{1,80})(?:\s+SECTION)?\.?\s*$",
         re.IGNORECASE | re.MULTILINE,
     )
 
@@ -413,7 +413,11 @@ class SymbolRegistryService:
         for match in self.COBOL_PARAGRAPH_RE.finditer(scan_text):
             paragraph = match.group(1).upper()
 
-            if paragraph in self._ignored_paragraphs() or self._looks_like_data_name(paragraph):
+            if (
+                paragraph in self._ignored_paragraphs()
+                or self._looks_like_data_name(paragraph)
+                or self._looks_like_continuation_data_name(paragraph)
+            ):
                 continue
 
             if paragraph in seen:
@@ -442,7 +446,11 @@ class SymbolRegistryService:
         for paragraph in self._extract_yaml_paragraph_names(yaml_text if "PROCEDURE" in scan_text.upper() else ""):
             paragraph = paragraph.upper()
 
-            if paragraph in self._ignored_paragraphs() or self._looks_like_data_name(paragraph):
+            if (
+                paragraph in self._ignored_paragraphs()
+                or self._looks_like_data_name(paragraph)
+                or self._looks_like_continuation_data_name(paragraph)
+            ):
                 continue
 
             if paragraph in seen:
@@ -556,18 +564,20 @@ class SymbolRegistryService:
 
     @staticmethod
     def _target_method_name(source_paragraph: str) -> str:
-        value = source_paragraph
-
-        value = re.sub(r"^\d+[-_]*", "", value)
-        value = re.sub(r"^[A-Z]\d+[-_]*", "", value)
-
-        method = SymbolRegistryService._to_camel(value)
+        value = source_paragraph or ""
+        number = re.match(r"^(\d+)[-_]*(.*)$", value)
+        if number:
+            suffix = SymbolRegistryService._to_camel(number.group(2))
+            method = f"p{number.group(1)}{suffix[:1].upper() + suffix[1:] if suffix else ''}"
+        else:
+            value = re.sub(r"^[A-Z]\d+[-_]*", "", value)
+            method = SymbolRegistryService._to_camel(value)
 
         if not method:
             method = SymbolRegistryService._to_camel(source_paragraph)
 
-        if method in {"class", "return", "public", "private", "def", "void"}:
-            method = f"{method}Method"
+        if method in {"class", "return", "public", "private", "def", "void", "switch"}:
+            method = f"{method}Paragraph"
 
         return method
 
@@ -670,9 +680,16 @@ class SymbolRegistryService:
             "PROCEDURE",
             "DIVISION",
             "SECTION",
+            "INPUT-OUTPUT",
             "WORKING-STORAGE",
             "FILE",
             "FILE-CONTROL",
+            "END-IF",
+            "END-EVALUATE",
+            "END-PERFORM",
+            "END-CALL",
+            "EXIT",
+            "CONTINUE",
             "GOBACK",
             "LINKAGE",
             "LOCAL-STORAGE",
@@ -769,6 +786,13 @@ class SymbolRegistryService:
         ]
         return any(marker in upper for marker in data_markers) and not any(
             marker in upper for marker in behavior_markers
+        )
+
+    @staticmethod
+    def _looks_like_continuation_data_name(name: str) -> bool:
+        upper = (name or "").upper()
+        return bool(
+            re.match(r"^(VALUE|TEMP|OUTPUT|ACTION|BOOK)(?:-\d+|-VALUE)?$", upper)
         )
 
     @staticmethod
