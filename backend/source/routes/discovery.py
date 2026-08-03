@@ -306,7 +306,6 @@ async def get_graph_data(run_id: str, db: Session = Depends(get_db)):
                 "filepath": target,
                 "resolved": False,
             }
-            rel_type = "UNRESOLVED"
 
         edges.append({
             "id": str(relation.id),
@@ -314,6 +313,7 @@ async def get_graph_data(run_id: str, db: Session = Depends(get_db)):
             "to": target,
             "type": rel_type,
             "relationType": rel_type,
+            "resolved": target in nodes_by_id and nodes_by_id[target].get("resolved", False),
         })
 
     return {
@@ -402,19 +402,33 @@ async def launch_pipeline(
     run_id: str = Form(...),
     source_lang: str = Form(""),
     target_lang: str = Form(""),
-    scope: str = Form(""),
+    scope: str = Form("reverse_engineering"),
 ):
-    # 1. Run Neo4j Graphing in background
-    background_tasks.add_task(run_graphing_task, run_id)
-    
-    # 2. Run Smart Chunking, then Technical YAML, in order.
-    background_tasks.add_task(run_chunking_then_analysis_task, run_id)
+    background_tasks.add_task(run_scoped_migration_task, run_id, scope)
 
     return {
-        "status": "Pipeline Launched",
+        "status": "STARTED",
         "run_id": run_id,
-        "parallel_tasks": ["Neo4j_Graphing", "Semantic_Chunking", "Technical_Analysis"],
+        "scope": scope,
+        "message": f"Scoped migration started for scope={scope}",
     }
+
+
+def run_scoped_migration_task(run_id: str, scope: str | None = None):
+    from Processes.scoped_migration_process import ScopedMigrationProcess
+
+    db = SessionLocal()
+    try:
+        process = ScopedMigrationProcess(db)
+        if scope:
+            process.update_scope(run_id, scope)
+        process.run_selected_scope(run_id)
+        print(f"Scoped migration completed for project {run_id} scope={scope}")
+    except Exception as exc:
+        db.rollback()
+        print(f"Scoped migration failed for {run_id}: {exc}")
+    finally:
+        db.close()
 
 def run_graphing_task(run_id: str):
     """Best-effort Neo4j graph build; SQLite remains the dependency source of truth."""
@@ -432,8 +446,23 @@ def run_technical_analysis_task(run_id: str):
     """Generate Technical YAML rows consumed by business-rule extraction."""
     db = SessionLocal()
     try:
-        provider = "openrouter" if settings.OPENROUTER_API_KEY else "local"
-        asyncio.run(AnalysisProcess(db, provider).analyze_project(run_id))
+        project = db.query(Project).filter_by(run_id=run_id).first()
+        provider_config = {
+            "mode": getattr(project, "ai_mode", None)
+            or getattr(project, "llm_provider", None)
+            or ("openrouter" if settings.OPENROUTER_API_KEY else "local"),
+            "provider": getattr(project, "llm_provider", None)
+            or getattr(project, "ai_mode", None)
+            or ("openrouter" if settings.OPENROUTER_API_KEY else "local"),
+            "key": getattr(project, "custom_api_key", None)
+            or settings.OPENROUTER_API_KEY
+            or "local",
+            "url": getattr(project, "custom_api_base_url", None)
+            or settings.OPENROUTER_BASE_URL,
+            "model": getattr(project, "llm_model", None)
+            or settings.OPENROUTER_MODEL,
+        }
+        asyncio.run(AnalysisProcess(db, provider_config).analyze_project(run_id))
         print(f"Technical analysis completed for project {run_id}")
     except Exception as e:
         db.rollback()

@@ -22,6 +22,31 @@ Change here when:
 Do not change:
 - business logic extractor files unless setup introduces extractor configuration
 
+## Migration Scope and Token Budget
+
+Purpose:
+Controls which workflow stages are allowed for a run and estimates token usage before expensive AI stages execute.
+
+Files:
+- `backend/services/migration_scope_service.py` - canonical scope definitions, allowed/blocked stages, labels, status path, and token estimates.
+- `backend/Processes/scoped_migration_process.py` - selected-scope execution runner and scope status writer.
+- `backend/source/routes/project.py` - migration scope, token estimate, and scope status APIs.
+- `backend/source/routes/discovery.py` - pipeline launch integration that starts the selected scoped workflow.
+- `backend/source/routes/business_rule_routes.py` and `backend/source/routes/code_generation_routes.py` - route guards that block stages outside the selected scope.
+- `frontend/src/pages/InitialSetup.tsx` - scope selection and backend token budget display.
+- `frontend/src/pages/SourceFiles.tsx` - launch request sends the selected scope.
+- `frontend/src/pages/Dashboard.tsx` - scope, status, and budget summary card.
+- `frontend/src/services/api.ts` - scope and estimate API helpers.
+
+Change here when:
+- adding a migration scope
+- changing stage names or stage availability
+- changing budget calculation
+- adding a guarded workflow endpoint
+
+Do not change:
+- per-agent prompts unless the actual extraction or generation behavior changes
+
 ## 2. File Upload and Language Detection
 
 Purpose:

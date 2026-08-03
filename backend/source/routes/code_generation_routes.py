@@ -9,8 +9,27 @@ from services.migration_report_service import MigrationReportService
 from services.symbol_registry_service import SymbolRegistryService
 from Processes.method_body_repair_process import MethodBodyRepairProcess
 from Processes.full_code_generation_pipeline import FullCodeGenerationPipeline
+from Persistence.sqlite.models import Project
+from services.migration_scope_service import MigrationScopeService
 
 router = APIRouter(prefix="/code-generation", tags=["Code Generation"])
+
+
+def _require_stage_allowed(db: Session, run_id: str, stage: str):
+    project = db.query(Project).filter(Project.run_id == run_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    service = MigrationScopeService()
+    scope = service.get_scope(getattr(project, "migration_scope", None))
+    if not service.is_stage_allowed(scope.id, stage):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"{stage} is not allowed for selected scope {scope.title}. "
+                "Upgrade migration scope to run this stage."
+            ),
+        )
 
 @router.post("/{run_id}/registry/finalize")
 async def finalize_symbol_registry(
@@ -54,6 +73,7 @@ async def create_conversion_plan(
     file_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
+    _require_stage_allowed(db, run_id, MigrationScopeService.STAGE_CONVERSION_PLANNING)
     try:
         process = ConversionPlanningProcess(db)
         return process.create_plans(
@@ -87,6 +107,7 @@ async def generate_code(
     file_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
+    _require_stage_allowed(db, run_id, MigrationScopeService.STAGE_CODE_GENERATION)
     try:
         process = CodeGenerationProcess(db)
         return process.generate(
@@ -184,6 +205,7 @@ async def validate_generated_project(
     target_language: str = Query(default="java"),
     db: Session = Depends(get_db),
 ):
+    _require_stage_allowed(db, run_id, MigrationScopeService.STAGE_VALIDATION)
     try:
         process = CodeGenerationProcess(db)
         return process.validate_generated_project(
@@ -222,6 +244,7 @@ async def generate_migration_report(
     target_language: str = Query(default="java"),
     db: Session = Depends(get_db),
 ):
+    _require_stage_allowed(db, run_id, MigrationScopeService.STAGE_MIGRATION_REPORT)
     try:
         service = MigrationReportService(db)
         return service.generate_report(
@@ -258,6 +281,7 @@ async def regenerate_missing_generated_files(
     max_files: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
+    _require_stage_allowed(db, run_id, MigrationScopeService.STAGE_CODE_GENERATION)
     try:
         process = CodeGenerationProcess(db)
 
@@ -278,6 +302,7 @@ async def repair_comment_only_methods(
     max_methods: int = Query(10, ge=1, le=50),
     db: Session = Depends(get_db),
 ):
+    _require_stage_allowed(db, run_id, MigrationScopeService.STAGE_CODE_GENERATION)
     try:
         process = MethodBodyRepairProcess(db)
 
@@ -297,6 +322,7 @@ async def run_full_code_generation_pipeline(
     target_language: str = Query("java"),
     db: Session = Depends(get_db),
 ):
+    _require_stage_allowed(db, run_id, MigrationScopeService.STAGE_CODE_GENERATION)
     try:
         pipeline = FullCodeGenerationPipeline(db)
 

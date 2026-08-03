@@ -22,7 +22,18 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ProjectAPI } from '../services/api';
-import type { DashboardStatus, DependencyRelation, FileRecord, JourneyStepStatus, ProjectSummary, ServiceHealth, ServiceStatus } from '../services/api';
+import type {
+  DashboardStatus,
+  DependencyRelation,
+  FileRecord,
+  JourneyStepStatus,
+  MigrationScopeResponse,
+  ProjectSummary,
+  ScopeStatusResponse,
+  ServiceHealth,
+  ServiceStatus,
+  TokenEstimateResponse,
+} from '../services/api';
 import Tooltip from '../components/Tooltip';
 import SectionLabel from '../components/SectionLabel';
 import StatusBadge from '../components/StatusBadge';
@@ -72,6 +83,11 @@ const emptyHealth: ServiceHealth = {
   neo4j: { active: false, detail: 'No active project selected.' },
 };
 
+const formatTokenCount = (value?: number) => {
+  if (!value) return '0 API tokens';
+  return `${new Intl.NumberFormat().format(value)} estimated tokens`;
+};
+
 const KPICard = ({ label, value, icon: Icon, status, featured = false, description }: KPICardProps) => (
   <div className={`glass-card ${featured ? 'kpi-featured p-7' : 'p-5'} flex flex-col border border-slate-800 bg-slate-900/50`}>
     <div className="flex items-start justify-between gap-4">
@@ -112,6 +128,9 @@ const Dashboard = () => {
   const [metrics, setMetrics] = useState<DashboardMetrics>(emptyMetrics);
   const [serviceHealth, setServiceHealth] = useState<ServiceHealth>(emptyHealth);
   const [dashboardStatus, setDashboardStatus] = useState<DashboardStatus | null>(null);
+  const [migrationScope, setMigrationScope] = useState<MigrationScopeResponse | null>(null);
+  const [tokenEstimate, setTokenEstimate] = useState<TokenEstimateResponse | null>(null);
+  const [scopeStatus, setScopeStatus] = useState<ScopeStatusResponse | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
   const [metricsLoading, setMetricsLoading] = useState(false);
   const [isDeletingRuns, setIsDeletingRuns] = useState(false);
@@ -229,6 +248,9 @@ const Dashboard = () => {
     if (!currentRunId) {
       setMetrics(emptyMetrics);
       setDashboardStatus(null);
+      setMigrationScope(null);
+      setTokenEstimate(null);
+      setScopeStatus(null);
       setServiceHealth(emptyHealth);
       return;
     }
@@ -245,6 +267,7 @@ const Dashboard = () => {
           const exists = current.some((project) => project.run_id === dashboard.project.run_id);
           return exists ? current.map((project) => project.run_id === dashboard.project.run_id ? dashboard.project : project) : [dashboard.project, ...current];
         });
+        void loadScopeMetadata(currentRunId);
         return;
       }
 
@@ -268,6 +291,7 @@ const Dashboard = () => {
         complexityFiles: complexity.files || [],
         rules: rules || [],
       });
+      void loadScopeMetadata(currentRunId);
       try {
         if (!includeHealth) return;
         const health = await ProjectAPI.getServiceHealth(currentRunId);
@@ -282,11 +306,26 @@ const Dashboard = () => {
       if (!options.silent) toast.error(error.response?.data?.detail || 'Failed to load dashboard metrics');
       setMetrics(emptyMetrics);
       setDashboardStatus(null);
+      setMigrationScope(null);
+      setTokenEstimate(null);
+      setScopeStatus(null);
       setServiceHealth(emptyHealth);
     } finally {
       if (!options.silent) setMetricsLoading(false);
       if (includeHealth) setHealthLoading(false);
     }
+  };
+
+  const loadScopeMetadata = async (currentRunId: string) => {
+    const [scopeResult, estimateResult, statusResult] = await Promise.allSettled([
+      ProjectAPI.getMigrationScope(currentRunId),
+      ProjectAPI.getTokenEstimate(currentRunId),
+      ProjectAPI.getScopeStatus(currentRunId),
+    ]);
+
+    if (scopeResult.status === 'fulfilled') setMigrationScope(scopeResult.value);
+    if (estimateResult.status === 'fulfilled') setTokenEstimate(estimateResult.value);
+    if (statusResult.status === 'fulfilled') setScopeStatus(statusResult.value);
   };
 
   const handleProjectChange = (id: string) => {
@@ -311,6 +350,9 @@ const Dashboard = () => {
       setRunId(null);
       setMetrics(emptyMetrics);
       setDashboardStatus(null);
+      setMigrationScope(null);
+      setTokenEstimate(null);
+      setScopeStatus(null);
       setServiceHealth(emptyHealth);
       localStorage.removeItem('active_run_id');
       localStorage.removeItem('modernizer_files');
@@ -336,6 +378,13 @@ const Dashboard = () => {
       : derived.pendingRules > 0
         ? `Review ${derived.pendingRules} pending business rules to unlock code generation.`
         : 'Business rules are verified. Continue to code generation or refinement.';
+
+  const allowedStages = tokenEstimate?.allowed_stages || migrationScope?.allowed_stages || [];
+  const blockedStages = tokenEstimate?.blocked_stages || migrationScope?.blocked_stages || [];
+  const stageLabels = tokenEstimate?.stage_labels || migrationScope?.stage_labels || {};
+  const currentScopeTitle = migrationScope?.scope_title || tokenEstimate?.title || activeProject?.migration_scope || 'Scope not selected';
+  const currentScopeRange = tokenEstimate?.static_token_range || migrationScope?.static_token_range || 'No estimate available';
+  const currentScopeStatus = scopeStatus?.status || 'NOT_STARTED';
 
   return (
     <div className="space-y-12 pb-24 animate-in fade-in duration-700">
@@ -392,6 +441,48 @@ const Dashboard = () => {
             <HealthIndicator label="AI API Readiness" status={serviceHealth.ai_api} loading={healthLoading} />
             <HealthIndicator label="Neo4j" status={serviceHealth.neo4j} loading={healthLoading} />
           </div>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        <div className="glass-card border border-slate-800 bg-slate-900/50 p-6 lg:col-span-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <SectionLabel>Migration Scope</SectionLabel>
+              <h2 className="text-heading mt-2">{currentScopeTitle}</h2>
+              <p className="mt-2 text-body-sm">{currentScopeRange}</p>
+            </div>
+            <span className="rounded-lg border border-slate-800 bg-slate-950/50 p-2 text-[var(--corporate-accent)]">
+              <Target size={20} />
+            </span>
+          </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+              <p className="label">Estimated Budget</p>
+              <p className="mt-2 text-sm font-black text-white">{formatTokenCount(tokenEstimate?.estimated_total_tokens)}</p>
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+              <p className="label">Workflow Status</p>
+              <p className="mt-2 text-sm font-black text-white">{currentScopeStatus.replace(/_/g, ' ')}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="glass-card border border-slate-800 bg-slate-900/50 p-6 lg:col-span-7">
+          <SectionLabel>Allowed Workflow</SectionLabel>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            {allowedStages.slice(0, 10).map((stage) => (
+              <div key={stage} className="flex items-center gap-2 text-xs text-slate-300">
+                <CheckCircle2 size={14} className="text-emerald-300" />
+                <span>{stageLabels[stage] || stage}</span>
+              </div>
+            ))}
+          </div>
+          {blockedStages.length > 0 && (
+            <p className="mt-4 text-xs leading-5 text-slate-500">
+              {blockedStages.length} later stage{blockedStages.length === 1 ? '' : 's'} blocked by this scope.
+            </p>
+          )}
         </div>
       </section>
 

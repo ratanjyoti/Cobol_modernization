@@ -81,6 +81,7 @@ const STORAGE_KEYS = {
   files: 'modernizer_files',
   pipelineStatus: 'modernizer_pipeline_status',
   selectedScope: 'modernizer_selected_scope',
+  migrationScope: 'modernizer_migration_scope',
   sourceLang: 'modernizer_source_lang',
   targetLang: 'modernizer_target_lang',
 } as const;
@@ -177,7 +178,10 @@ const SourceFiles = ({ embedded = false }: SourceFilesProps) => {
   const [githubUrl, setGithubUrl] = useState('');
   const [githubToken, setGithubToken] = useState('');
   const [files, setFiles] = useState<SourceFileRecord[]>([]);
-  const [selectedScope, setSelectedScope] = useState(() => normalizeScopeId(localStorage.getItem(STORAGE_KEYS.selectedScope)));
+  const [selectedScope, setSelectedScope] = useState(() => (
+    normalizeScopeId(localStorage.getItem(STORAGE_KEYS.migrationScope) || localStorage.getItem(STORAGE_KEYS.selectedScope))
+      || 'reverse_engineering'
+  ));
   const [sourceLang, setSourceLang] = useState(localStorage.getItem(STORAGE_KEYS.sourceLang) || 'auto');
   const [targetLang, setTargetLang] = useState(localStorage.getItem(STORAGE_KEYS.targetLang) || 'java');
   const [isLaunching, setIsLaunching] = useState(false);
@@ -237,6 +241,34 @@ const SourceFiles = ({ embedded = false }: SourceFilesProps) => {
     };
 
     loadExistingFiles();
+
+    return () => {
+      active = false;
+    };
+  }, [runId]);
+
+  useEffect(() => {
+    let active = true;
+
+    const syncScope = async () => {
+      const savedScope = normalizeScopeId(localStorage.getItem(STORAGE_KEYS.migrationScope) || localStorage.getItem(STORAGE_KEYS.selectedScope));
+      if (savedScope) {
+        setSelectedScope(savedScope);
+      }
+      if (!runId) return;
+      try {
+        const response = await ProjectAPI.getMigrationScope(runId);
+        const backendScope = normalizeScopeId(response.selected_scope);
+        if (!active || !backendScope) return;
+        setSelectedScope(backendScope);
+        localStorage.setItem(STORAGE_KEYS.migrationScope, backendScope);
+        localStorage.setItem(STORAGE_KEYS.selectedScope, backendScope);
+      } catch (error) {
+        console.error('Unable to sync migration scope', error);
+      }
+    };
+
+    void syncScope();
 
     return () => {
       active = false;
@@ -493,7 +525,8 @@ const SourceFiles = ({ embedded = false }: SourceFilesProps) => {
   };
 
   const launchPipeline = async () => {
-    if (!selectedScope) {
+    const effectiveScope = normalizeScopeId(selectedScope || localStorage.getItem(STORAGE_KEYS.migrationScope)) || 'reverse_engineering';
+    if (!effectiveScope) {
       toast.error("Please select a migration scope first!");
       return;
     }
@@ -506,9 +539,13 @@ const SourceFiles = ({ embedded = false }: SourceFilesProps) => {
     formData.append('run_id', runId);
     formData.append('source_lang', sourceLang);
     formData.append('target_lang', targetLang);
-    formData.append('scope', selectedScope);
+    formData.append('scope', effectiveScope);
     try {
+      await ProjectAPI.updateMigrationScope(runId, effectiveScope);
       await ProjectAPI.launchPipeline(formData);
+      setSelectedScope(effectiveScope);
+      localStorage.setItem(STORAGE_KEYS.migrationScope, effectiveScope);
+      localStorage.setItem(STORAGE_KEYS.selectedScope, effectiveScope);
       setPipelineActive(true);
       localStorage.setItem(STORAGE_KEYS.pipelineStatus, 'active');
       toast.success("Pipeline initialized!");
@@ -523,9 +560,10 @@ const SourceFiles = ({ embedded = false }: SourceFilesProps) => {
   const resetPipeline = () => {
     localStorage.removeItem(STORAGE_KEYS.pipelineStatus);
     localStorage.removeItem(STORAGE_KEYS.selectedScope);
+    localStorage.removeItem(STORAGE_KEYS.migrationScope);
     setPipelineActive(false);
     setFiles(prev => prev.map(f => ({ ...f, status: 'Pending' })));
-    setSelectedScope('');
+    setSelectedScope('reverse_engineering');
     toast.success("Pipeline reset");
   };
 

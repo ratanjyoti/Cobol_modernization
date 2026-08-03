@@ -49,6 +49,7 @@ def ensure_schema_columns():
             "neo4j_uri": "ALTER TABLE projects ADD COLUMN neo4j_uri VARCHAR",
             "neo4j_user": "ALTER TABLE projects ADD COLUMN neo4j_user VARCHAR",
             "neo4j_password": "ALTER TABLE projects ADD COLUMN neo4j_password VARCHAR",
+            "migration_scope": "ALTER TABLE projects ADD COLUMN migration_scope VARCHAR DEFAULT 'reverse_engineering'",
         })
         _add_missing_columns(connection, "file_complexity", {
             "mode": "ALTER TABLE file_complexity ADD COLUMN mode VARCHAR",
@@ -119,6 +120,7 @@ def ensure_indexes():
             "neo4j_uri": "ALTER TABLE projects ADD COLUMN neo4j_uri VARCHAR",
             "neo4j_user": "ALTER TABLE projects ADD COLUMN neo4j_user VARCHAR",
             "neo4j_password": "ALTER TABLE projects ADD COLUMN neo4j_password VARCHAR",
+            "migration_scope": "ALTER TABLE projects ADD COLUMN migration_scope VARCHAR DEFAULT 'reverse_engineering'",
         })
         for statement in index_statements:
             connection.execute(text(statement))
@@ -130,7 +132,6 @@ def get_db():
         yield db
     finally:
         db.close()
-
 
 
 

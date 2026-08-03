@@ -12,6 +12,7 @@ from Persistence.sqlite.models import BusinessRule, Project, ProjectFile
 from Persistence.sqlite.session import get_db
 from Processes.logic_extraction_process import LogicExtractionProcess
 from Processes.procedural_flow_process import ProceduralFlowProcess
+from services.migration_scope_service import MigrationScopeService
 
 router = APIRouter(prefix="/business-rules", tags=["Business Logic"]) 
 
@@ -245,8 +246,26 @@ def validate_cloud_chat_config(config: dict):
         )
 
 
+def _require_stage_allowed(db: Session, run_id: str, stage: str):
+    project = db.query(Project).filter(Project.run_id == run_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    service = MigrationScopeService()
+    scope = service.get_scope(getattr(project, "migration_scope", None))
+    if not service.is_stage_allowed(scope.id, stage):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"{stage} is not allowed for selected scope {scope.title}. "
+                "Upgrade migration scope to run this stage."
+            ),
+        )
+
+
 @router.post("/{run_id}/extract")
 async def extract_rules(run_id: str, db: Session = Depends(get_db)):
+    _require_stage_allowed(db, run_id, MigrationScopeService.STAGE_BUSINESS_LOGIC)
     project = db.query(Project).filter_by(run_id=run_id).first()
 
     config = project_ai_config(project)
@@ -290,6 +309,7 @@ async def get_rules(run_id: str, db: Session = Depends(get_db)):
 
 @router.post("/{run_id}/procedural-flow/extract")
 async def extract_procedural_flow(run_id: str, db: Session = Depends(get_db)):
+    _require_stage_allowed(db, run_id, MigrationScopeService.STAGE_PROCEDURAL_FLOW)
     try:
         process = ProceduralFlowProcess(db)
         return process.extract_all(run_id=run_id)

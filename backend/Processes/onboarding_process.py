@@ -37,7 +37,8 @@ class OnboardingProcess:
             neo4j_password=config_data.get("neo4j_password"),
             speed_profile=config_data.get("speed_profile", "Balanced"),
             reasoning_effort=config_data.get("reasoning_effort", "Medium"),
-            parallel_workers=int(config_data.get("workers", 4))
+            parallel_workers=int(config_data.get("workers", 4)),
+            migration_scope=config_data.get("migration_scope", "reverse_engineering"),
         )
 
         self.repo.save(new_project)

@@ -40,6 +40,7 @@ class Project(Base):
     speed_profile = Column(String)
     reasoning_effort = Column(String)
     parallel_workers = Column(Integer)
+    migration_scope = Column(String, default="reverse_engineering")
 
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 

@@ -16,7 +16,7 @@ import toast from 'react-hot-toast';
 import ConfigPanel from '../components/ConfigPanel';
 import SourceFiles from './SourceFiles';
 import { getApiErrorDetail, ProjectAPI } from '../services/api';
-import type { ProjectConfig, ProjectSummary, ServiceHealth } from '../services/api';
+import type { ProjectConfig, ProjectSummary, ServiceHealth, TokenEstimateResponse } from '../services/api';
 import SectionLabel from '../components/SectionLabel';
 
 const defaultAIConfig: ProjectConfig = {
@@ -153,6 +153,11 @@ const scopeLevelClass: Record<MigrationScope['level'], string> = {
 
 const isMigrationScopeId = (value: string | null): value is MigrationScopeId => {
   return MIGRATION_SCOPES.some((scope) => scope.id === value);
+};
+
+const formatTokenCount = (value?: number) => {
+  if (!value) return '0 API tokens';
+  return `${new Intl.NumberFormat().format(value)} estimated tokens`;
 };
 
 const loadLastAIConfig = (): ProjectConfig => {
@@ -408,6 +413,7 @@ const InitialSetup = () => {
   const [pendingNeo4jConfig, setPendingNeo4jConfig] = useState<ProjectConfig | null>(null);
   const [serviceHealth, setServiceHealth] = useState<ServiceHealth>(emptyHealth);
   const [healthLoading, setHealthLoading] = useState(false);
+  const [tokenEstimate, setTokenEstimate] = useState<TokenEstimateResponse | null>(null);
 
   useEffect(() => {
     void fetchProjectHistory();
@@ -417,6 +423,11 @@ const InitialSetup = () => {
 
   useEffect(() => {
     void loadServiceHealth(runId);
+    if (runId) {
+      void loadMigrationScope(runId);
+    } else {
+      setTokenEstimate(null);
+    }
   }, [runId]);
 
   useEffect(() => {
@@ -442,6 +453,24 @@ const InitialSetup = () => {
       setServiceHealth(emptyHealth);
     } finally {
       if (!options.silent) setHealthLoading(false);
+    }
+  };
+
+  const loadMigrationScope = async (currentRunId: string) => {
+    try {
+      const [scopeResponse, estimateResponse] = await Promise.all([
+        ProjectAPI.getMigrationScope(currentRunId),
+        ProjectAPI.getTokenEstimate(currentRunId),
+      ]);
+      const selected = isMigrationScopeId(scopeResponse.selected_scope)
+        ? scopeResponse.selected_scope
+        : 'reverse_engineering';
+      setMigrationScope(selected);
+      localStorage.setItem('modernizer_migration_scope', selected);
+      setTokenEstimate(estimateResponse);
+    } catch (e) {
+      setTokenEstimate(null);
+      console.error('Failed to load migration scope metadata', e);
     }
   };
   const fetchProjectHistory = async () => {
@@ -515,10 +544,11 @@ const InitialSetup = () => {
 
       setRunId(newRunId);
       setProjects([
-        { run_id: newRunId, name: response.name, status: response.status, files_count: 0 },
+        { run_id: newRunId, name: response.name, status: response.status, files_count: 0, migration_scope: migrationScope },
         ...projects,
       ]);
       void loadServiceHealth(newRunId);
+      void loadMigrationScope(newRunId);
 
       toast.success(`Project ${runName} created. Upload source files below.`);
     } catch (e) {
@@ -563,12 +593,16 @@ const InitialSetup = () => {
 
     if (runId) {
       try {
-        await ProjectAPI.updateConfig(runId, { migration_scope: scope } as any);
+        await ProjectAPI.updateMigrationScope(runId, scope);
+        const estimate = await ProjectAPI.getTokenEstimate(runId);
+        setTokenEstimate(estimate);
       } catch (e) {
         console.error('Failed to sync migration scope', e);
       }
     }
   };
+
+  const selectedEstimate = tokenEstimate && tokenEstimate.scope === migrationScope ? tokenEstimate : null;
 
   return (
     <div className="space-y-12 pb-32 animate-in fade-in duration-700">
@@ -756,6 +790,32 @@ const InitialSetup = () => {
             Dependency Mapping uses static scanning and graph building, so it consumes{' '}
             <span className="font-black text-emerald-300">0 API tokens</span>. AI-based scopes use the API key and model configured above.
           </p>
+
+          {selectedEstimate && (
+            <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="label">Backend Budget Estimate</p>
+                  <p className="mt-2 text-sm font-black text-white">{formatTokenCount(selectedEstimate.estimated_total_tokens)}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {selectedEstimate.file_count} files, {selectedEstimate.chunk_count} chunks, static range {selectedEstimate.static_token_range}
+                  </p>
+                </div>
+                <span className={`inline-flex rounded-md px-2 py-1 text-xs font-black ${scopeLevelClass[selectedEstimate.level as MigrationScope['level']] || 'bg-slate-500/10 text-slate-300'}`}>
+                  {selectedEstimate.level}
+                </span>
+              </div>
+
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {selectedEstimate.allowed_stages.slice(0, 8).map((stage) => (
+                  <div key={stage} className="flex items-center gap-2 text-xs text-slate-300">
+                    <Check size={13} className="text-emerald-300" />
+                    <span>{selectedEstimate.stage_labels?.[stage] || stage}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </section>
 

@@ -17,10 +17,19 @@ from Persistence.sqlite.models import BusinessRule, ChunkAnalysis, FileAnalysis,
 from Persistence.sqlite.project_repo import ProjectRepository
 from Persistence.sqlite.session import SessionLocal, get_db
 from paths import UPLOADS_DIR
+from services.migration_scope_service import MigrationScopeService
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 SERVICE_HEALTH_CACHE: dict[str, dict] = {}
 
+"""
+It checks not only whether the key exists, but whether:
+
+the key is accepted,
+the selected model is accessible,
+the endpoint works,
+and the model can return chat text.
+"""
 
 def mask_api_key(api_key: str | None):
     if not api_key:
@@ -127,6 +136,7 @@ def serialize_project(project, files=None):
         "speed_profile": project.speed_profile,
         "reasoning_effort": project.reasoning_effort,
         "parallel_workers": project.parallel_workers,
+        "migration_scope": getattr(project, "migration_scope", None) or "reverse_engineering",
         "file_status_counts": file_status_counts,
         "language_counts": language_counts,
     }
@@ -163,6 +173,7 @@ def serialize_project_summary(project, files_count: int, file_status_counts: dic
         "speed_profile": project.speed_profile,
         "reasoning_effort": project.reasoning_effort,
         "parallel_workers": project.parallel_workers,
+        "migration_scope": getattr(project, "migration_scope", None) or "reverse_engineering",
         "file_status_counts": file_status_counts,
         "language_counts": language_counts,
     }
@@ -620,6 +631,86 @@ async def get_project(run_id: str, db: Session = Depends(get_db)):
 
 
 
+@router.get("/{run_id}/migration-scope")
+async def get_migration_scope(run_id: str, db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.run_id == run_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    service = MigrationScopeService()
+    scope = service.get_scope(getattr(project, "migration_scope", None))
+
+    return {
+        "run_id": run_id,
+        "selected_scope": scope.id,
+        "scope_title": scope.title,
+        "level": scope.level,
+        "static_token_range": scope.static_token_range,
+        "allowed_stages": list(scope.allowed_stages),
+        "blocked_stages": service.blocked_stages(scope.id),
+        "stage_labels": service.stage_labels(),
+        "description": scope.description,
+    }
+
+
+@router.put("/{run_id}/migration-scope")
+async def update_migration_scope(
+    run_id: str,
+    payload: dict,
+    db: Session = Depends(get_db),
+):
+    project = db.query(Project).filter(Project.run_id == run_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    service = MigrationScopeService()
+    new_scope = service.normalize_scope(payload.get("migration_scope") or payload.get("scope"))
+    project.migration_scope = new_scope
+    db.commit()
+
+    scope = service.get_scope(new_scope)
+    return {
+        "run_id": run_id,
+        "selected_scope": scope.id,
+        "scope_title": scope.title,
+        "allowed_stages": list(scope.allowed_stages),
+        "blocked_stages": service.blocked_stages(scope.id),
+        "stage_labels": service.stage_labels(),
+    }
+
+
+@router.get("/{run_id}/token-estimate")
+async def get_token_estimate(run_id: str, db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.run_id == run_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    service = MigrationScopeService()
+    return service.estimate_tokens_for_run(
+        db=db,
+        run_id=run_id,
+        scope=getattr(project, "migration_scope", None),
+    )
+
+
+@router.get("/{run_id}/scope-status")
+async def get_scope_status(run_id: str):
+    import json
+
+    service = MigrationScopeService()
+    path = service.status_path(run_id)
+
+    if not path.exists():
+        return {
+            "run_id": run_id,
+            "status": "NOT_STARTED",
+            "current_stage": "",
+            "completed_stages": [],
+            "blocked_stages": [],
+            "actual_tokens_used": 0,
+        }
+
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def count_by_status(rows, default_status="PENDING"):
@@ -784,6 +875,7 @@ async def get_project_config(run_id: str, db: Session = Depends(get_db)):
         "speed_profile": project.speed_profile,
         "reasoning_effort": project.reasoning_effort,
         "workers": project.parallel_workers,
+        "migration_scope": getattr(project, "migration_scope", None) or "reverse_engineering",
     }
 
 

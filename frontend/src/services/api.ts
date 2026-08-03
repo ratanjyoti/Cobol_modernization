@@ -19,6 +19,54 @@ export interface ProjectConfig {
   speed_profile?: 'Turbo' | 'Fast' | 'Balanced' | 'Thorough';
   reasoning_effort?: 'Low' | 'Medium' | 'High';
   workers?: number;
+  migration_scope?: string;
+}
+
+export interface MigrationScopeResponse {
+  run_id: string;
+  selected_scope: string;
+  scope_title: string;
+  level: string;
+  static_token_range: string;
+  allowed_stages: string[];
+  blocked_stages: string[];
+  stage_labels?: Record<string, string>;
+  description?: string;
+}
+
+export interface TokenEstimateResponse {
+  run_id: string;
+  scope: string;
+  title: string;
+  level: string;
+  static_token_range: string;
+  allowed_stages: string[];
+  blocked_stages: string[];
+  stage_labels?: Record<string, string>;
+  file_count: number;
+  chunk_count: number;
+  estimated_total_tokens: number;
+  stage_estimates: Array<{
+    stage: string;
+    label?: string;
+    estimated_tokens: number;
+    prompt_overhead: number;
+    expected_output_tokens: number;
+  }>;
+  is_static_only: boolean;
+}
+
+export interface ScopeStatusResponse {
+  run_id: string;
+  scope?: string;
+  scope_title?: string;
+  status: string;
+  current_stage: string;
+  completed_stages: string[];
+  blocked_stages: string[];
+  estimated_total_tokens?: number;
+  static_token_range?: string;
+  actual_tokens_used: number;
 }
 
 export type LocalLLMHealthRequest = {
@@ -183,6 +231,7 @@ export interface ProjectSummary {
   speed_profile?: string | null;
   reasoning_effort?: string | null;
   parallel_workers?: number | null;
+  migration_scope?: string | null;
   file_status_counts?: Record<string, number>;
   language_counts?: Record<string, number>;
 }
@@ -263,6 +312,28 @@ export const ProjectAPI = {
 
   updateConfig: async (runId: string, config: Partial<ProjectConfig>) => {
     const response = await api.patch(`/projects/${runId}/config`, config);
+    return response.data;
+  },
+
+  getMigrationScope: async (runId: string): Promise<MigrationScopeResponse> => {
+    const response = await api.get(`/projects/${encodeURIComponent(runId)}/migration-scope`);
+    return response.data;
+  },
+
+  updateMigrationScope: async (runId: string, migrationScope: string): Promise<MigrationScopeResponse> => {
+    const response = await api.put(`/projects/${encodeURIComponent(runId)}/migration-scope`, {
+      migration_scope: migrationScope,
+    });
+    return response.data;
+  },
+
+  getTokenEstimate: async (runId: string): Promise<TokenEstimateResponse> => {
+    const response = await api.get(`/projects/${encodeURIComponent(runId)}/token-estimate`);
+    return response.data;
+  },
+
+  getScopeStatus: async (runId: string): Promise<ScopeStatusResponse> => {
+    const response = await api.get(`/projects/${encodeURIComponent(runId)}/scope-status`);
     return response.data;
   },
 
