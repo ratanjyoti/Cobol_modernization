@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,7 +42,20 @@ class AgenticBusinessLogicExtractor:
 
     def __init__(self, llm_config: dict[str, Any]):
         self.llm_config = llm_config or {}
-        self.timeout_seconds = int(self.llm_config.get("timeout") or 120)
+        self.local_like = self._is_local_like()
+        default_timeout = 30 if self.local_like else 120
+        self.timeout_seconds = int(
+            self.llm_config.get("timeout")
+            or os.getenv("BUSINESS_LOGIC_LLM_TIMEOUT", default_timeout)
+        )
+        self.use_llm = str(os.getenv("BUSINESS_LOGIC_USE_LLM", "true")).lower() not in {
+            "0",
+            "false",
+            "no",
+        }
+        self.local_max_llm_chars = int(
+            os.getenv("BUSINESS_LOGIC_LOCAL_MAX_LLM_CHARS", "8000")
+        )
 
     def extract(self, context: BusinessLogicFileContext) -> dict[str, Any]:
         agent_key = self._select_agent(
@@ -58,7 +72,7 @@ class AgenticBusinessLogicExtractor:
             return result
 
         except Exception as first_error:
-            if agent_key != "generic":
+            if agent_key != "generic" and not self.local_like:
                 try:
                     fallback_result = self._extract_with_agent(context, "generic")
                     fallback_result["agent_name"] = self._agent_name("generic")
@@ -81,20 +95,30 @@ class AgenticBusinessLogicExtractor:
         context: BusinessLogicFileContext,
         agent_key: str,
     ) -> dict[str, Any]:
+        if not self.use_llm:
+            raise RuntimeError("Business logic LLM calls are disabled by BUSINESS_LOGIC_USE_LLM.")
+        if self.local_like and len(context.source_code or "") > self.local_max_llm_chars:
+            raise RuntimeError(
+                "Source file exceeds BUSINESS_LOGIC_LOCAL_MAX_LLM_CHARS; using deterministic local extraction."
+            )
+
         system_prompt = SYSTEM_PROMPTS.get(agent_key) or SYSTEM_PROMPTS["generic"]
+        budgets = self._prompt_budgets()
 
         user_prompt = USER_PROMPT_TEMPLATE.format(
             file_id=context.file_id,
             file_name=context.file_name,
             detected_language=context.detected_language or "unknown",
             agent_key=agent_key,
-            technical_yaml=self._trim(context.technical_yaml, 12000),
-            dependency_context=self._trim(context.dependency_context, 4000),
-            glossary_context=self._trim(context.glossary_context, 4000),
-            source_code=self._trim(context.source_code, 16000),
+            technical_yaml=self._trim(context.technical_yaml, budgets["technical_yaml"]),
+            dependency_context=self._trim(context.dependency_context, budgets["dependency_context"]),
+            glossary_context=self._trim(context.glossary_context, budgets["glossary_context"]),
+            source_code=self._trim(context.source_code, budgets["source_code"]),
         )
 
         response_text = self._call_llm(system_prompt, user_prompt)
+        if not str(response_text or "").strip():
+            raise ValueError("Business logic agent returned empty output.")
         parsed = self._parse_json(response_text)
 
         return self._normalize_result(
@@ -212,6 +236,7 @@ class AgenticBusinessLogicExtractor:
                 {"role": "user", "content": user_prompt},
             ],
             "temperature": 0.1,
+            "max_tokens": int(self.llm_config.get("max_tokens") or (1600 if self.local_like else 2400)),
             "response_format": self._json_response_format("business_logic_result"),
         }
 
@@ -235,6 +260,39 @@ class AgenticBusinessLogicExtractor:
         data = response.json()
 
         return data["choices"][0]["message"]["content"]
+
+    def _is_local_like(self) -> bool:
+        mode = str(
+            self.llm_config.get("mode")
+            or self.llm_config.get("provider")
+            or self.llm_config.get("llm_provider")
+            or ""
+        ).lower()
+        base_url = str(
+            self.llm_config.get("url")
+            or self.llm_config.get("base_url")
+            or self.llm_config.get("custom_api_base_url")
+            or ""
+        ).lower()
+        return mode in {"local", "ollama", "lmstudio", "lm-studio"} or any(
+            host in base_url for host in ("127.0.0.1", "localhost", ":1234", ":11434")
+        )
+
+    def _prompt_budgets(self) -> dict[str, int]:
+        if self.local_like:
+            return {
+                "technical_yaml": 4500,
+                "dependency_context": 1200,
+                "glossary_context": 800,
+                "source_code": 6000,
+            }
+
+        return {
+            "technical_yaml": 12000,
+            "dependency_context": 4000,
+            "glossary_context": 4000,
+            "source_code": 16000,
+        }
 
     @staticmethod
     def _json_response_format(name: str) -> dict[str, Any]:

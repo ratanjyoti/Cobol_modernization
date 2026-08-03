@@ -119,7 +119,11 @@ class AgenticCodeConversionOrchestrator:
             or self.llm_config.get("api_key")
             or self.llm_config.get("openrouter_api_key")
         )
-        timeout = int(self.llm_config.get("timeout") or 180)
+        local_like = mode == "local" or any(host in str(base_url).lower() for host in ("127.0.0.1", "localhost", ":1234", ":11434"))
+        timeout = int(
+            self.llm_config.get("timeout")
+            or (90 if local_like else 180)
+        )
 
         if mode in {"openrouter", "api", "cloud", "custom", "local"} and "/v1" in base_url:
             return self._call_openai_compatible(
@@ -273,7 +277,10 @@ class AgenticCodeConversionOrchestrator:
                 continue
 
             file_path = str(item.get("file_path") or item.get("path") or "").strip()
-            content = str(item.get("content") or "").strip()
+            content = self._normalize_generated_content(
+                str(item.get("content") or "").strip(),
+                self._normalize_target_language(item.get("language") or context.get("target_language")),
+            )
             if not file_path or not content:
                 continue
 
@@ -316,6 +323,20 @@ class AgenticCodeConversionOrchestrator:
         text = aliases.get(text, text)
         allowed = {"model", "service", "controller", "repository", "dto", "config", "test", "other"}
         return text if text in allowed else "other"
+
+    @staticmethod
+    def _normalize_generated_content(content: str, target_language: str) -> str:
+        if not content:
+            return ""
+
+        target = (target_language or "").lower().strip()
+        if target == "java":
+            content = re.sub(r"\bexecuteBusinessRule\s*\(", "execute(", content)
+        elif target == "csharp":
+            content = re.sub(r"\bExecuteBusinessRule\s*\(", "Execute(", content)
+        elif target == "python":
+            content = re.sub(r"\bexecute_business_rule\s*\(", "execute(", content)
+        return content
 
     def _assert_semantic_completeness(self, result: dict[str, Any], context: dict[str, Any]) -> None:
         content = "\n".join(
@@ -439,25 +460,31 @@ class AgenticCodeConversionOrchestrator:
         method_index = {name: self._java_method_name(name) for name in paragraphs}
 
         execute_calls = []
-        for line in start_body:
-            perform = re.search(r"\bPERFORM\s+([A-Z0-9][A-Z0-9-]+)", line, re.IGNORECASE)
-            if perform:
-                paragraph = perform.group(1).upper()
-                execute_calls.append(f"        {method_index.get(paragraph, self._java_method_name(paragraph))}();")
+        if "000-START" in paragraphs:
+            execute_calls.append(f"        {method_index['000-START']}();")
+        else:
+            for line in start_body:
+                perform = re.search(r"\bPERFORM\s+([A-Z0-9][A-Z0-9-]+)", line, re.IGNORECASE)
+                if perform:
+                    paragraph = perform.group(1).upper()
+                    execute_calls.append(f"        {method_index.get(paragraph, self._java_method_name(paragraph))}();")
 
         if not execute_calls:
             flow = context.get("procedural_flow") or {}
             for step in flow.get("execution_flow") or []:
                 paragraph = str(step.get("name") or "").upper()
+                if paragraph == "000-START":
+                    continue
                 if paragraph in method_index:
                     execute_calls.append(f"        {method_index[paragraph]}();")
+
+        if not execute_calls:
+            execute_calls.extend(self._java_lines_from_cobol(start_body, method_index))
 
         if not execute_calls:
             execute_calls.append('        this.lastOperation = "Executed legacy program.";')
 
         for paragraph, body_lines in paragraphs.items():
-            if paragraph == "000-START":
-                continue
             method_name = method_index[paragraph]
             converted = self._java_lines_from_cobol(body_lines, method_index)
             if not converted:
@@ -531,16 +558,15 @@ public class {class_name}Service {{
         fields = []
         seen = set()
         normalized = re.sub(r"==\s*UT\s*==", "", source_code or "", flags=re.IGNORECASE).replace("==", "")
-        pattern = re.compile(
-            r"^\s*\d{2}\s+([A-Z0-9-]+)\s+(?:PIC|PICTURE)\s+[^.\n]+(?:\s+VALUE\s+['\"]?([^'.\"]+)['\"]?)?",
-            re.IGNORECASE | re.MULTILINE,
-        )
+        pattern = re.compile(r"^\s*\d{2}\s+([A-Z0-9-]+)\s+(?:PIC|PICTURE)\b(?P<body>[^.\n]*)", re.IGNORECASE | re.MULTILINE)
+        value_pattern = re.compile(r"\bVALUE\s+['\"]?([^'\".\s]+)", re.IGNORECASE)
         for match in pattern.finditer(normalized):
             source_name = match.group(1).upper()
             if source_name == "FILLER" or source_name in seen:
                 continue
             seen.add(source_name)
-            fields.append((source_name, self._java_field_name(source_name), match.group(2) or ""))
+            value_match = value_pattern.search(match.group("body") or "")
+            fields.append((source_name, self._java_field_name(source_name), value_match.group(1) if value_match else ""))
         return fields[:40]
 
     def _extract_cobol_paragraph_blocks(self, source_code: str) -> dict[str, list[str]]:
@@ -552,6 +578,11 @@ public class {class_name}Service {{
             "END-EVALUATE",
             "END-PERFORM",
             "END-CALL",
+            "ELSE",
+            "IF",
+            "THEN",
+            "WHEN",
+            "OTHER",
             "EXIT",
             "CONTINUE",
             "GOBACK",
@@ -595,6 +626,12 @@ public class {class_name}Service {{
             line = body_lines[index].rstrip(".")
             upper = line.upper()
 
+            if upper.startswith("IF "):
+                if_lines, consumed = self._java_if_from_cobol(body_lines[index:], method_index)
+                java_lines.extend(if_lines)
+                index += consumed
+                continue
+
             if upper.startswith("EVALUATE "):
                 variable = self._java_expr(line.split(None, 1)[1])
                 switch_lines, consumed = self._java_switch_from_evaluate(
@@ -611,6 +648,33 @@ public class {class_name}Service {{
                 java_lines.extend(converted)
             index += 1
         return java_lines
+
+    def _java_if_from_cobol(
+        self,
+        lines: list[str],
+        method_index: dict[str, str],
+    ) -> tuple[list[str], int]:
+        first = lines[0].strip().rstrip(".")
+        condition = re.sub(r"^\s*IF\s+", "", first, flags=re.IGNORECASE)
+        result = [f"        if ({self._java_condition(condition)}) {{"]
+        consumed = 1
+        in_else = False
+
+        for raw in lines[1:]:
+            consumed += 1
+            line = raw.strip().rstrip(".")
+            upper = line.upper()
+            if upper.startswith("END-IF") or upper.startswith("END IF"):
+                break
+            if upper == "ELSE":
+                result.append("        } else {")
+                in_else = True
+                continue
+            converted = self._java_statement_from_cobol(line, method_index, indent="            ")
+            result.extend(converted)
+
+        result.append("        }")
+        return result, consumed
 
     def _java_switch_from_evaluate(
         self,
@@ -655,6 +719,16 @@ public class {class_name}Service {{
         if move:
             return [f"{indent}{self._java_field_name(move.group(2))} = {self._java_expr(move.group(1))};"]
 
+        subtract = re.search(r"\bSUBTRACT\s+(.+?)\s+FROM\s+([A-Z0-9-]+)", stripped, re.IGNORECASE)
+        if subtract:
+            target = self._java_field_name(subtract.group(2))
+            return [f"{indent}{target} = String.valueOf(Integer.parseInt({target}) - Integer.parseInt({self._java_expr(subtract.group(1))}));"]
+
+        add = re.search(r"\bADD\s+(.+?)\s+TO\s+([A-Z0-9-]+)", stripped, re.IGNORECASE)
+        if add:
+            target = self._java_field_name(add.group(2))
+            return [f"{indent}{target} = String.valueOf(Integer.parseInt({target}) + Integer.parseInt({self._java_expr(add.group(1))}));"]
+
         perform = re.search(r"\bPERFORM\s+([A-Z0-9][A-Z0-9-]+)", stripped, re.IGNORECASE)
         if perform:
             target = perform.group(1).upper()
@@ -681,6 +755,28 @@ public class {class_name}Service {{
 
         return []
 
+    def _java_condition(self, condition: str) -> str:
+        text = str(condition or "").strip().rstrip(".")
+        match = re.match(
+            r"([A-Z0-9-]+)\s+(LESS\s+THAN|GREATER\s+THAN|=|EQUAL\s+TO|NOT\s+=)\s+(.+)",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            return "true"
+
+        left = self._java_expr(match.group(1))
+        op_text = match.group(2).upper()
+        right = self._java_expr(match.group(3))
+        op = {
+            "LESS THAN": "<",
+            "GREATER THAN": ">",
+            "=": "==",
+            "EQUAL TO": "==",
+            "NOT =": "!=",
+        }.get(op_text, "==")
+        return f"Integer.parseInt({left}) {op} Integer.parseInt({right})"
+
     def _java_expr(self, value: str) -> str:
         text = str(value or "").strip().rstrip(",.")
         quoted = re.match(r"""^['"](.+)['"]$""", text)
@@ -704,7 +800,7 @@ public class {class_name}Service {{
             camel = f"p{number.group(1)}{suffix[:1].upper() + suffix[1:] if suffix else ''}"
         else:
             camel = self._camel_name(raw)
-        if camel in {"class", "return", "switch", "default", "public", "private", "void"}:
+        if camel in {"class", "return", "switch", "default", "public", "private", "void", "if", "else", "case", "for", "while", "do", "try", "catch", "finally"}:
             camel += "Paragraph"
         return camel or "executeParagraph"
 

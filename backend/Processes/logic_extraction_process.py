@@ -5,7 +5,7 @@ from typing import Any
 import json
 from sqlalchemy.orm import Session
 from Chunking.context.chunk_context_manager import ChunkContextManager
-from Persistence.sqlite.models import BusinessRule, ChunkAnalysis, FileChunk, FileRelation, ProjectFile
+from Persistence.sqlite.models import BusinessRule, ChunkAnalysis, FileChunk, FileRelation, FileStatus, ProjectFile
 from paths import UPLOADS_DIR
 from Agents.infrastructure.chat_client_factory import ChatClientFactory
 
@@ -94,7 +94,10 @@ class LogicExtractionProcess:
 
         files = (
             self.db.query(ProjectFile)
-            .filter(ProjectFile.run_id == run_id)
+            .filter(
+                ProjectFile.run_id == run_id,
+                ProjectFile.status == FileStatus.CONFIRMED,
+            )
             .all()
         )
 
@@ -348,7 +351,9 @@ class LogicExtractionProcess:
             or self.config.get("key")
             or self.config.get("api_key")
             or None,
-            "timeout": self.config.get("timeout") or 120,
+            "timeout": self.config.get("timeout")
+            or os.getenv("BUSINESS_LOGIC_LLM_TIMEOUT", "30"),
+            "max_tokens": self.config.get("max_tokens") or 1600,
         }
 
         return AgenticBusinessLogicExtractor(llm_config=llm_config)

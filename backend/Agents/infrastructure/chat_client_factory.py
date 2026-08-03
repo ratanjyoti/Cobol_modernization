@@ -3,14 +3,29 @@ from Config.llm_config import settings
 
 
 class ChatClientFactory:
+
+    """LLM client factory that hides the difference between local Ollama and OpenRouter from the rest of the application."""
+
     @staticmethod
     def get_client(provider_or_config=None, api_key: str = None, base_url: str = None, model: str = None):
         config = ChatClientFactory._normalize_config(provider_or_config, api_key, base_url, model)
         mode = (config.get("mode") or config.get("provider") or "local").lower()
+        url = config.get("url") or config.get("base_url") or "http://localhost:11434"
+        local_provider = str(config.get("local_provider") or "").lower()
+
+        if mode in {"local", "lmstudio", "lm-studio"} and (
+            local_provider in {"openai-compatible", "lmstudio", "lm-studio"}
+            or str(url).rstrip("/").endswith("/v1")
+        ):
+            return OpenRouterClient(
+                api_key=config.get("key") or "local",
+                base_url=url,
+                model=config.get("model") or "llama3",
+            )
 
         if mode in {"local", "ollama"}:
             return LocalLLMClient(
-                base_url=config.get("url") or config.get("base_url") or "http://localhost:11434",
+                base_url=url,
                 model=config.get("model") or "llama3",
             )
 

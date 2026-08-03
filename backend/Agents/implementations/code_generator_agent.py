@@ -675,6 +675,8 @@ public class {class_name}
 
         if local_provider == "openai-compatible" or base_url.endswith("/v1"):
             api_base = base_url if base_url.endswith("/v1") else f"{base_url}/v1"
+            timeout = int(self.llm_config.get("timeout") or os.getenv("CODE_GENERATION_LOCAL_TIMEOUT", "90"))
+            max_tokens = int(self.llm_config.get("max_tokens") or os.getenv("CODE_GENERATION_LOCAL_MAX_TOKENS", "4096"))
 
             response = requests.post(
                 f"{api_base}/chat/completions",
@@ -685,10 +687,10 @@ public class {class_name}
                         {"role": "user", "content": user_prompt},
                     ],
                     "temperature": 0.1,
-                    "max_tokens": 8000,
+                    "max_tokens": max_tokens,
                     "stream": False,
                 },
-                timeout=180,
+                timeout=timeout,
             )
 
             if response.status_code >= 400:
@@ -704,6 +706,9 @@ public class {class_name}
                 or ""
             )
 
+        timeout = int(self.llm_config.get("timeout") or os.getenv("CODE_GENERATION_LOCAL_TIMEOUT", "90"))
+        max_tokens = int(self.llm_config.get("max_tokens") or os.getenv("CODE_GENERATION_LOCAL_MAX_TOKENS", "4096"))
+
         response = requests.post(
             f"{base_url}/api/generate",
             json={
@@ -712,10 +717,10 @@ public class {class_name}
                 "stream": False,
                 "options": {
                     "temperature": 0.1,
-                    "num_predict": 8000,
+                    "num_predict": max_tokens,
                 },
             },
-            timeout=180,
+            timeout=timeout,
         )
 
         if response.status_code >= 400:

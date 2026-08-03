@@ -219,6 +219,8 @@ class ConversionPlannerAgent:
 
         if local_provider == "openai-compatible" or base_url.endswith("/v1"):
             api_base = base_url if base_url.endswith("/v1") else f"{base_url}/v1"
+            timeout = int(self.llm_config.get("timeout") or os.getenv("CONVERSION_PLANNER_LOCAL_TIMEOUT", "45"))
+            max_tokens = int(self.llm_config.get("max_tokens") or os.getenv("CONVERSION_PLANNER_LOCAL_MAX_TOKENS", "2200"))
 
             response = requests.post(
                 f"{api_base}/chat/completions",
@@ -229,10 +231,10 @@ class ConversionPlannerAgent:
                         {"role": "user", "content": user_prompt},
                     ],
                     "temperature": 0.1,
-                    "max_tokens": 4000,
+                    "max_tokens": max_tokens,
                     "stream": False,
                 },
-                timeout=120,
+                timeout=timeout,
             )
 
             if response.status_code >= 400:
@@ -248,6 +250,9 @@ class ConversionPlannerAgent:
                 or ""
             )
 
+        timeout = int(self.llm_config.get("timeout") or os.getenv("CONVERSION_PLANNER_LOCAL_TIMEOUT", "45"))
+        max_tokens = int(self.llm_config.get("max_tokens") or os.getenv("CONVERSION_PLANNER_LOCAL_MAX_TOKENS", "2200"))
+
         response = requests.post(
             f"{base_url}/api/generate",
             json={
@@ -256,10 +261,10 @@ class ConversionPlannerAgent:
                 "stream": False,
                 "options": {
                     "temperature": 0.1,
-                    "num_predict": 4000,
+                    "num_predict": max_tokens,
                 },
             },
-            timeout=120,
+            timeout=timeout,
         )
 
         if response.status_code >= 400:
@@ -379,7 +384,7 @@ class ConversionPlannerAgent:
             ],
             "methods": [
                 {
-                    "method_name": "executeBusinessRule",
+                    "method_name": "execute",
                     "owning_class": class_name,
                     "responsibility": "Execute the preserved business rule path for this legacy source file.",
                     "source_mapping": [file_context.filename],

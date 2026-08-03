@@ -233,7 +233,8 @@ class ScopedMigrationProcess:
             "model": getattr(project, "llm_model", None) or "llama3",
             "url": getattr(project, "custom_api_base_url", None) or "http://127.0.0.1:11434",
             "key": getattr(project, "custom_api_key", None) or None,
-            "timeout": 180,
+            "local_provider": getattr(project, "local_provider", None),
+            "timeout": 30,
         }
 
     def _target_language(self, run_id: str) -> str:
