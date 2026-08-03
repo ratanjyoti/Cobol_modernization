@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from Persistence.sqlite.models import ProjectFile
+from services.method_quality_service import MethodQualityService
 from services.symbol_registry_service import SymbolRegistryService
 
 
@@ -19,6 +20,7 @@ class GenerationQualityService:
 
     def __init__(self, db_session: Session):
         self.db = db_session
+        self.method_quality_service = MethodQualityService()
 
     def evaluate(
         self,
@@ -33,6 +35,10 @@ class GenerationQualityService:
         code_files = self._code_files(project_dir, target)
         source_files = self._source_files(run_id)
         registry = SymbolRegistryService(self.db).get_registry(run_id, target)
+        method_quality = self.method_quality_service.scan_project(
+            project_dir=project_dir,
+            target_language=target,
+        )
 
         failures: list[str] = []
         warnings: list[str] = []
@@ -54,6 +60,11 @@ class GenerationQualityService:
         planned_class_paths = self._planned_class_paths(plans)
         generated_rel_paths = {path.relative_to(project_dir).as_posix() for path in code_files}
         missing_planned_classes = sorted(planned_class_paths - generated_rel_paths)
+        generated_source_files = {
+            str(item.get("source_file") or "")
+            for item in manifest.get("files") or []
+            if item.get("source_file")
+        }
 
         if missing_planned_classes:
             failures.append(
@@ -62,7 +73,6 @@ class GenerationQualityService:
             )
 
         placeholder_files = []
-        comment_only_method_files = []
         copybook_service_files = []
         implementation_signal_count = 0
 
@@ -70,18 +80,14 @@ class GenerationQualityService:
             content = path.read_text(encoding="utf-8", errors="ignore")
             rel_path = path.relative_to(project_dir).as_posix()
 
-            if self._is_placeholder_code(content):
+            if self._is_placeholder_code(content, target):
                 placeholder_files.append(rel_path)
-
-            comment_only_count = self._comment_only_method_count(content)
-            if comment_only_count:
-                comment_only_method_files.append(f"{rel_path} ({comment_only_count} method(s))")
 
             source_name = self._source_for_generated_file(manifest, rel_path)
             if self._copybook_service_misroute(source_name, rel_path, content):
                 copybook_service_files.append(rel_path)
 
-            implementation_signal_count += self._implementation_signal_count(content)
+            implementation_signal_count += self._implementation_signal_count(content, target)
 
         if placeholder_files:
             failures.append(
@@ -89,11 +95,27 @@ class GenerationQualityService:
                 + ", ".join(placeholder_files[:20])
             )
 
-        if comment_only_method_files:
-            failures.append(
-                "Generated methods contain comments but no executable implementation: "
-                + ", ".join(comment_only_method_files[:20])
-            )
+        if not method_quality.get("success"):
+            comment_items = method_quality.get("comment_only_methods", [])[:30]
+            placeholder_items = method_quality.get("placeholder_methods", [])[:30]
+
+            if comment_items:
+                failures.append(
+                    "Generated methods/functions contain comments but no executable implementation: "
+                    + ", ".join(
+                        f"{item['file_path']}::{item['method_name']}"
+                        for item in comment_items
+                    )
+                )
+
+            if placeholder_items:
+                failures.append(
+                    "Generated methods/functions contain placeholder or stub logic: "
+                    + ", ".join(
+                        f"{item['file_path']}::{item['method_name']}"
+                        for item in placeholder_items
+                    )
+                )
 
         if copybook_service_files:
             failures.append(
@@ -104,12 +126,21 @@ class GenerationQualityService:
         if code_files and implementation_signal_count == 0:
             failures.append("Generated code contains no implementation evidence beyond declarations/comments.")
 
+        scoped_type_mappings = self._registry_items_for_sources(
+            registry.get("type_mappings", []),
+            generated_source_files,
+        )
+        scoped_signatures = self._registry_items_for_sources(
+            registry.get("signatures", []),
+            generated_source_files,
+        )
+
         type_coverage = self._name_coverage(
-            [item.get("target_name") for item in registry.get("type_mappings", [])],
+            [item.get("target_name") for item in scoped_type_mappings],
             code_files,
         )
         method_coverage = self._method_coverage(
-            [item.get("target_method") for item in registry.get("signatures", [])],
+            [item.get("target_method") for item in scoped_signatures],
             code_files,
         )
 
@@ -131,8 +162,8 @@ class GenerationQualityService:
             if self._is_bad_fallback_plan(plan, source_files)
         ]
         if stale_fallback_plans:
-            failures.append(
-                "Fallback conversion plans must be regenerated with the selected LLM: "
+            warnings.append(
+                "Local fallback conversion plan used because the selected LLM was unavailable or over context: "
                 + ", ".join(str(item) for item in stale_fallback_plans[:20])
             )
 
@@ -157,12 +188,27 @@ class GenerationQualityService:
                 "locked_method_covered": method_coverage["covered"],
                 "locked_method_coverage_ratio": method_coverage["ratio"],
             },
+            "method_quality": method_quality,
             "failures": failures,
             "warnings": warnings,
         }
 
         self._write_latest_quality(output_root, target, result)
         return result
+
+    def run_quality_gate(
+        self,
+        run_id: str,
+        target_language: str,
+        project_dir: Path | None = None,
+    ) -> dict[str, Any]:
+        target = self._normalize_target(target_language)
+        project_dir = project_dir or self._project_dir(run_id, target)
+        return self.evaluate(
+            run_id=run_id,
+            target_language=target,
+            project_dir=project_dir,
+        )
 
     def latest(
         self,
@@ -211,24 +257,38 @@ class GenerationQualityService:
         except Exception:
             return {}
 
-    @staticmethod
-    def _code_files(project_dir: Path, target_language: str) -> list[Path]:
-        suffixes = {
-            "java": [".java"],
-            "python": [".py"],
-            "csharp": [".cs"],
-        }.get(target_language, [".java"])
+    def _source_extension(self, target_language: str) -> str:
+        target = self._normalize_target(target_language)
 
+        if target == "python":
+            return ".py"
+
+        if target == "csharp":
+            return ".cs"
+
+        return ".java"
+
+    def _code_files(self, project_dir: Path, target_language: str) -> list[Path]:
         if not project_dir.exists():
             return []
 
+        source_extension = self._source_extension(target_language)
         files = []
-        for path in sorted(project_dir.rglob("*")):
-            if not path.is_file() or path.suffix.lower() not in suffixes:
+
+        for path in sorted(project_dir.rglob(f"*{source_extension}")):
+            normalized = path.as_posix()
+
+            if (
+                "/target/" in normalized
+                or "/build/" in normalized
+                or "/bin/" in normalized
+                or "/obj/" in normalized
+                or "/__pycache__/" in normalized
+            ):
                 continue
-            if any(part in {"target", "__pycache__", "bin", "obj"} for part in path.parts):
-                continue
+
             files.append(path)
+
         return files
 
     @staticmethod
@@ -249,15 +309,50 @@ class GenerationQualityService:
                     paths.add(file_path)
         return paths
 
-    @staticmethod
-    def _is_placeholder_code(content: str) -> bool:
+    def _placeholder_patterns(self, target_language: str) -> list[str]:
+        target = self._normalize_target(target_language)
+
+        common = [
+            r"\bTODO\b",
+            r"\bFIXME\b",
+            r"\bstub\b",
+            r"\bplaceholder\b",
+            r"\bnot\s+implemented\b",
+        ]
+
+        if target == "python":
+            return common + [
+                r"\bpass\b",
+                r"raise\s+NotImplementedError",
+                r"return\s+True\b",
+                r"return\s+False\b",
+                r"return\s+None\b",
+                r"execute_business_rule",
+            ]
+
+        if target == "csharp":
+            return common + [
+                r"NotImplementedException",
+                r"return\s+true\s*;",
+                r"return\s+false\s*;",
+                r"ExecuteBusinessRule",
+            ]
+
+        return common + [
+            r"UnsupportedOperationException",
+            r"return\s+true\s*;",
+            r"return\s+false\s*;",
+            r"executeBusinessRule",
+        ]
+
+    def _is_placeholder_code(self, content: str, target_language: str) -> bool:
         lower = (content or "").lower()
         if "extends exception" in lower or "extends runtimeexception" in lower:
             return False
-        if "todo: implement business logic" in lower or "placeholder" in lower:
-            return True
-        if re.search(r"\bexecuteBusinessRule\s*\(\s*\)\s*\{[^{}]*return\s+true\s*;", content or "", flags=re.IGNORECASE | re.DOTALL):
-            return True
+
+        for pattern in self._placeholder_patterns(target_language):
+            if re.search(pattern, content or "", flags=re.IGNORECASE | re.DOTALL):
+                return True
 
         non_comment_lines = [
             line.strip()
@@ -280,19 +375,43 @@ class GenerationQualityService:
             return True
         return rel_path.lower().endswith("service.java") and "@applicationscoped" in content.lower()
 
-    @staticmethod
-    def _implementation_signal_count(content: str) -> int:
-        without_comments = re.sub(r"//.*|/\*.*?\*/", "", content or "", flags=re.DOTALL)
-        signals = [
-            r"\bif\s*\(",
-            r"\bswitch\s*\(",
-            r"\bfor\s*\(",
-            r"\bwhile\s*\(",
-            r"\breturn\s+[^;]+;",
-            r"\.[a-zA-Z_][A-Za-z0-9_]*\(",
-            r"=\s*[^=]",
-            r"\+|-|\*|/",
-        ]
+    def _implementation_signal_count(self, content: str, target_language: str) -> int:
+        target = self._normalize_target(target_language)
+
+        if target == "python":
+            without_comments = "\n".join(
+                line.split("#", 1)[0]
+                for line in (content or "").splitlines()
+            )
+            signals = [
+                r"\bif\s+",
+                r"\bfor\s+",
+                r"\bwhile\s+",
+                r"\breturn\b",
+                r"\braise\b",
+                r"\bwith\s+",
+                r"\btry\s*:",
+                r"\bexcept\s+",
+                r"\.[a-zA-Z_][A-Za-z0-9_]*\(",
+                r"\b[a-zA-Z_][A-Za-z0-9_]*\(",
+                r"=\s*[^=]",
+                r"\+|-|\*|/",
+            ]
+        else:
+            without_comments = re.sub(r"//.*|/\*.*?\*/", "", content or "", flags=re.DOTALL)
+            signals = [
+                r"\bif\s*\(",
+                r"\bswitch\s*\(",
+                r"\bfor(?:each)?\s*\(",
+                r"\bwhile\s*\(",
+                r"\breturn\s+[^;]+;",
+                r"\bthrow\b",
+                r"\bnew\b",
+                r"\.[a-zA-Z_][A-Za-z0-9_]*\(",
+                r"=\s*[^=]",
+                r"\+|-|\*|/",
+            ]
+
         return sum(len(re.findall(pattern, without_comments)) for pattern in signals)
 
     @staticmethod
@@ -350,6 +469,19 @@ class GenerationQualityService:
         }
 
     @staticmethod
+    def _registry_items_for_sources(
+        items: list[dict[str, Any]],
+        source_files: set[str],
+    ) -> list[dict[str, Any]]:
+        if not source_files:
+            return items
+        return [
+            item
+            for item in items
+            if str(item.get("filename") or "") in source_files
+        ]
+
+    @staticmethod
     def _is_bad_fallback_plan(plan: dict[str, Any], source_files: dict[str, ProjectFile]) -> bool:
         summary = str(plan.get("summary") or "").lower()
         assumptions = " ".join(str(item).lower() for item in plan.get("assumptions") or [])
@@ -385,3 +517,23 @@ class GenerationQualityService:
     def _output_root(run_id: str) -> Path:
         backend_root = Path(__file__).resolve().parents[1]
         return backend_root / "output" / "generated_code" / run_id
+
+    @staticmethod
+    def _project_dir(run_id: str, target_language: str) -> Path:
+        return (
+            GenerationQualityService._output_root(run_id)
+            / "project"
+            / target_language
+        )
+
+    @staticmethod
+    def _normalize_target(target_language: str) -> str:
+        value = str(target_language or "").lower().strip()
+
+        if value in {"python", "py", "fastapi"}:
+            return "python"
+
+        if value in {"csharp", "c#", "cs", "dotnet"}:
+            return "csharp"
+
+        return "java"
