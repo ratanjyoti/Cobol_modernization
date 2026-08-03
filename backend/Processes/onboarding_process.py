@@ -30,6 +30,7 @@ class OnboardingProcess:
             custom_api_key=config_data.get("key") or config_data.get("custom_api_key"),
             custom_api_base_url=config_data.get("url") or config_data.get("custom_api_base_url"),
             llm_model=config_data.get("model"),
+            local_provider=config_data.get("local_provider"),
             interaction_lang=config_data.get("lang", "en"),
             neo4j_uri=config_data.get("neo4j_uri"),
             neo4j_user=config_data.get("neo4j_user"),

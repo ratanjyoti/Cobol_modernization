@@ -260,6 +260,7 @@ class CodeGenerationProcess:
         quality_report = self.quality_service.evaluate(
             run_id=run_id,
             target_language=target.value,
+            project_dir=self._project_dir(run_id, target.value),
         )
         workflow_metadata = self._code_generation_metadata(
             target=target,

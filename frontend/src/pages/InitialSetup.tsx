@@ -15,16 +15,17 @@ import toast from 'react-hot-toast';
 
 import ConfigPanel from '../components/ConfigPanel';
 import SourceFiles from './SourceFiles';
-import { ProjectAPI } from '../services/api';
+import { getApiErrorDetail, ProjectAPI } from '../services/api';
 import type { ProjectConfig, ProjectSummary, ServiceHealth } from '../services/api';
 import SectionLabel from '../components/SectionLabel';
 
 const defaultAIConfig: ProjectConfig = {
-  mode: 'openrouter',
-  provider: 'openrouter',
+  mode: 'local',
+  provider: 'local',
   key: '',
-  url: 'https://openrouter.ai/api/v1',
-  model: 'openai/gpt-oss-20b:free',
+  url: 'http://127.0.0.1:1234/v1',
+  model: 'meta-llama-3.1-8b-instruct',
+  local_provider: 'openai-compatible',
 };
 
 const defaultNeo4jConfig: ProjectConfig = {
@@ -84,10 +85,12 @@ const isTargetConversionLanguage = (value: string | null): value is TargetConver
 const getStoredTargetConversionLanguage = (currentRunId?: string | null): TargetConversionLanguage => {
   const runSpecific = currentRunId ? localStorage.getItem(`modernizer_target_language_${currentRunId}`) : null;
   const globalTarget = localStorage.getItem('modernizer_target_language');
-  const value = (runSpecific || globalTarget || 'java').toLowerCase();
+  const value = (runSpecific || globalTarget || 'java').toLowerCase().trim();
 
-  if (value === 'python') return 'python';
-  if (value === 'csharp' || value === 'c#') return 'csharp';
+  if (value === 'python' || value === 'py' || value === 'fastapi') return 'python';
+  if (value === 'csharp' || value === 'c#' || value === 'cs' || value === 'dotnet') {
+    return 'csharp';
+  }
   return 'java';
 };
 
@@ -158,7 +161,24 @@ const loadLastAIConfig = (): ProjectConfig => {
     delete saved.key;
     delete saved.has_api_key;
     delete saved.key_preview;
-    return { ...defaultAIConfig, ...saved };
+    const config = { ...defaultAIConfig, ...saved };
+    const mode = String(config.mode || config.provider || '').toLowerCase();
+    const url = String(config.url || '').trim();
+    if (mode === 'local') {
+      config.provider = 'local';
+      config.mode = 'local';
+      config.local_provider =
+        config.local_provider === 'ollama' && !url.endsWith('/v1') && !url.includes(':1234')
+          ? 'ollama'
+          : 'openai-compatible';
+      if (!url || url.includes('10.56.213.199') || url.includes(':1234')) {
+        config.url = 'http://127.0.0.1:1234/v1';
+      }
+      if (!config.model || config.model === 'custom') {
+        config.model = 'meta-llama-3.1-8b-instruct';
+      }
+    }
+    return config;
   } catch {
     return defaultAIConfig;
   }
@@ -501,8 +521,8 @@ const InitialSetup = () => {
       void loadServiceHealth(newRunId);
 
       toast.success(`Project ${runName} created. Upload source files below.`);
-    } catch (e: any) {
-      toast.error(e.response?.data?.detail || 'Error creating project');
+    } catch (e) {
+      toast.error(getApiErrorDetail(e, 'Error creating project'));
     } finally {
       setIsCreatingProject(false);
     }

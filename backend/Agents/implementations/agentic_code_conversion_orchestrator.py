@@ -34,7 +34,9 @@ class AgenticCodeConversionOrchestrator:
             result["agent_key"] = agent_key
             result["agent_name"] = self._agent_name(agent_key)
             result["fallback_used"] = False
-            return self._normalize_result(result, context, agent_key)
+            normalized = self._normalize_result(result, context, agent_key)
+            self._assert_semantic_completeness(normalized, context)
+            return normalized
         except Exception as exc:
             fallback = self._deterministic_fallback(
                 context=context,
@@ -49,6 +51,7 @@ class AgenticCodeConversionOrchestrator:
 
     def _convert_with_agent(self, context: dict[str, Any], agent_key: str) -> dict[str, Any]:
         system_prompt = SYSTEM_PROMPTS.get(agent_key) or SYSTEM_PROMPTS["generic"]
+        budgets = self._prompt_budgets()
         user_prompt = USER_PROMPT_TEMPLATE.format(
             target_language=context.get("target_language", ""),
             target_framework=context.get("target_framework", ""),
@@ -56,13 +59,13 @@ class AgenticCodeConversionOrchestrator:
             file_id=context.get("file_id", ""),
             file_name=context.get("file_name", ""),
             source_language=context.get("source_language", ""),
-            conversion_plan=self._trim_json(context.get("conversion_plan"), 9000),
-            technical_yaml=self._trim(context.get("technical_yaml"), 12000),
-            business_rules_json=self._trim_json(context.get("business_rules"), 8000),
-            procedural_flow_json=self._trim_json(context.get("procedural_flow"), 7000),
-            dependencies_json=self._trim_json(context.get("dependencies"), 5000),
-            locked_symbols_json=self._trim_json(context.get("locked_symbols"), 6000),
-            source_code=self._trim(context.get("source_code"), 16000),
+            conversion_plan=self._trim_json(context.get("conversion_plan"), budgets["conversion_plan"]),
+            technical_yaml=self._trim(context.get("technical_yaml"), budgets["technical_yaml"]),
+            business_rules_json=self._trim_json(context.get("business_rules"), budgets["business_rules"]),
+            procedural_flow_json=self._trim_json(context.get("procedural_flow"), budgets["procedural_flow"]),
+            dependencies_json=self._trim_json(context.get("dependencies"), budgets["dependencies"]),
+            locked_symbols_json=self._trim_json(context.get("locked_symbols"), budgets["locked_symbols"]),
+            source_code=self._trim(context.get("source_code"), budgets["source_code"]),
         )
 
         response = self._call_llm(system_prompt, user_prompt)
@@ -166,7 +169,8 @@ class AgenticCodeConversionOrchestrator:
                 {"role": "user", "content": user_prompt},
             ],
             "temperature": 0.1,
-            "response_format": {"type": "json_object"},
+            "max_tokens": 4096,
+            "response_format": self._json_response_format("code_conversion_result"),
         }
 
         response = requests.post(
@@ -188,6 +192,55 @@ class AgenticCodeConversionOrchestrator:
         response.raise_for_status()
         data = response.json()
         return data["choices"][0]["message"]["content"]
+
+    def _prompt_budgets(self) -> dict[str, int]:
+        base_url = str(
+            self.llm_config.get("url")
+            or self.llm_config.get("base_url")
+            or self.llm_config.get("custom_api_base_url")
+            or ""
+        ).lower()
+        mode = str(
+            self.llm_config.get("mode")
+            or self.llm_config.get("provider")
+            or self.llm_config.get("llm_provider")
+            or "local"
+        ).lower()
+
+        if mode == "local" or "127.0.0.1" in base_url or "localhost" in base_url:
+            return {
+                "conversion_plan": 2400,
+                "technical_yaml": 3200,
+                "business_rules": 2200,
+                "procedural_flow": 2600,
+                "dependencies": 1200,
+                "locked_symbols": 1400,
+                "source_code": 7000,
+            }
+
+        return {
+            "conversion_plan": 9000,
+            "technical_yaml": 12000,
+            "business_rules": 8000,
+            "procedural_flow": 7000,
+            "dependencies": 5000,
+            "locked_symbols": 6000,
+            "source_code": 16000,
+        }
+
+    @staticmethod
+    def _json_response_format(name: str) -> dict[str, Any]:
+        return {
+            "type": "json_schema",
+            "json_schema": {
+                "name": name,
+                "strict": False,
+                "schema": {
+                    "type": "object",
+                    "additionalProperties": True,
+                },
+            },
+        }
 
     def _parse_json(self, text: str) -> dict[str, Any]:
         raw = str(text or "").strip()
@@ -263,6 +316,50 @@ class AgenticCodeConversionOrchestrator:
         text = aliases.get(text, text)
         allowed = {"model", "service", "controller", "repository", "dto", "config", "test", "other"}
         return text if text in allowed else "other"
+
+    def _assert_semantic_completeness(self, result: dict[str, Any], context: dict[str, Any]) -> None:
+        content = "\n".join(
+            str(item.get("content") or "")
+            for item in result.get("files") or []
+            if isinstance(item, dict)
+        )
+        source = str(context.get("source_code") or "")
+        source_upper = source.upper()
+        content_upper = content.upper()
+        missing: list[str] = []
+
+        for literal in self._quoted_literals(source):
+            if literal.upper() not in content_upper:
+                missing.append(f"literal:{literal}")
+
+        for program in self._called_programs(source):
+            if program.upper() not in content_upper:
+                missing.append(f"call:{program}")
+
+        if "MOVE TEMP TO" in source_upper and "TEMP" not in content_upper:
+            missing.append("temp-swap")
+
+        if "EVALUATE " in source_upper and "SWITCH" not in content_upper and "IF " not in content_upper:
+            missing.append("decision-logic")
+
+        if missing:
+            sample = ", ".join(missing[:8])
+            raise ValueError(f"LLM conversion missed source behavior: {sample}")
+
+    @staticmethod
+    def _quoted_literals(source: str) -> list[str]:
+        ignored = {"initial"}
+        literals = re.findall(r"['\"]([^'\"]{1,80})['\"]", source or "")
+        return [
+            literal.strip()
+            for literal in literals
+            if literal.strip() and literal.strip().lower() not in ignored
+        ]
+
+    @staticmethod
+    def _called_programs(source: str) -> list[str]:
+        programs = re.findall(r"\bCALL\s+['\"]([^'\"]+)['\"]", source or "", flags=re.IGNORECASE)
+        return [program.strip() for program in programs if program.strip()]
 
     def _deterministic_fallback(
         self,

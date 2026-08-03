@@ -22,7 +22,7 @@ interface ConfigPanelProps {
 
 const defaultsForMode = (mode: AiMode) => {
   if (mode === 'local') {
-    return { key: '', url: 'http://localhost:11434', model: 'llama3.2:3b' };
+    return { key: '', url: 'http://127.0.0.1:1234/v1', model: 'meta-llama-3.1-8b-instruct' };
   }
   return { key: '', url: 'https://openrouter.ai/api/v1', model: 'openai/gpt-oss-20b:free' };
 };
@@ -33,13 +33,25 @@ const normalizeMode = (value: unknown): AiMode => {
 
 const storageKeyForRun = (runId: string | null) => runId ? `ai_config_${runId}` : 'ai_config';
 
+const inferLocalProvider = (saved: any): LocalProvider => {
+  const provider = String(saved.local_provider || '').toLowerCase();
+  const url = String(saved.url || saved.custom_api_base_url || '').trim().replace(/\/+$/, '').toLowerCase();
+  if (provider === 'openai-compatible' || provider === 'lmstudio' || provider === 'lm-studio') {
+    return 'openai-compatible';
+  }
+  if (url.endsWith('/v1') || url.includes(':1234')) {
+    return 'openai-compatible';
+  }
+  return 'ollama';
+};
+
 const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
   const [step, setStep] = useState(1);
   const [mode, setMode] = useState<AiMode | null>(null);
   const [config, setConfig] = useState(defaultsForMode('openrouter'));
   const [customModel, setCustomModel] = useState('');
   const [savedKeyPreview, setSavedKeyPreview] = useState<string | null>(null);
-  const [localProvider, setLocalProvider] = useState<LocalProvider>('ollama');
+  const [localProvider, setLocalProvider] = useState<LocalProvider>('openai-compatible');
   const [checkingLocalLLM, setCheckingLocalLLM] = useState(false);
   const [localLLMStatus, setLocalLLMStatus] = useState<LocalLLMHealthResponse | null>(null);
   const backendCheckControllerRef = useRef<AbortController | null>(null);
@@ -59,7 +71,7 @@ const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
         model: [...OPENROUTER_MODELS, ...LOCAL_MODELS].includes(savedModel) ? savedModel : 'custom',
       });
       setSavedKeyPreview(saved.has_api_key ? saved.key_preview || 'saved' : null);
-      setLocalProvider(saved.local_provider === 'openai-compatible' || saved.local_provider === 'lmstudio' ? 'openai-compatible' : 'ollama');
+      setLocalProvider(inferLocalProvider(saved));
       setCustomModel([...OPENROUTER_MODELS, ...LOCAL_MODELS].includes(savedModel) ? '' : savedModel);
       setLocalLLMStatus(null);
       setStep(2);
@@ -113,6 +125,9 @@ const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
       setConfig(defaultsForMode(nextMode));
       setCustomModel('');
       setSavedKeyPreview(null);
+      if (nextMode === 'local') {
+        setLocalProvider('openai-compatible');
+      }
     }
     setMode(nextMode);
     setLocalLLMStatus(null);
@@ -123,14 +138,14 @@ const ConfigPanel = ({ runId, onSave }: ConfigPanelProps) => {
   const normalizeLocalBaseUrl = (url: string, provider: LocalProvider) => {
     const trimmed = (url || '').trim().replace(/\/+$/, '');
     if (provider === 'openai-compatible') {
-      const base = trimmed || 'http://localhost:1234';
+      const base = trimmed || 'http://127.0.0.1:1234';
       return base.endsWith('/v1') ? base : `${base}/v1`;
     }
     return trimmed || 'http://localhost:11434';
   };
 
   const defaultEndpointForLocalProvider = (provider: LocalProvider) => {
-    return provider === 'openai-compatible' ? 'http://localhost:1234/v1' : 'http://localhost:11434';
+    return provider === 'openai-compatible' ? 'http://127.0.0.1:1234/v1' : 'http://127.0.0.1:11434';
   };
   const checkBrowserOpenAICompatible = async (model: string, endpoint: string, externalSignal?: AbortSignal): Promise<LocalLLMHealthResponse> => {
     const started = performance.now();

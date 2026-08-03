@@ -199,12 +199,13 @@ class ProceduralFlowExtractor:
         technical_yaml: str,
         source_code: str,
     ) -> dict[str, Any]:
+        budgets = self._prompt_budgets()
         user_prompt = USER_PROMPT_TEMPLATE.format(
             file_id=file_id,
             file_name=file_name,
             detected_language=detected_language or "unknown",
-            technical_yaml=self._trim(technical_yaml, 16000),
-            source_code=self._trim(source_code, 16000),
+            technical_yaml=self._trim(technical_yaml, budgets["technical_yaml"]),
+            source_code=self._trim(source_code, budgets["source_code"]),
         )
 
         response = self._call_llm(SYSTEM_PROMPT, user_prompt)
@@ -282,7 +283,8 @@ class ProceduralFlowExtractor:
                 {"role": "user", "content": user_prompt},
             ],
             "temperature": 0.1,
-            "response_format": {"type": "json_object"},
+            "max_tokens": 4096,
+            "response_format": self._json_response_format("procedural_flow_result"),
         }
 
         response = requests.post(
@@ -304,6 +306,37 @@ class ProceduralFlowExtractor:
         response.raise_for_status()
         data = response.json()
         return data["choices"][0]["message"]["content"]
+
+    def _prompt_budgets(self) -> dict[str, int]:
+        base_url = str(
+            self.llm_config.get("url")
+            or self.llm_config.get("base_url")
+            or self.llm_config.get("custom_api_base_url")
+            or ""
+        ).lower()
+        mode = str(
+            self.llm_config.get("mode")
+            or self.llm_config.get("provider")
+            or self.llm_config.get("llm_provider")
+            or "local"
+        ).lower()
+        if mode == "local" or "127.0.0.1" in base_url or "localhost" in base_url:
+            return {"technical_yaml": 5000, "source_code": 9000}
+        return {"technical_yaml": 16000, "source_code": 16000}
+
+    @staticmethod
+    def _json_response_format(name: str) -> dict[str, Any]:
+        return {
+            "type": "json_schema",
+            "json_schema": {
+                "name": name,
+                "strict": False,
+                "schema": {
+                    "type": "object",
+                    "additionalProperties": True,
+                },
+            },
+        }
 
     def _parse_json(self, text: str) -> dict[str, Any]:
         raw = str(text or "").strip()

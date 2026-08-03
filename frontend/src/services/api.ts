@@ -238,7 +238,7 @@ const api = axios.create({
 
 export const LLMHealthAPI = {
   checkLocal: async (payload: LocalLLMHealthRequest, signal?: AbortSignal): Promise<LocalLLMHealthResponse> => {
-    const response = await api.post('/llm-health/local/check', payload, { timeout: 60000, signal });
+    const response = await api.post('/llm-health/local/check', payload, { timeout: 120000, signal });
     return response.data;
   },
 };
