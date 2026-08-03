@@ -22,6 +22,7 @@ import PageHeader from '../components/PageHeader';
 import SectionLabel from '../components/SectionLabel';
 import StatusBadge from '../components/StatusBadge';
 import type {
+  CodeGenerationWorkflowMetadata,
   ConversionPlan,
   FixResponse,
   GeneratedFileContent,
@@ -90,11 +91,46 @@ const getCurrentRunId = () => {
 const getLockedTargetLanguage = (runId: string): TargetLanguage => {
   const runSpecific = localStorage.getItem(`modernizer_target_language_${runId}`);
   const global = localStorage.getItem('modernizer_target_language');
-  const value = (runSpecific || global || 'java').toLowerCase();
+  const value = (runSpecific || global || 'java').toLowerCase().trim();
 
-  if (value === 'python') return 'python';
-  if (value === 'csharp' || value === 'c#') return 'csharp';
+  if (value === 'python' || value === 'py' || value === 'fastapi') {
+    return 'python';
+  }
+
+  if (
+    value === 'csharp' ||
+    value === 'c#' ||
+    value === 'cs' ||
+    value === 'dotnet'
+  ) {
+    return 'csharp';
+  }
+
   return 'java';
+};
+
+const targetLanguageLabel = (target: TargetLanguage): string => {
+  if (target === 'python') return 'Python / FastAPI';
+  if (target === 'csharp') return 'C# / ASP.NET Core';
+  return 'Java / Quarkus';
+};
+
+const conversionAgentName = (target: TargetLanguage): string => {
+  if (target === 'python') return 'PythonConversionAgent';
+  if (target === 'csharp') return 'CSharpConversionAgent';
+  return 'JavaConversionAgent';
+};
+
+const yesNo = (value?: boolean) => (value ? 'Yes' : 'No');
+
+const statusFromPayload = (value: unknown): string => {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object' && 'status' in value) {
+    const status = (value as { status?: unknown }).status;
+    return typeof status === 'string' ? status : '';
+  }
+  return '';
 };
 const formatBytes = (bytes: number) => {
   if (!bytes) return '0 B';
@@ -126,6 +162,7 @@ const CodeGeneration = () => {
   const [lockingRegistry, setLockingRegistry] = useState(false);
   const [pipelineStatus, setPipelineStatus] = useState<PipelineStatusResponse | null>(null);
   const [pipelineRunning, setPipelineRunning] = useState(false);
+  const [workflowMetadata, setWorkflowMetadata] = useState<CodeGenerationWorkflowMetadata>({});
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const selectedTarget = useMemo(
@@ -144,6 +181,8 @@ const CodeGeneration = () => {
     0,
     Math.min(100, Number(pipelineStatus?.progress || 0)),
   );
+  const targetDisplayName =
+    pipelineStatus?.target_display_name || targetLanguageLabel(targetLanguage);
 
   const loadExistingData = async () => {
     if (!hasRunId) return;
@@ -193,6 +232,13 @@ const CodeGeneration = () => {
 
         if (!cancelled) {
           setPipelineStatus(status);
+          setWorkflowMetadata((prev) => ({
+            ...prev,
+            conversion_agent: status.conversion_agent || status.current_agent || prev.conversion_agent,
+            conversion_agent_key: status.conversion_agent_key || prev.conversion_agent_key,
+            quality_gate_status: statusFromPayload(status.quality_gate) || prev.quality_gate_status,
+            validation_status: statusFromPayload(status.validation) || prev.validation_status,
+          }));
           setPipelineRunning(status.status === 'RUNNING');
         }
       } catch (err) {
@@ -217,6 +263,13 @@ const CodeGeneration = () => {
         const status = await getCodeGenerationPipelineStatus(runId, targetLanguage);
 
         setPipelineStatus(status);
+        setWorkflowMetadata((prev) => ({
+          ...prev,
+          conversion_agent: status.conversion_agent || status.current_agent || prev.conversion_agent,
+          conversion_agent_key: status.conversion_agent_key || prev.conversion_agent_key,
+          quality_gate_status: statusFromPayload(status.quality_gate) || prev.quality_gate_status,
+          validation_status: statusFromPayload(status.validation) || prev.validation_status,
+        }));
 
         if (status.status !== 'RUNNING') {
           setPipelineRunning(false);
@@ -244,14 +297,16 @@ const CodeGeneration = () => {
     setMessage('');
     setPipelineRunning(true);
     setValidationResult(null);
+    setWorkflowMetadata({});
     setFixResult(null);
     setReportResult(null);
 
     const startingStatus: PipelineStatusResponse = {
       run_id: runId,
       target_language: targetLanguage,
+      target_display_name: targetLanguageLabel(targetLanguage),
       status: 'RUNNING',
-      stage: 'Starting code generation pipeline...',
+      stage: `Starting ${targetLanguageLabel(targetLanguage)} code generation pipeline...`,
       progress: 1,
       download_allowed: false,
     };
@@ -262,6 +317,13 @@ const CodeGeneration = () => {
       const result = await runFullCodeGeneration(runId, targetLanguage);
 
       setPipelineStatus(result);
+      setWorkflowMetadata((prev) => ({
+        ...prev,
+        conversion_agent: result.conversion_agent || result.current_agent || prev.conversion_agent,
+        conversion_agent_key: result.conversion_agent_key || prev.conversion_agent_key,
+        quality_gate_status: statusFromPayload(result.quality_gate) || prev.quality_gate_status,
+        validation_status: statusFromPayload(result.validation) || prev.validation_status,
+      }));
       setPipelineRunning(result.status === 'RUNNING');
 
       if (result.status === 'COMPLETED' && result.download_allowed) {
@@ -399,6 +461,7 @@ const CodeGeneration = () => {
     try {
       const response = await validateGeneratedProject(runId, targetLanguage);
       setValidationResult(response);
+      setWorkflowMetadata((prev) => ({ ...prev, ...response }));
 
       if (response.success) {
         setMessage(`Validation passed using: ${response.command}`);
@@ -424,6 +487,7 @@ const CodeGeneration = () => {
 
     try {
       const response = await generateCode(runId, targetLanguage);
+      setWorkflowMetadata((prev) => ({ ...prev, ...response }));
 
       if (response.errors?.length) {
         setError(response.errors.map((item) => `${item.filename}: ${item.error}`).join('\n'));
@@ -473,6 +537,27 @@ const CodeGeneration = () => {
     generatedFiles.length > 0 &&
     canDownloadZip &&
     validationResult?.quality_gate?.success !== false;
+  const resolvedQualityGateStatus =
+    workflowMetadata.quality_gate_status ||
+    statusFromPayload(pipelineStatus?.quality_gate) ||
+    validationResult?.quality_gate?.status ||
+    'PENDING';
+  const resolvedValidationStatus =
+    workflowMetadata.validation_status ||
+    statusFromPayload(pipelineStatus?.validation) ||
+    validationResult?.status ||
+    'PENDING';
+  const resolvedConversionAgent =
+    workflowMetadata.conversion_agent ||
+    pipelineStatus?.conversion_agent ||
+    pipelineStatus?.current_agent ||
+    conversionAgentName(targetLanguage);
+  const resolvedConversionAgentKey =
+    workflowMetadata.conversion_agent_key ||
+    pipelineStatus?.conversion_agent_key ||
+    targetLanguage;
+  const resolvedBusinessRulesUsed = workflowMetadata.business_rules_used ?? Boolean(plans.length);
+  const resolvedProceduralFlowUsed = workflowMetadata.procedural_flow_used ?? Boolean(pipelineStatus?.steps?.length);
   const manualDebugActions = (
     <div className="flex flex-wrap gap-2">
       <button
@@ -552,6 +637,7 @@ const CodeGeneration = () => {
                 setSelectedFile(null);
                 setRegistry(null);
                 setValidationResult(null);
+                setWorkflowMetadata({});
                 setFixResult(null);
                 setReportResult(null);
               }}
@@ -600,6 +686,64 @@ const CodeGeneration = () => {
         </div>
       </section>
 
+      <section className="glass-card p-5">
+        <SectionLabel
+          icon={<Route size={18} />}
+          title="Agentic Workflow"
+          subtitle="Conversion agent, source context usage, fallback, and gate status for this run."
+        />
+
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-lg border border-[var(--corporate-border)] bg-[var(--terminal-bg)] p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Target</p>
+            <p className="mt-1 font-mono text-sm font-bold text-[var(--terminal-text)]">{targetDisplayName}</p>
+          </div>
+          <div className="rounded-lg border border-[var(--corporate-border)] bg-[var(--terminal-bg)] p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Agent</p>
+            <p className="mt-1 truncate font-mono text-sm font-bold text-[var(--terminal-text)]" title={resolvedConversionAgent}>
+              {resolvedConversionAgent}
+            </p>
+            <p className="mt-1 font-mono text-[10px] text-[var(--text-muted)]">{resolvedConversionAgentKey}</p>
+          </div>
+          <div className="rounded-lg border border-[var(--corporate-border)] bg-[var(--terminal-bg)] p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Business Rules Used</p>
+            <p className="mt-1 font-mono text-sm font-bold text-[var(--terminal-text)]">{yesNo(resolvedBusinessRulesUsed)}</p>
+          </div>
+          <div className="rounded-lg border border-[var(--corporate-border)] bg-[var(--terminal-bg)] p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Program Flow Used</p>
+            <p className="mt-1 font-mono text-sm font-bold text-[var(--terminal-text)]">{yesNo(resolvedProceduralFlowUsed)}</p>
+          </div>
+          <div className="rounded-lg border border-[var(--corporate-border)] bg-[var(--terminal-bg)] p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Fallback Used</p>
+            <p className="mt-1 font-mono text-sm font-bold text-[var(--terminal-text)]">{yesNo(workflowMetadata.fallback_used)}</p>
+            <p className="mt-1 truncate text-xs text-[var(--text-muted)]" title={workflowMetadata.fallback_reason || 'None'}>
+              {workflowMetadata.fallback_reason || 'None'}
+            </p>
+          </div>
+          <div className="rounded-lg border border-[var(--corporate-border)] bg-[var(--terminal-bg)] p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Quality Gate Status</p>
+            <div className="mt-2">
+              <StatusBadge status={resolvedQualityGateStatus} pulse={pipelineStatus?.status === 'RUNNING'} />
+            </div>
+          </div>
+          <div className="rounded-lg border border-[var(--corporate-border)] bg-[var(--terminal-bg)] p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Validation Status</p>
+            <div className="mt-2">
+              <StatusBadge status={resolvedValidationStatus} pulse={pipelineStatus?.status === 'RUNNING'} />
+            </div>
+          </div>
+          <div className="rounded-lg border border-[var(--corporate-border)] bg-[var(--terminal-bg)] p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Files</p>
+            <p className="mt-1 font-mono text-sm font-bold text-[var(--terminal-text)]">
+              {pipelineStatus?.generated_files ?? generatedFiles.length} generated
+            </p>
+            <p className="mt-1 font-mono text-[10px] text-[var(--text-muted)]">
+              {pipelineStatus?.planned_files ?? plans.length} planned / {pipelineStatus?.total_files ?? 'unknown'} total
+            </p>
+          </div>
+        </div>
+      </section>
+
       <section className="glass-card p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -607,7 +751,7 @@ const CodeGeneration = () => {
               Code Generation
             </p>
             <h2 className="mt-1 text-2xl font-black text-[var(--text-primary)]">
-              Generate Working Code
+              Generate {targetDisplayName} Code
             </h2>
             <p className="mt-2 text-body-sm">
               The system will plan, generate, repair, validate, and prepare the ZIP automatically.
@@ -694,7 +838,7 @@ const CodeGeneration = () => {
             />
 
             <span className="text-[var(--text-muted)]">
-              Target: {targetLanguage.toUpperCase()}
+              Target: {targetDisplayName}
             </span>
 
             <span className="text-[var(--text-muted)]">

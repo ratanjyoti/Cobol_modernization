@@ -140,7 +140,7 @@ Related files:
   Exposes procedural flow API routes.
 
 - `frontend/src/pages/BusinessLogic.tsx`
-  Displays the Program Flow tab below Business Logic.
+  Displays the Program Flow tab below Business Logic, including detected language, agent/fallback status, rule counts, procedural counts, external operations, and external calls.
 
 Change here when:
 - adding a new procedural flow section
@@ -217,6 +217,11 @@ Related files:
 
 - `frontend/src/pages/CodeGeneration.tsx`
   Displays target-language code generation UI.
+
+Metadata surfaced to UI:
+- Business logic extraction exposes `file_id`, `file_name`, `detected_language`, `agent_name`, `agent_key`, `fallback_used`, `fallback_reason`, and `business_rules_count`.
+- Procedural flow exposes detected language, entry point, execution steps, decisions, loops, external operations, external calls, and fallback details.
+- Code generation exposes `target_language`, `conversion_agent`, `conversion_agent_key`, `fallback_used`, `fallback_reason`, `business_rules_used`, `procedural_flow_used`, `quality_gate_status`, and `validation_status`.
 
 Change here when:
 - adding a new target language

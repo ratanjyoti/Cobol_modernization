@@ -9,6 +9,7 @@ from Processes.code_generation_process import CodeGenerationProcess
 from Processes.method_body_repair_process import MethodBodyRepairProcess
 from services.symbol_registry_service import SymbolRegistryService
 from services.migration_report_service import MigrationReportService
+from Persistence.sqlite.models import BusinessRule, ProjectFile
 
 
 class FullCodeGenerationPipeline:
@@ -33,20 +34,22 @@ class FullCodeGenerationPipeline:
         max_missing_rounds: int = 2,
         max_method_repair_rounds: int = 2,
     ) -> dict[str, Any]:
-        target_language = (target_language or "java").lower().strip()
+        target_language = self._normalize_target(target_language)
         project_id = project_id or run_id
+        target_display = self._target_display_name(target_language)
 
         self._write_status(
             run_id,
             target_language,
             status="RUNNING",
-            stage="Starting code generation pipeline",
+            stage=f"Starting {target_display} code generation pipeline",
             progress=1,
         )
 
         final_result: dict[str, Any] = {
             "run_id": run_id,
             "target_language": target_language,
+            "target_display_name": target_display,
             "status": "RUNNING",
             "download_allowed": False,
             "steps": [],
@@ -55,7 +58,7 @@ class FullCodeGenerationPipeline:
 
         try:
             # 1. Registry
-            self._stage(run_id, target_language, "Locking symbol registry", 5)
+            self._stage(run_id, target_language, f"Locking {target_display} symbol registry", 5)
             registry = SymbolRegistryService(self.db).finalize_registry(
                 run_id=run_id,
                 target_language=target_language,
@@ -69,7 +72,7 @@ class FullCodeGenerationPipeline:
             )
 
             # 2. Planning
-            self._stage(run_id, target_language, "Creating conversion plans", 15)
+            self._stage(run_id, target_language, f"Creating {target_display} conversion plans", 15)
             plan_result = ConversionPlanningProcess(self.db).create_plans(
                 run_id=run_id,
                 target_language=target_language,
@@ -84,7 +87,7 @@ class FullCodeGenerationPipeline:
             )
 
             # 3. Initial full generation
-            self._stage(run_id, target_language, "Generating source files", 35)
+            self._stage(run_id, target_language, f"Generating {target_display} source files", 35)
             generation_process = CodeGenerationProcess(self.db)
 
             generate_result = generation_process.generate(
@@ -197,7 +200,7 @@ class FullCodeGenerationPipeline:
                 )
 
             # 6. Final quality gate
-            self._stage(run_id, target_language, "Running final quality gate", 80)
+            self._stage(run_id, target_language, f"Running final {target_display} quality gate", 80)
 
             quality = generation_process.quality_service.run_quality_gate(
                 run_id=run_id,
@@ -229,7 +232,7 @@ class FullCodeGenerationPipeline:
                 return final_result
 
             # 7. Compile validation
-            self._stage(run_id, target_language, "Compiling generated project", 90)
+            self._stage(run_id, target_language, f"Validating {target_display} project", 90)
 
             validation = generation_process.validate_generated_project(
                 run_id=run_id,
@@ -262,7 +265,7 @@ class FullCodeGenerationPipeline:
                 return final_result
 
             # 8. Report
-            self._stage(run_id, target_language, "Generating migration report", 96)
+            self._stage(run_id, target_language, f"Generating {target_display} migration report", 96)
 
             report = MigrationReportService(self.db).generate_report(
                 run_id=run_id,
@@ -279,7 +282,7 @@ class FullCodeGenerationPipeline:
                 run_id,
                 target_language,
                 status="COMPLETED",
-                stage="Generated code is ready to download",
+                stage=f"{target_display} generated code is ready to download",
                 progress=100,
                 download_allowed=True,
                 extra=final_result,
@@ -315,28 +318,68 @@ class FullCodeGenerationPipeline:
         run_id: str,
         target_language: str = "java",
     ) -> dict[str, Any]:
+        target_language = self._normalize_target(target_language)
         path = self._status_path(run_id, target_language)
 
         if not path.exists():
             return {
                 "run_id": run_id,
                 "target_language": target_language,
+                "target_display_name": self._target_display_name(target_language),
+                "current_agent": self._conversion_agent_name(target_language),
+                "conversion_agent": self._conversion_agent_name(target_language),
+                "conversion_agent_key": target_language,
+                "fallback_used": False,
+                "fallback_reason": "",
+                "business_rules_used": self._business_rules_used(run_id),
+                "procedural_flow_used": self._procedural_flow_used(run_id),
+                "quality_gate_status": "PENDING",
+                "validation_status": "PENDING",
                 "status": "NOT_STARTED",
                 "stage": "Code generation has not started.",
                 "progress": 0,
                 "download_allowed": False,
+                **self._progress_counts(run_id, target_language),
             }
 
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["target_language"] = target_language
+            payload.setdefault(
+                "target_display_name",
+                self._target_display_name(target_language),
+            )
+            payload.setdefault("current_agent", self._conversion_agent_name(target_language))
+            payload.setdefault("conversion_agent", self._conversion_agent_name(target_language))
+            payload.setdefault("conversion_agent_key", target_language)
+            payload.setdefault("fallback_used", False)
+            payload.setdefault("fallback_reason", "")
+            payload.setdefault("business_rules_used", self._business_rules_used(run_id))
+            payload.setdefault("procedural_flow_used", self._procedural_flow_used(run_id))
+            payload.setdefault("quality_gate_status", self._status_label(payload.get("quality_gate")))
+            payload.setdefault("validation_status", self._status_label(payload.get("validation")))
+            for key, value in self._progress_counts(run_id, target_language).items():
+                payload.setdefault(key, value)
+            return payload
         except Exception:
             return {
                 "run_id": run_id,
                 "target_language": target_language,
+                "target_display_name": self._target_display_name(target_language),
+                "current_agent": self._conversion_agent_name(target_language),
+                "conversion_agent": self._conversion_agent_name(target_language),
+                "conversion_agent_key": target_language,
+                "fallback_used": False,
+                "fallback_reason": "",
+                "business_rules_used": self._business_rules_used(run_id),
+                "procedural_flow_used": self._procedural_flow_used(run_id),
+                "quality_gate_status": "UNKNOWN",
+                "validation_status": "UNKNOWN",
                 "status": "STATUS_READ_FAILED",
                 "stage": "Could not read pipeline status.",
                 "progress": 0,
                 "download_allowed": False,
+                **self._progress_counts(run_id, target_language),
             }
 
     def _stage(
@@ -365,15 +408,33 @@ class FullCodeGenerationPipeline:
         download_allowed: bool = False,
         extra: dict[str, Any] | None = None,
     ) -> None:
+        target_language = self._normalize_target(target_language)
         payload = {
             "run_id": run_id,
             "target_language": target_language,
+            "target_display_name": self._target_display_name(target_language),
+            "current_agent": self._conversion_agent_name(target_language),
+            "conversion_agent": self._conversion_agent_name(target_language),
+            "conversion_agent_key": target_language,
+            "fallback_used": bool((extra or {}).get("fallback_used", False)),
+            "fallback_reason": str((extra or {}).get("fallback_reason", "") or ""),
+            "business_rules_used": bool(
+                (extra or {}).get("business_rules_used", self._business_rules_used(run_id))
+            ),
+            "procedural_flow_used": bool(
+                (extra or {}).get("procedural_flow_used", self._procedural_flow_used(run_id))
+            ),
             "status": status,
             "stage": stage,
             "progress": max(0, min(100, int(progress))),
             "download_allowed": bool(download_allowed),
+            "quality_gate": self._status_label((extra or {}).get("quality_gate")),
+            "validation": self._status_label((extra or {}).get("validation")),
+            "quality_gate_status": self._status_label((extra or {}).get("quality_gate")),
+            "validation_status": self._status_label((extra or {}).get("validation")),
             "updated_at": datetime.utcnow().isoformat() + "Z",
         }
+        payload.update(self._progress_counts(run_id, target_language))
 
         if extra:
             payload.update(extra)
@@ -382,11 +443,96 @@ class FullCodeGenerationPipeline:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
+    def _progress_counts(self, run_id: str, target_language: str) -> dict[str, Any]:
+        try:
+            total_files = (
+                self.db.query(ProjectFile)
+                .filter(ProjectFile.run_id == run_id)
+                .count()
+            )
+        except Exception:
+            total_files = 0
+
+        output_root = Path("output") / "generated_code" / run_id
+        plan_dir = output_root / "plans" / target_language
+        result_dir = output_root / "results" / target_language
+        return {
+            "total_files": total_files,
+            "planned_files": len(list(plan_dir.glob("*.json"))) if plan_dir.exists() else 0,
+            "generated_files": len(list(result_dir.glob("*.json"))) if result_dir.exists() else 0,
+        }
+
+    def _business_rules_used(self, run_id: str) -> bool:
+        try:
+            return (
+                self.db.query(BusinessRule)
+                .filter(BusinessRule.run_id == run_id)
+                .first()
+                is not None
+            )
+        except Exception:
+            return False
+
+    def _procedural_flow_used(self, run_id: str) -> bool:
+        flow_dir = (
+            Path(__file__).resolve().parents[1]
+            / "output"
+            / "procedural_flow"
+            / run_id
+        )
+        path = flow_dir / "summary.json"
+        if not path.exists():
+            return flow_dir.exists() and any(item.name != "summary.json" for item in flow_dir.glob("*.json"))
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            return bool(payload.get("flows"))
+        except Exception:
+            return False
+
+    @staticmethod
+    def _status_label(value: Any) -> str:
+        if isinstance(value, dict):
+            return str(value.get("status") or ("PASSED" if value.get("success") else "PENDING"))
+        if value:
+            return str(value)
+        return "PENDING"
+
+    def _conversion_agent_name(self, target_language: str) -> str:
+        target = self._normalize_target(target_language)
+        if target == "python":
+            return "PythonConversionAgent"
+        if target == "csharp":
+            return "CSharpConversionAgent"
+        return "JavaConversionAgent"
+
+    def _normalize_target(self, target_language: str) -> str:
+        value = str(target_language or "").lower().strip()
+
+        if value in {"python", "py", "fastapi"}:
+            return "python"
+
+        if value in {"csharp", "c#", "cs", "dotnet"}:
+            return "csharp"
+
+        return "java"
+
+    def _target_display_name(self, target_language: str) -> str:
+        target = self._normalize_target(target_language)
+
+        if target == "python":
+            return "Python / FastAPI"
+
+        if target == "csharp":
+            return "C# / ASP.NET Core"
+
+        return "Java / Quarkus"
+
     def _status_path(
         self,
         run_id: str,
         target_language: str,
     ) -> Path:
+        target_language = self._normalize_target(target_language)
         return (
             Path("output")
             / "generated_code"

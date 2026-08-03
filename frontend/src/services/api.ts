@@ -56,6 +56,46 @@ export interface DependencyRelation {
   relation_type: string;
 }
 
+export interface ProceduralFlowSummary {
+  file_id: string | number;
+  file_name: string;
+  detected_language: string;
+  status: string;
+  entry_point: string;
+  execution_steps: number;
+  decision_count: number;
+  loop_count: number;
+  data_movement_count: number;
+  external_operation_count: number;
+  external_call_count: number;
+  external_operations?: string[];
+  external_calls?: string[];
+  exit_path_count: number;
+  fallback_used: boolean;
+  fallback_reason?: string;
+}
+
+export interface ProceduralFlowDetail {
+  file_id: string | number;
+  file_name: string;
+  detected_language: string;
+  entry_point: {
+    name?: string;
+    description?: string;
+    technical_reference?: string;
+  };
+  execution_flow: any[];
+  decision_branches: any[];
+  loops: any[];
+  data_movement: any[];
+  external_operations: any[];
+  external_calls: any[];
+  exit_paths: any[];
+  unresolved_items: any[];
+  fallback_used: boolean;
+  fallback_reason?: string;
+}
+
 export interface ServiceStatus {
   active: boolean;
   provider?: string;
@@ -152,11 +192,26 @@ const getDefaultApiBaseUrl = () => {
     return 'http://localhost:8000';
   }
 
-  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    return import.meta.env.VITE_API_BASE_URL || 'http://localhost:8010';
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
   }
 
-  return import.meta.env.VITE_API_BASE_URL || 'https://cobol-modernization.onrender.com';
+  const hostname = window.location.hostname;
+  const isLocalHost =
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '0.0.0.0' ||
+    hostname === '::1';
+  const isPrivateNetwork =
+    hostname.startsWith('10.') ||
+    hostname.startsWith('192.168.') ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname);
+
+  if (isLocalHost || isPrivateNetwork || window.location.port === '5173' || window.location.protocol === 'http:') {
+    return 'http://127.0.0.1:8010';
+  }
+
+  return 'https://cobol-modernization.onrender.com';
 };
 
 export const API_BASE_URL = getDefaultApiBaseUrl();
@@ -328,6 +383,21 @@ export const ProjectAPI = {
   extractBusinessRules: async (runId: string) => {
     const response = await api.post(`/business-rules/${runId}/extract`);
     return Array.isArray(response.data) ? response.data : (response.data.rules || []);
+  },
+
+  extractProceduralFlow: async (runId: string) => {
+    const response = await api.post(`/business-rules/${runId}/procedural-flow/extract`);
+    return response.data;
+  },
+
+  listProceduralFlows: async (runId: string): Promise<{ run_id: string; flows: ProceduralFlowSummary[] }> => {
+    const response = await api.get(`/business-rules/${runId}/procedural-flow`);
+    return response.data;
+  },
+
+  getProceduralFlow: async (runId: string, fileId: string | number): Promise<ProceduralFlowDetail> => {
+    const response = await api.get(`/business-rules/${runId}/procedural-flow/${fileId}`);
+    return response.data;
   },
 
   verifyRule: async (ruleId: number, data: { status: string; text?: string }) => {

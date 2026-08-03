@@ -74,6 +74,17 @@ export type GeneratedFileContent = {
   content: string;
 };
 
+export type CodeGenerationWorkflowMetadata = {
+  conversion_agent?: string;
+  conversion_agent_key?: string;
+  fallback_used?: boolean;
+  fallback_reason?: string;
+  business_rules_used?: boolean;
+  procedural_flow_used?: boolean;
+  quality_gate_status?: string;
+  validation_status?: string;
+};
+
 export type PlanResponse = {
   run_id: string;
   target_language: TargetLanguage;
@@ -115,7 +126,7 @@ export type GenerateResponse = {
     filename: string;
     error: string;
   }>;
-};
+} & CodeGenerationWorkflowMetadata;
 
 export type FileListResponse = {
   run_id: string;
@@ -174,6 +185,7 @@ export interface PipelineStep {
 export interface PipelineStatusResponse {
   run_id: string;
   target_language: TargetLanguage;
+  target_display_name?: string;
   status:
     | 'NOT_STARTED'
     | 'RUNNING'
@@ -187,6 +199,12 @@ export interface PipelineStatusResponse {
   progress: number;
   download_allowed: boolean;
   updated_at?: string;
+  current_agent?: string;
+  conversion_agent?: string;
+  conversion_agent_key?: string;
+  total_files?: number;
+  planned_files?: number;
+  generated_files?: number;
   steps?: PipelineStep[];
   errors?: unknown[];
   quality_gate?: unknown;
@@ -251,7 +269,7 @@ export type ValidationResponse = {
   };
   checked_files?: string[];
   failed_files?: string[];
-};
+} & CodeGenerationWorkflowMetadata;
 
 export async function generateMigrationReport(
   runId: string,

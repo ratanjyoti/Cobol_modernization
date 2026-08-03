@@ -1,4 +1,5 @@
 ﻿import os
+# Owns business logic extraction process orchestration and persistence. Do not put language-specific prompt text here.
 import re
 from typing import Any
 import json
@@ -158,7 +159,9 @@ class LogicExtractionProcess:
                         "file_name": context.file_name,
                         "detected_language": context.detected_language,
                         "agent_name": result.get("agent_name"),
+                        "agent_key": result.get("agent_key"),
                         "fallback_used": result.get("fallback_used", False),
+                        "fallback_reason": result.get("fallback_reason", ""),
                         "business_rules_count": len(result.get("business_rules") or []),
                         "status": "completed",
                     }
@@ -176,13 +179,37 @@ class LogicExtractionProcess:
                     }
                 )
 
-        return {
+        summary = {
             "run_id": run_id,
             "total_files": total,
             "completed_files": completed,
             "failed_files": failed,
             "results": results,
         }
+        self._write_extraction_summary(run_id, summary)
+        return summary
+
+    def extraction_summary(self, run_id: str) -> dict[str, Any]:
+        path = self._summary_path(run_id)
+        if not path.exists():
+            return {"run_id": run_id, "results": []}
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                return payload
+        except Exception:
+            pass
+        return {"run_id": run_id, "results": []}
+
+    def _write_extraction_summary(self, run_id: str, payload: dict[str, Any]) -> None:
+        path = self._summary_path(run_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    @staticmethod
+    def _summary_path(run_id: str) -> Path:
+        backend_root = Path(__file__).resolve().parents[1]
+        return backend_root / "output" / "business_logic" / run_id / "summary.json"
 
     def _persist_agentic_business_logic_result(
         self,
@@ -321,7 +348,7 @@ class LogicExtractionProcess:
             or self.config.get("key")
             or self.config.get("api_key")
             or None,
-            "timeout": self.config.get("timeout") or 60,
+            "timeout": self.config.get("timeout") or 120,
         }
 
         return AgenticBusinessLogicExtractor(llm_config=llm_config)
@@ -602,6 +629,8 @@ class LogicExtractionProcess:
             ".tps",
             ".pli",
             ".pl1",
+            ".sql",
+            ".ddl",
         )
 
         supported_languages = {
@@ -612,6 +641,8 @@ class LogicExtractionProcess:
             "pli",
             "pl/i",
             "pl1",
+            "sql",
+            "db2",
         }
 
         has_supported_extension = filename.endswith(

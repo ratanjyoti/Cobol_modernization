@@ -1,17 +1,24 @@
+import json
+from pathlib import Path
+
 import requests
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from Config.llm_config import settings
 from Persistence.sqlite.models import BusinessRule, Project, ProjectFile
 from Persistence.sqlite.session import get_db
 from Processes.logic_extraction_process import LogicExtractionProcess
+from Processes.procedural_flow_process import ProceduralFlowProcess
 
-router = APIRouter(prefix="/business-rules", tags=["Business Logic"])
+router = APIRouter(prefix="/business-rules", tags=["Business Logic"]) 
 
+"""API layer between the frontend, business-rule extraction process, LLM configuration, and SQLite storage."""
 
-def serialize_rule(rule: BusinessRule, filename: str = ""):
+def serialize_rule(rule: BusinessRule, filename: str = "", metadata: dict | None = None):
+    metadata = metadata or {}
     technical_yaml = rule.technical_yaml or ""
     technical_ref = rule.technical_ref or technical_yaml or ""
     rule_text = rule.rule_text or rule.business_logic or ""
@@ -33,6 +40,12 @@ def serialize_rule(rule: BusinessRule, filename: str = ""):
         "technical_ref": technical_ref,
         "technical_yaml": technical_yaml or technical_ref,
         "filename": filename,
+        "detected_language": metadata.get("detected_language", ""),
+        "agent_name": metadata.get("agent_name", ""),
+        "agent_key": metadata.get("agent_key", ""),
+        "fallback_used": bool(metadata.get("fallback_used", False)),
+        "fallback_reason": metadata.get("fallback_reason", ""),
+        "business_rules_count": metadata.get("business_rules_count", 0),
         "status": rule.status or "PENDING",
         "chunk_id": rule.chunk_id,
         "file_id": rule.file_id,
@@ -40,7 +53,87 @@ def serialize_rule(rule: BusinessRule, filename: str = ""):
     }
 
 
-def serialize_rules(db: Session, rules: list[BusinessRule]):
+def _business_logic_metadata(db: Session, run_id: str) -> dict[int, dict]:
+    try:
+        summary_path = (
+            Path(__file__).resolve().parents[2]
+            / "output"
+            / "business_logic"
+            / run_id
+            / "summary.json"
+        )
+        summary = json.loads(summary_path.read_text(encoding="utf-8")) if summary_path.exists() else {"results": []}
+    except Exception:
+        summary = {"results": []}
+
+    metadata = {}
+    for item in summary.get("results") or []:
+        if not isinstance(item, dict):
+            continue
+        file_id = item.get("file_id")
+        if file_id is None:
+            continue
+        try:
+            metadata[int(file_id)] = item
+        except Exception:
+            continue
+    if metadata:
+        return metadata
+
+    count_rows = (
+        db.query(BusinessRule.file_id, func.count(BusinessRule.id))
+        .filter(BusinessRule.run_id == run_id, BusinessRule.file_id.isnot(None))
+        .group_by(BusinessRule.file_id)
+        .all()
+    )
+    counts = {int(file_id): int(count) for file_id, count in count_rows if file_id is not None}
+    if not counts:
+        return metadata
+
+    files = (
+        db.query(ProjectFile)
+        .filter(ProjectFile.run_id == run_id, ProjectFile.id.in_(counts.keys()))
+        .all()
+    )
+
+    for project_file in files:
+        language = (
+            getattr(project_file, "detected_language", None)
+            or getattr(project_file, "detected_lang", None)
+            or getattr(project_file, "language", None)
+            or "unknown"
+        )
+        agent_name = _business_agent_name(language)
+        metadata[int(project_file.id)] = {
+            "file_id": project_file.id,
+            "file_name": project_file.filename,
+            "detected_language": language,
+            "agent_name": agent_name,
+            "agent_key": agent_name.replace("BusinessLogicAgent", "").lower() or "generic",
+            "fallback_used": False,
+            "fallback_reason": "",
+            "business_rules_count": counts.get(int(project_file.id), 0),
+        }
+
+    return metadata
+
+
+def _business_agent_name(language: str) -> str:
+    normalized = str(language or "").lower().strip()
+    if normalized.startswith("cobol"):
+        return "CobolBusinessLogicAgent"
+    if normalized.startswith("telon"):
+        return "TelonBusinessLogicAgent"
+    if normalized in {"jcl", "job control language"}:
+        return "JclBusinessLogicAgent"
+    if normalized in {"copybook", "cpy"}:
+        return "CopybookBusinessLogicAgent"
+    if normalized in {"sql", "db2"}:
+        return "SqlBusinessLogicAgent"
+    return "GenericBusinessLogicAgent"
+
+
+def serialize_rules(db: Session, rules: list[BusinessRule], run_id: str = ""):
     file_ids = sorted({rule.file_id for rule in rules if rule.file_id})
 
     files = {}
@@ -50,8 +143,10 @@ def serialize_rules(db: Session, rules: list[BusinessRule]):
             for file in db.query(ProjectFile).filter(ProjectFile.id.in_(file_ids)).all()
         }
 
+    metadata = _business_logic_metadata(db, run_id) if run_id else {}
+
     return [
-        serialize_rule(rule, files.get(rule.file_id, ""))
+        serialize_rule(rule, files.get(rule.file_id, ""), metadata.get(rule.file_id, {}))
         for rule in rules
     ]
 
@@ -162,7 +257,7 @@ async def extract_rules(run_id: str, db: Session = Depends(get_db)):
         llm_provider=config,
     )
 
-    count = await process.extract_all_rules(run_id)
+    summary = await process.extract_all_rules(run_id)
 
     rules = (
         db.query(BusinessRule)
@@ -174,8 +269,10 @@ async def extract_rules(run_id: str, db: Session = Depends(get_db)):
     return {
         "status": "success",
         "run_id": run_id,
-        "count": count,
-        "rules": serialize_rules(db, rules),
+        "count": len(rules),
+        "extraction_summary": summary,
+        "results": summary.get("results", []),
+        "rules": serialize_rules(db, rules, run_id),
     }
 
 
@@ -188,7 +285,36 @@ async def get_rules(run_id: str, db: Session = Depends(get_db)):
         .all()
     )
 
-    return serialize_rules(db, rules)
+    return serialize_rules(db, rules, run_id)
+
+
+@router.post("/{run_id}/procedural-flow/extract")
+async def extract_procedural_flow(run_id: str, db: Session = Depends(get_db)):
+    try:
+        process = ProceduralFlowProcess(db)
+        return process.extract_all(run_id=run_id)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/{run_id}/procedural-flow")
+async def list_procedural_flows(run_id: str, db: Session = Depends(get_db)):
+    try:
+        process = ProceduralFlowProcess(db)
+        return process.list_flows(run_id=run_id)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/{run_id}/procedural-flow/{file_id}")
+async def get_procedural_flow(run_id: str, file_id: str, db: Session = Depends(get_db)):
+    try:
+        process = ProceduralFlowProcess(db)
+        return process.get_flow(run_id=run_id, file_id=file_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @router.patch("/{rule_id}")
