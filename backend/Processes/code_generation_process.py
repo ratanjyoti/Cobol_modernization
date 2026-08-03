@@ -5,12 +5,18 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from Agents.implementations.agentic_code_conversion_orchestrator import (
+    AgenticCodeConversionOrchestrator,
+)
 from Agents.implementations.code_generator_agent import CodeGeneratorAgent
 from Agents.infrastructure.codegen_context_builder import CodegenContextBuilder
+from Agents.infrastructure.constitution_loader import ConstitutionLoader
 from Agents.models.code_generation_models import (
+    CodeGenerationStatus,
     CodeGenerationResult,
     ConversionPlan,
     GeneratedFile,
+    GeneratedFileType,
     TargetLanguage,
     model_to_dict,
 )
@@ -37,62 +43,55 @@ class CodeGenerationProcess:
         self.validation_service = CodeValidationService()
         self.quality_service = GenerationQualityService(db_session)
 
-
-
-
     def validate_generated_project(
         self,
         run_id: str,
         target_language: str = "java",
     ) -> dict[str, Any]:
         target = self._normalize_target(target_language)
+
         project_dir = self._project_dir(run_id, target.value)
 
-        self.scaffold_service.ensure_scaffold(project_dir, target.value)
-
-        quality = self.quality_service.evaluate(
+        quality_report = self.quality_service.run_quality_gate(
             run_id=run_id,
             target_language=target.value,
-            project_dir=project_dir,
         )
 
-        if not quality.get("success"):
-            result = {
+        if not quality_report.get("success"):
+            validation = {
                 "success": False,
                 "status": "QUALITY_GATE_FAILED",
-                "download_allowed": False,
                 "target_language": target.value,
                 "project_dir": str(project_dir),
-                "command": "generation quality gate",
+                "command": ["generation quality gate"],
+                "command_text": "generation quality gate",
                 "stdout": "",
-                "stderr": "\n".join(quality.get("failures") or []),
-                "returncode": 1,
-                "quality_gate": quality,
+                "stderr": "\n".join(quality_report.get("failures", [])),
+                "returncode": -1,
+                "download_allowed": False,
+                "quality_gate": quality_report,
             }
-
-            validation_dir = self._output_root(run_id) / "validation" / target.value
-            validation_dir.mkdir(parents=True, exist_ok=True)
-            validation_path = validation_dir / "latest_validation.json"
-            validation_path.write_text(
-                json.dumps(result, indent=2, ensure_ascii=False),
-                encoding="utf-8",
+        else:
+            validation = self.validation_service.validate(
+                project_dir=project_dir,
+                target_language=target.value,
             )
-            return result
+            validation["quality_gate"] = quality_report
+            validation["download_allowed"] = bool(
+                validation.get("success") and quality_report.get("success")
+            )
 
-        result = self.validation_service.validate(project_dir, target.value)
-        result["quality_gate"] = quality
-        result["download_allowed"] = bool(result.get("success")) and bool(quality.get("success"))
-
-        validation_dir = self._output_root(run_id) / "validation" / target.value
-        validation_dir.mkdir(parents=True, exist_ok=True)
-
-        validation_path = validation_dir / "latest_validation.json"
-        validation_path.write_text(
-            json.dumps(result, indent=2, ensure_ascii=False),
-            encoding="utf-8",
+        validation_path = (
+            self._output_root(run_id)
+            / "validation"
+            / target.value
+            / "latest_validation.json"
         )
 
-        return result
+        validation_path.parent.mkdir(parents=True, exist_ok=True)
+        validation_path.write_text(json.dumps(validation, indent=2), encoding="utf-8")
+
+        return validation
 
     def _planned_file_ids(
         self,
@@ -148,7 +147,8 @@ class CodeGenerationProcess:
             )
 
         target = self._normalize_target(target_language)
-        generator = CodeGeneratorAgent(llm_config=llm_config)
+        legacy_generator = CodeGeneratorAgent(llm_config=llm_config)
+        orchestrator = self._build_agentic_code_orchestrator(project)
 
         if file_id is not None:
             file_contexts = [
@@ -210,10 +210,15 @@ class CodeGenerationProcess:
 
             try:
                 plan = self._load_plan(run_id, file_context.file_id, target.value)
-
-                result = generator.generate_code(
+                result = self._generate_with_agentic_orchestrator(
+                    run_id=run_id,
+                    project=project,
                     file_context=file_context,
                     conversion_plan=plan,
+                    target=target,
+                    registry=registry,
+                    orchestrator=orchestrator,
+                    legacy_generator=legacy_generator,
                     project_id=effective_project_id,
                 )
 
@@ -258,6 +263,238 @@ class CodeGenerationProcess:
             "errors": errors,
             "quality_gate": quality_report,
         }
+
+    def _build_agentic_code_orchestrator(
+        self,
+        project: Project,
+    ) -> AgenticCodeConversionOrchestrator:
+        llm_config = self._project_ai_config(project)
+        return AgenticCodeConversionOrchestrator(llm_config=llm_config)
+
+    def _generate_with_agentic_orchestrator(
+        self,
+        *,
+        run_id: str,
+        project: Project,
+        file_context: Any,
+        conversion_plan: ConversionPlan,
+        target: TargetLanguage,
+        registry: dict[str, Any],
+        orchestrator: AgenticCodeConversionOrchestrator,
+        legacy_generator: CodeGeneratorAgent,
+        project_id: str,
+    ) -> CodeGenerationResult:
+        profile = ConstitutionLoader().load_profile(target)
+        procedural_flow = self._load_procedural_flow_for_file(
+            run_id=run_id,
+            file_id=file_context.file_id,
+        )
+        conversion_context = self._build_agentic_conversion_context(
+            project=project,
+            file_context=file_context,
+            conversion_plan=conversion_plan,
+            target=target,
+            target_framework=conversion_plan.target_framework or profile.framework,
+            registry=registry,
+            procedural_flow=procedural_flow,
+            constitution_profile=profile,
+        )
+
+        agentic_result = orchestrator.convert(conversion_context)
+        generated_files = self._agentic_conversion_to_generated_files(
+            agentic_result=agentic_result,
+            file_context=file_context,
+            target=target,
+            legacy_generator=legacy_generator,
+        )
+
+        if not generated_files:
+            fallback_result = legacy_generator.generate_code(
+                run_id=run_id,
+                file_context=file_context,
+                conversion_plan=conversion_plan,
+                target=target,
+                project_id=project_id,
+                registry=registry,
+            )
+            fallback_result.warnings.append(
+                "Agentic code conversion produced no files; legacy generator fallback was used."
+            )
+            return fallback_result
+
+        warnings = [str(item) for item in agentic_result.get("warnings", []) if item]
+        if agentic_result.get("fallback_used"):
+            reason = agentic_result.get("fallback_reason") or "LLM conversion failed."
+            warnings.append(f"Agentic conversion fallback used: {reason}")
+
+        flow_used = bool(procedural_flow)
+        notes = [
+            f"Generated by {agentic_result.get('agent_name') or 'AgenticCodeConversionOrchestrator'}.",
+            f"Procedural flow used: {flow_used}.",
+            "Technical YAML, business rules, dependencies, and locked registry were supplied to the conversion agent.",
+        ]
+        for generated_file in generated_files:
+            generated_file.notes.extend(notes)
+
+        return CodeGenerationResult(
+            run_id=run_id,
+            target_language=target,
+            target_framework=conversion_plan.target_framework or profile.framework,
+            status=CodeGenerationStatus.GENERATED,
+            summary=agentic_result.get("summary") or "Agentic code conversion completed.",
+            generated_files=generated_files,
+            unresolved_items=[
+                str(item) for item in agentic_result.get("unresolved_items", []) if item
+            ],
+            warnings=warnings,
+            errors=[],
+        )
+
+    def _build_agentic_conversion_context(
+        self,
+        *,
+        project: Project,
+        file_context: Any,
+        conversion_plan: ConversionPlan,
+        target: TargetLanguage,
+        target_framework: str,
+        registry: dict[str, Any],
+        procedural_flow: dict[str, Any],
+        constitution_profile: Any,
+    ) -> dict[str, Any]:
+        return {
+            "run_id": file_context.run_id,
+            "project_id": getattr(project, "project_id", None) or project.run_id,
+            "file_id": file_context.file_id,
+            "file_name": file_context.filename,
+            "file_path": file_context.filepath,
+            "source_language": self._enum_value(file_context.source_language),
+            "target_language": target.value,
+            "target_framework": target_framework,
+            "conversion_plan": self._safe_model_dump(conversion_plan),
+            "technical_yaml": file_context.technical_yaml,
+            "business_rules": self._safe_model_dump(file_context.business_rules),
+            "procedural_flow": procedural_flow,
+            "dependencies": self._safe_model_dump(file_context.dependencies),
+            "locked_symbols": registry,
+            "source_code": file_context.raw_code,
+            "constitution_profile": self._safe_model_dump(constitution_profile),
+        }
+
+    def _agentic_conversion_to_generated_files(
+        self,
+        *,
+        agentic_result: dict[str, Any],
+        file_context: Any,
+        target: TargetLanguage,
+        legacy_generator: CodeGeneratorAgent,
+    ) -> list[GeneratedFile]:
+        generated_files: list[GeneratedFile] = []
+        seen_paths: set[str] = set()
+
+        for item in agentic_result.get("files") or []:
+            if not isinstance(item, dict):
+                continue
+
+            raw_path = str(item.get("file_path") or item.get("path") or "").strip()
+            content = str(item.get("content") or "").strip()
+            if not raw_path or not content:
+                continue
+
+            file_type = self._generated_file_type(item.get("file_type"))
+            safe_path = legacy_generator.plan_sanitizer.sanitize_file_path_for_generated_file(
+                path=raw_path,
+                source_file=file_context.filename,
+                target_language=target.value,
+                file_type=file_type.value,
+            )
+            safe_path = self._normalize_generated_file_path(safe_path)
+
+            if safe_path in seen_paths:
+                continue
+            seen_paths.add(safe_path)
+
+            generated_files.append(
+                GeneratedFile(
+                    path=safe_path,
+                    language=target,
+                    file_type=file_type,
+                    content=content.rstrip() + "\n",
+                    source_file=file_context.filename,
+                    notes=[
+                        str(item.get("description") or "").strip(),
+                        *[
+                            f"Source reference: {ref}"
+                            for ref in item.get("source_references", []) or []
+                            if ref
+                        ],
+                    ],
+                )
+            )
+
+        return generated_files
+
+    def _load_procedural_flow_for_file(
+        self,
+        run_id: str,
+        file_id: int,
+    ) -> dict[str, Any]:
+        backend_root = Path(__file__).resolve().parents[1]
+        candidates = [
+            backend_root / "output" / "procedural_flow" / run_id / f"{file_id}.json",
+            backend_root / "output" / "program_flow" / run_id / f"{file_id}.json",
+        ]
+
+        for path in candidates:
+            if not path.exists():
+                continue
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(payload, dict):
+                    return payload
+            except Exception:
+                continue
+
+        return {}
+
+    def _generated_file_type(self, value: Any) -> GeneratedFileType:
+        text = str(value or "other").lower().strip()
+        aliases = {
+            "model": GeneratedFileType.DOMAIN,
+            "domain": GeneratedFileType.DOMAIN,
+            "entity": GeneratedFileType.DOMAIN,
+            "service": GeneratedFileType.SERVICE,
+            "controller": GeneratedFileType.CONTROLLER,
+            "resource": GeneratedFileType.RESOURCE,
+            "router": GeneratedFileType.ROUTER,
+            "repository": GeneratedFileType.REPOSITORY,
+            "dto": GeneratedFileType.DTO,
+            "schema": GeneratedFileType.DTO,
+            "config": GeneratedFileType.CONFIG,
+            "test": GeneratedFileType.TEST,
+            "exception": GeneratedFileType.EXCEPTION,
+            "readme": GeneratedFileType.README,
+        }
+        return aliases.get(text, GeneratedFileType.OTHER)
+
+    def _safe_model_dump(self, value: Any) -> Any:
+        if isinstance(value, list):
+            return [self._safe_model_dump(item) for item in value]
+        if isinstance(value, dict):
+            return {key: self._safe_model_dump(item) for key, item in value.items()}
+        if hasattr(value, "model_dump"):
+            return value.model_dump()
+        if hasattr(value, "dict"):
+            return value.dict()
+        if hasattr(value, "value"):
+            return value.value
+        return value
+
+    @staticmethod
+    def _enum_value(value: Any) -> str:
+        if hasattr(value, "value"):
+            return str(value.value)
+        return str(value or "")
 
     def _extract_missing_planned_files(
         self,
@@ -812,13 +1049,18 @@ class CodeGenerationProcess:
         results: list[CodeGenerationResult],
         generated_files: list[GeneratedFile],
         errors: list[dict[str, Any]],
+        processed_source_files: list[dict[str, Any]] | None = None,
         quality_gate: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        processed_source_files = processed_source_files or []
+
         manifest = {
             "run_id": run_id,
             "target_language": target_language,
             "generated_file_count": len(generated_files),
             "source_file_count": len(results),
+            "processed_source_file_count": len(processed_source_files),
+            "processed_source_files": processed_source_files,
             "files": [
                 {
                     "path": item.path,
