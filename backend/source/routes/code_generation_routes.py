@@ -105,6 +105,7 @@ async def generate_code(
     run_id: str,
     target_language: str = Query(default="java"),
     file_id: int | None = Query(default=None),
+    force: bool = Query(default=False),
     db: Session = Depends(get_db),
 ):
     _require_stage_allowed(db, run_id, MigrationScopeService.STAGE_CODE_GENERATION)
@@ -115,6 +116,7 @@ async def generate_code(
             target_language=target_language,
             file_id=file_id,
             project_id=run_id,
+            clean_output=force,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
@@ -320,6 +322,7 @@ async def repair_comment_only_methods(
 async def run_full_code_generation_pipeline(
     run_id: str,
     target_language: str = Query("java"),
+    force: bool = Query(False),
     db: Session = Depends(get_db),
 ):
     _require_stage_allowed(db, run_id, MigrationScopeService.STAGE_CODE_GENERATION)
@@ -330,6 +333,7 @@ async def run_full_code_generation_pipeline(
             run_id=run_id,
             target_language=target_language,
             project_id=run_id,
+            force=force,
         )
 
     except Exception as exc:

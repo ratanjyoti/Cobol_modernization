@@ -451,13 +451,13 @@ export const ProjectAPI = {
     return response.data;
   },
 
-  extractBusinessRules: async (runId: string) => {
-    const response = await api.post(`/business-rules/${runId}/extract`);
+  extractBusinessRules: async (runId: string, force = false) => {
+    const response = await api.post(`/business-rules/${runId}/extract?force=${force ? 'true' : 'false'}`);
     return Array.isArray(response.data) ? response.data : (response.data.rules || []);
   },
 
-  extractProceduralFlow: async (runId: string) => {
-    const response = await api.post(`/business-rules/${runId}/procedural-flow/extract`);
+  extractProceduralFlow: async (runId: string, force = false) => {
+    const response = await api.post(`/business-rules/${runId}/procedural-flow/extract?force=${force ? 'true' : 'false'}`);
     return response.data;
   },
 

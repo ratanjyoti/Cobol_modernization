@@ -3,12 +3,12 @@ from pathlib import Path
 
 import requests
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from Config.llm_config import settings
-from Persistence.sqlite.models import BusinessRule, Project, ProjectFile
+from Persistence.sqlite.models import BusinessRule, FileStatus, Project, ProjectFile
 from Persistence.sqlite.session import get_db
 from Processes.logic_extraction_process import LogicExtractionProcess
 from Processes.procedural_flow_process import ProceduralFlowProcess
@@ -158,18 +158,21 @@ def project_ai_config(project: Project | None):
             "mode": "openrouter" if settings.OPENROUTER_API_KEY else "local",
             "provider": "openrouter" if settings.OPENROUTER_API_KEY else "local",
             "key": settings.OPENROUTER_API_KEY,
-            "url": settings.OPENROUTER_BASE_URL,
-            "model": settings.OPENROUTER_MODEL,
+            "url": settings.OPENROUTER_BASE_URL if settings.OPENROUTER_API_KEY else "http://127.0.0.1:11434",
+            "model": settings.OPENROUTER_MODEL if settings.OPENROUTER_API_KEY else "llama3",
+            "local_provider": "ollama",
         }
 
     mode = project.ai_mode or project.llm_provider or "openrouter"
+    local_mode = str(mode or "").lower() in {"local", "ollama", "lmstudio", "lm-studio"}
 
     return {
         "mode": mode,
         "provider": mode,
         "key": project.custom_api_key or settings.OPENROUTER_API_KEY,
-        "url": project.custom_api_base_url or settings.OPENROUTER_BASE_URL,
-        "model": project.llm_model or settings.OPENROUTER_MODEL,
+        "url": project.custom_api_base_url or ("http://127.0.0.1:11434" if local_mode else settings.OPENROUTER_BASE_URL),
+        "model": project.llm_model or ("llama3" if local_mode else settings.OPENROUTER_MODEL),
+        "local_provider": project.local_provider,
     }
 
 
@@ -246,6 +249,75 @@ def validate_cloud_chat_config(config: dict):
         )
 
 
+def validate_local_chat_config(config: dict):
+    mode = (config.get("mode") or config.get("provider") or "local").lower()
+    if mode not in {"local", "ollama", "lmstudio", "lm-studio"}:
+        return
+
+    base_url = (config.get("url") or config.get("base_url") or "http://127.0.0.1:11434").rstrip("/")
+    model = config.get("model") or "llama3"
+    local_provider = (
+        config.get("local_provider")
+        or ("openai-compatible" if base_url.endswith("/v1") else "ollama")
+    ).lower()
+
+    try:
+        if local_provider == "ollama":
+            response = requests.post(
+                f"{base_url}/api/generate",
+                json={"model": model, "prompt": "Reply OK only.", "stream": False},
+                timeout=20,
+            )
+            if response.status_code >= 400:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Local Ollama model '{model}' failed at {base_url}: HTTP {response.status_code} {response.text[:300]}",
+                )
+            if not str(response.json().get("response") or "").strip():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Local Ollama model '{model}' responded without text at {base_url}.",
+                )
+            return
+
+        response = requests.post(
+            f"{base_url}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {config.get('key') or 'local'}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model,
+                "messages": [{"role": "user", "content": "Reply OK only."}],
+                "temperature": 0,
+                "max_tokens": 8,
+            },
+            timeout=20,
+        )
+    except requests.RequestException as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Local LLM is not reachable at {base_url}. Start the local server or update AI Configuration. {exc}",
+        ) from exc
+
+    if response.status_code >= 400:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Local OpenAI-compatible model '{model}' failed at {base_url}: HTTP {response.status_code} {response.text[:300]}",
+        )
+
+    try:
+        content = response.json().get("choices", [{}])[0].get("message", {}).get("content")
+    except Exception:
+        content = None
+
+    if not isinstance(content, str) or not content.strip():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Local OpenAI-compatible model '{model}' responded without text at {base_url}.",
+        )
+
+
 def _require_stage_allowed(db: Session, run_id: str, stage: str):
     project = db.query(Project).filter(Project.run_id == run_id).first()
     if not project:
@@ -263,20 +335,105 @@ def _require_stage_allowed(db: Session, run_id: str, stage: str):
         )
 
 
+def _has_detected_language(project_file: ProjectFile) -> bool:
+    detected = str(project_file.detected_lang or "").strip().lower()
+    return bool(detected and detected != "unknown")
+
+
 @router.post("/{run_id}/extract")
-async def extract_rules(run_id: str, db: Session = Depends(get_db)):
+async def extract_rules(
+    run_id: str,
+    force: bool = Query(False),
+    db: Session = Depends(get_db),
+):
     _require_stage_allowed(db, run_id, MigrationScopeService.STAGE_BUSINESS_LOGIC)
     project = db.query(Project).filter_by(run_id=run_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    total_files = db.query(func.count(ProjectFile.id)).filter(ProjectFile.run_id == run_id).scalar() or 0
+    files = db.query(ProjectFile).filter(ProjectFile.run_id == run_id).all()
+    eligible_files = [
+        project_file
+        for project_file in files
+        if project_file.status == FileStatus.CONFIRMED or _has_detected_language(project_file)
+    ]
+
+    if total_files > 0 and not eligible_files:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"No source files have a detected language for business logic extraction. "
+                f"Confirm or set the language for at least one source file first "
+                f"({total_files} files are still pending)."
+            ),
+        )
+
+    eligible_file_ids = {project_file.id for project_file in eligible_files}
+    if eligible_file_ids and not force:
+        cached_file_ids = {
+            file_id
+            for file_id, in (
+                db.query(BusinessRule.file_id)
+                .filter(
+                    BusinessRule.run_id == run_id,
+                    BusinessRule.file_id.in_(eligible_file_ids),
+                )
+                .distinct()
+                .all()
+            )
+            if file_id is not None
+        }
+
+        if eligible_file_ids.issubset(cached_file_ids):
+            rules = (
+                db.query(BusinessRule)
+                .filter_by(run_id=run_id)
+                .order_by(BusinessRule.id)
+                .all()
+            )
+            return {
+                "status": "cached",
+                "run_id": run_id,
+                "count": len(rules),
+                "extraction_summary": {
+                    "run_id": run_id,
+                    "total_files": len(eligible_files),
+                    "completed_files": 0,
+                    "cached_files": len(eligible_files),
+                    "failed_files": 0,
+                    "results": [
+                        {
+                            "file_id": project_file.id,
+                            "file_name": project_file.filename,
+                            "detected_language": project_file.detected_lang or "",
+                            "status": "cached",
+                        }
+                        for project_file in eligible_files
+                    ],
+                },
+                "results": [
+                    {
+                        "file_id": project_file.id,
+                        "file_name": project_file.filename,
+                        "detected_language": project_file.detected_lang or "",
+                        "status": "cached",
+                    }
+                    for project_file in eligible_files
+                ],
+                "rules": serialize_rules(db, rules, run_id),
+            }
 
     config = project_ai_config(project)
     validate_cloud_chat_config(config)
+    validate_local_chat_config(config)
 
     process = LogicExtractionProcess(
         db_session=db,
         llm_provider=config,
     )
 
-    summary = await process.extract_all_rules(run_id)
+    summary = await process.extract_all_rules(run_id, force=force)
 
     rules = (
         db.query(BusinessRule)
@@ -308,11 +465,15 @@ async def get_rules(run_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{run_id}/procedural-flow/extract")
-async def extract_procedural_flow(run_id: str, db: Session = Depends(get_db)):
+async def extract_procedural_flow(
+    run_id: str,
+    force: bool = Query(False),
+    db: Session = Depends(get_db),
+):
     _require_stage_allowed(db, run_id, MigrationScopeService.STAGE_PROCEDURAL_FLOW)
     try:
         process = ProceduralFlowProcess(db)
-        return process.extract_all(run_id=run_id)
+        return process.extract_all(run_id=run_id, force=force)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 

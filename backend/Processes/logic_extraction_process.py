@@ -82,7 +82,7 @@ class LogicExtractionProcess:
                 }
             )
 
-    async def extract_all_rules(self, run_id: str) -> dict:
+    async def extract_all_rules(self, run_id: str, force: bool = False) -> dict:
         from Persistence.sqlite.models import Project, ProjectFile
 
         project = self.db.query(Project).filter_by(run_id=run_id).first()
@@ -92,33 +92,64 @@ class LogicExtractionProcess:
 
         extractor = self._build_agentic_extractor(project)
 
-        files = (
-            self.db.query(ProjectFile)
-            .filter(
-                ProjectFile.run_id == run_id,
-                ProjectFile.status == FileStatus.CONFIRMED,
-            )
-            .all()
-        )
+        files = [
+            project_file
+            for project_file in self.db.query(ProjectFile).filter(ProjectFile.run_id == run_id).all()
+            if self._is_detected_or_confirmed(project_file)
+        ]
 
         total = len(files)
         completed = 0
+        cached = 0
         failed = 0
         results = []
 
-        self.db.query(BusinessRule).filter_by(run_id=run_id).delete(
-            synchronize_session=False
-        )
-        self.db.commit()
-
         for project_file in files:
             try:
+                existing_rules_count = (
+                    self.db.query(BusinessRule)
+                    .filter(
+                        BusinessRule.run_id == run_id,
+                        BusinessRule.file_id == project_file.id,
+                    )
+                    .count()
+                )
+
+                if existing_rules_count and not force:
+                    cached += 1
+                    results.append(
+                        {
+                            "file_id": project_file.id,
+                            "file_name": project_file.filename,
+                            "detected_language": (
+                                getattr(project_file, "detected_language", None)
+                                or getattr(project_file, "detected_lang", None)
+                                or ""
+                            ),
+                            "business_rules_count": existing_rules_count,
+                            "status": "cached",
+                        }
+                    )
+                    continue
+
+                if existing_rules_count and force:
+                    (
+                        self.db.query(BusinessRule)
+                        .filter(
+                            BusinessRule.run_id == run_id,
+                            BusinessRule.file_id == project_file.id,
+                        )
+                        .delete(synchronize_session=False)
+                    )
+                    self.db.commit()
+
+                source_code = self._load_source_code_for_file(project_file)
                 technical_yaml = self._load_technical_yaml_for_file(
                     run_id=run_id,
                     file_id=project_file.id,
                 )
-
-                source_code = self._load_source_code_for_file(project_file)
+                if not technical_yaml.strip():
+                    technical_yaml = self._generate_local_yaml_from_source(source_code)
 
                 if not self._is_legacy_source_chunk(project_file, source_code):
                     results.append(
@@ -186,6 +217,7 @@ class LogicExtractionProcess:
             "run_id": run_id,
             "total_files": total,
             "completed_files": completed,
+            "cached_files": cached,
             "failed_files": failed,
             "results": results,
         }
@@ -664,6 +696,21 @@ class LogicExtractionProcess:
             has_supported_extension
             or has_supported_language
         ) and bool(content and content.strip())
+
+    @staticmethod
+    def _is_detected_or_confirmed(project_file: ProjectFile | None) -> bool:
+        if not project_file:
+            return False
+        if project_file.status == FileStatus.CONFIRMED:
+            return True
+        detected = str(project_file.detected_lang or "").strip().lower()
+        return bool(detected and detected != "unknown")
+
+    def _generate_local_yaml_from_source(self, source_code: str | None) -> str:
+        class _SourceChunk:
+            content = source_code or ""
+
+        return self._generate_local_yaml(_SourceChunk())
 
     def _is_logic_candidate(self, content: str | None) -> bool:
         return bool(content and self.LOGIC_RE.search(content))

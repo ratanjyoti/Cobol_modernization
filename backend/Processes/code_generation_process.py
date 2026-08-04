@@ -138,7 +138,7 @@ class CodeGenerationProcess:
         target_language: str = "java",
         file_id: int | None = None,
         project_id: str | None = None,
-        clean_output: bool = True,
+        clean_output: bool = False,
     ) -> dict[str, Any]:
         project = self.db.query(Project).filter(Project.run_id == run_id).first()
 

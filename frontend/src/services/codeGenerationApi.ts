@@ -210,15 +210,17 @@ export interface PipelineStatusResponse {
   quality_gate?: unknown;
   validation?: unknown;
   report?: unknown;
+  cached?: boolean;
 }
 export async function runFullCodeGeneration(
   runId: string,
   targetLanguage: TargetLanguage,
+  force = false,
 ): Promise<PipelineStatusResponse> {
   const response = await fetch(
     `${API_BASE_URL}/code-generation/${encodeURIComponent(
       runId,
-    )}/run-full?target_language=${encodeURIComponent(targetLanguage)}`,
+    )}/run-full?target_language=${encodeURIComponent(targetLanguage)}&force=${force ? 'true' : 'false'}`,
     {
       method: 'POST',
     },

@@ -219,7 +219,7 @@ const CodeGeneration = () => {
 
   useEffect(() => {
     loadExistingData();
-  }, [targetLanguage]);
+  }, [hasRunId, runId, targetLanguage]);
 
   useEffect(() => {
     if (!hasRunId || !targetLanguage) return;
@@ -287,11 +287,12 @@ const CodeGeneration = () => {
     return () => window.clearInterval(interval);
   }, [hasRunId, runId, targetLanguage, pipelineRunning, pipelineStatus?.status]);
 
-  const handleGenerateWorkingCode = async () => {
+  const handleGenerateWorkingCode = async (force = false) => {
     if (!hasRunId) {
       setError('Please select or enter a run id first.');
       return;
     }
+    if (force && !window.confirm('Regenerate code and replace the saved generated output for this run?')) return;
 
     setError('');
     setMessage('');
@@ -314,7 +315,7 @@ const CodeGeneration = () => {
     setPipelineStatus(startingStatus);
 
     try {
-      const result = await runFullCodeGeneration(runId, targetLanguage);
+      const result = await runFullCodeGeneration(runId, targetLanguage, force);
 
       setPipelineStatus(result);
       setWorkflowMetadata((prev) => ({
@@ -327,7 +328,7 @@ const CodeGeneration = () => {
       setPipelineRunning(result.status === 'RUNNING');
 
       if (result.status === 'COMPLETED' && result.download_allowed) {
-        setMessage('Generated working code is ready to download.');
+        setMessage(result.cached ? 'Using saved generated code.' : 'Generated working code is ready to download.');
         await loadExistingData();
       } else {
         setError(
@@ -761,12 +762,21 @@ const CodeGeneration = () => {
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
-              onClick={handleGenerateWorkingCode}
+              onClick={() => handleGenerateWorkingCode(false)}
               disabled={pipelineRunning || !hasRunId}
               className="btn-glow flex items-center gap-2 px-5 py-3 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {pipelineRunning ? <Loader2 className="animate-spin" size={18} /> : <Sparkles size={18} />}
               {pipelineRunning ? 'Generating...' : 'Generate Working Code'}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleGenerateWorkingCode(true)}
+              disabled={pipelineRunning || !hasRunId}
+              className="btn-secondary flex items-center gap-2 px-5 py-3 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {pipelineRunning ? <Loader2 className="animate-spin" size={18} /> : <RefreshCcw size={18} />}
+              Regenerate
             </button>
 
             <a

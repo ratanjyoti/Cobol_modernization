@@ -37,7 +37,7 @@ class ProceduralFlowProcess:
     def __init__(self, db_session: Session):
         self.db = db_session
 
-    def extract_all(self, run_id: str) -> dict[str, Any]:
+    def extract_all(self, run_id: str, force: bool = False) -> dict[str, Any]:
         project = self.db.query(Project).filter_by(run_id=run_id).first()
         if not project:
             raise ValueError(f"Project not found for run_id={run_id}")
@@ -52,11 +52,22 @@ class ProceduralFlowProcess:
 
         results = []
         completed = 0
+        cached = 0
         skipped = 0
         failed = 0
 
         for project_file in files:
             try:
+                flow_path = self._flow_dir(run_id) / f"{project_file.id}.json"
+                if flow_path.exists() and not force:
+                    try:
+                        cached_flow = json.loads(flow_path.read_text(encoding="utf-8"))
+                    except Exception:
+                        cached_flow = {}
+                    cached += 1
+                    results.append(self._summary_item(cached_flow, "cached"))
+                    continue
+
                 source_code = self._load_source_code_for_file(project_file)
                 if not self._is_supported_source(project_file, source_code):
                     skipped += 1
@@ -97,6 +108,7 @@ class ProceduralFlowProcess:
             "run_id": run_id,
             "total_files": len(files),
             "completed_files": completed,
+            "cached_files": cached,
             "skipped_files": skipped,
             "failed_files": failed,
             "results": results,

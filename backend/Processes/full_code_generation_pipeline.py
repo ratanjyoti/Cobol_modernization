@@ -33,10 +33,27 @@ class FullCodeGenerationPipeline:
         project_id: str | None = None,
         max_missing_rounds: int = 2,
         max_method_repair_rounds: int = 2,
+        force: bool = False,
     ) -> dict[str, Any]:
         target_language = self._normalize_target(target_language)
         project_id = project_id or run_id
         target_display = self._target_display_name(target_language)
+
+        if not force:
+            existing_status = self.get_status(run_id, target_language)
+            existing_files = CodeGenerationProcess(self.db).list_generated_files(
+                run_id=run_id,
+                target_language=target_language,
+            )
+            if (
+                existing_status.get("status") == "COMPLETED"
+                and int(existing_files.get("count") or 0) > 0
+            ):
+                existing_status["cached"] = True
+                existing_status["stage"] = existing_status.get("stage") or (
+                    f"{target_display} generated code is ready to download"
+                )
+                return existing_status
 
         self._write_status(
             run_id,
@@ -95,7 +112,7 @@ class FullCodeGenerationPipeline:
                 target_language=target_language,
                 file_id=None,
                 project_id=project_id,
-                clean_output=True,
+                clean_output=force,
             )
 
             final_result["steps"].append(
@@ -322,6 +339,35 @@ class FullCodeGenerationPipeline:
         path = self._status_path(run_id, target_language)
 
         if not path.exists():
+            counts = self._progress_counts(run_id, target_language)
+            if int(counts.get("generated_files") or 0) > 0:
+                validation = CodeGenerationProcess(self.db)._latest_validation(
+                    run_id=run_id,
+                    target_language=target_language,
+                )
+                validation_success = bool(validation.get("success"))
+                return {
+                    "run_id": run_id,
+                    "target_language": target_language,
+                    "target_display_name": self._target_display_name(target_language),
+                    "current_agent": self._conversion_agent_name(target_language),
+                    "conversion_agent": self._conversion_agent_name(target_language),
+                    "conversion_agent_key": target_language,
+                    "fallback_used": False,
+                    "fallback_reason": "",
+                    "business_rules_used": self._business_rules_used(run_id),
+                    "procedural_flow_used": self._procedural_flow_used(run_id),
+                    "quality_gate_status": "PENDING",
+                    "validation_status": validation.get("status") or "PENDING",
+                    "validation": validation,
+                    "status": "COMPLETED",
+                    "stage": "Saved generated code loaded.",
+                    "progress": 100,
+                    "download_allowed": validation_success,
+                    "cached": True,
+                    **counts,
+                }
+
             return {
                 "run_id": run_id,
                 "target_language": target_language,
@@ -339,7 +385,7 @@ class FullCodeGenerationPipeline:
                 "stage": "Code generation has not started.",
                 "progress": 0,
                 "download_allowed": False,
-                **self._progress_counts(run_id, target_language),
+                **counts,
             }
 
         try:
@@ -453,7 +499,7 @@ class FullCodeGenerationPipeline:
         except Exception:
             total_files = 0
 
-        output_root = Path("output") / "generated_code" / run_id
+        output_root = Path(__file__).resolve().parents[1] / "output" / "generated_code" / run_id
         plan_dir = output_root / "plans" / target_language
         result_dir = output_root / "results" / target_language
         return {
@@ -534,7 +580,8 @@ class FullCodeGenerationPipeline:
     ) -> Path:
         target_language = self._normalize_target(target_language)
         return (
-            Path("output")
+            Path(__file__).resolve().parents[1]
+            / "output"
             / "generated_code"
             / run_id
             / "pipeline"
