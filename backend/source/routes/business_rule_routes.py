@@ -42,10 +42,34 @@ def serialize_rule(rule: BusinessRule, filename: str = "", metadata: dict | None
         "technical_yaml": technical_yaml or technical_ref,
         "filename": filename,
         "detected_language": metadata.get("detected_language", ""),
+        "artifact_type": metadata.get("artifact_type", ""),
+        "file_role": metadata.get("file_role", ""),
+        "selected_agent": metadata.get("selected_agent") or metadata.get("agent_name", ""),
         "agent_name": metadata.get("agent_name", ""),
         "agent_key": metadata.get("agent_key", ""),
+        "extraction_mode": metadata.get("extraction_mode", ""),
+        "llm_called": bool(metadata.get("llm_called", False)),
         "fallback_used": bool(metadata.get("fallback_used", False)),
         "fallback_reason": metadata.get("fallback_reason", ""),
+        "model": metadata.get("model", ""),
+        "source_character_count": metadata.get("source_character_count", 0),
+        "source_hash": metadata.get("source_hash", ""),
+        "extractor_version": metadata.get("extractor_version", ""),
+        "prompt_version": metadata.get("prompt_version", ""),
+        "technical_analysis_version": metadata.get("technical_analysis_version", ""),
+        "cache_status": metadata.get("cache_status", ""),
+        "coverage": metadata.get("coverage", {}),
+        "chunk_execution": metadata.get("chunk_execution", {}),
+        "processing_mode": metadata.get("processing_mode") or (metadata.get("chunk_execution") or {}).get("processing_mode", ""),
+        "stored_chunks": (metadata.get("chunk_execution") or {}).get("stored_chunks", 0),
+        "request_batches": (metadata.get("chunk_execution") or {}).get("request_batches", 0),
+        "completed_chunks": (metadata.get("chunk_execution") or {}).get("completed_chunks", 0),
+        "llm_chunks": (metadata.get("chunk_execution") or {}).get("llm_chunks", 0),
+        "fallback_chunks": (metadata.get("chunk_execution") or {}).get("fallback_chunks", 0),
+        "failed_chunks": (metadata.get("chunk_execution") or {}).get("failed_chunks", 0),
+        "overlap_lines": (metadata.get("chunk_execution") or {}).get("overlap_lines", 0),
+        "analysis_coverage": (metadata.get("chunk_execution") or {}).get("analysis_coverage", 0),
+        "quality_status": (metadata.get("chunk_execution") or {}).get("quality_status", ""),
         "business_rules_count": metadata.get("business_rules_count", 0),
         "status": rule.status or "PENDING",
         "chunk_id": rule.chunk_id,
@@ -109,8 +133,13 @@ def _business_logic_metadata(db: Session, run_id: str) -> dict[int, dict]:
             "file_id": project_file.id,
             "file_name": project_file.filename,
             "detected_language": language,
+            "artifact_type": "data_copybook" if str(language).lower() in {"copybook", "cpy"} else "domain_program",
+            "file_role": "domain_program",
+            "selected_agent": agent_name,
             "agent_name": agent_name,
             "agent_key": agent_name.replace("BusinessLogicAgent", "").lower() or "generic",
+            "extraction_mode": "cached_unknown",
+            "llm_called": False,
             "fallback_used": False,
             "fallback_reason": "",
             "business_rules_count": counts.get(int(project_file.id), 0),
@@ -368,61 +397,6 @@ async def extract_rules(
                 f"({total_files} files are still pending)."
             ),
         )
-
-    eligible_file_ids = {project_file.id for project_file in eligible_files}
-    if eligible_file_ids and not force:
-        cached_file_ids = {
-            file_id
-            for file_id, in (
-                db.query(BusinessRule.file_id)
-                .filter(
-                    BusinessRule.run_id == run_id,
-                    BusinessRule.file_id.in_(eligible_file_ids),
-                )
-                .distinct()
-                .all()
-            )
-            if file_id is not None
-        }
-
-        if eligible_file_ids.issubset(cached_file_ids):
-            rules = (
-                db.query(BusinessRule)
-                .filter_by(run_id=run_id)
-                .order_by(BusinessRule.id)
-                .all()
-            )
-            return {
-                "status": "cached",
-                "run_id": run_id,
-                "count": len(rules),
-                "extraction_summary": {
-                    "run_id": run_id,
-                    "total_files": len(eligible_files),
-                    "completed_files": 0,
-                    "cached_files": len(eligible_files),
-                    "failed_files": 0,
-                    "results": [
-                        {
-                            "file_id": project_file.id,
-                            "file_name": project_file.filename,
-                            "detected_language": project_file.detected_lang or "",
-                            "status": "cached",
-                        }
-                        for project_file in eligible_files
-                    ],
-                },
-                "results": [
-                    {
-                        "file_id": project_file.id,
-                        "file_name": project_file.filename,
-                        "detected_language": project_file.detected_lang or "",
-                        "status": "cached",
-                    }
-                    for project_file in eligible_files
-                ],
-                "rules": serialize_rules(db, rules, run_id),
-            }
 
     config = project_ai_config(project)
     validate_cloud_chat_config(config)

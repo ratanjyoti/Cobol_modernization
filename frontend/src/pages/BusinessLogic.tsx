@@ -38,10 +38,47 @@ interface BusinessRule {
   complexity_rating?: string;
   modernization_tips?: string[];
   detected_language?: string;
+  artifact_type?: string;
+  file_role?: string;
+  selected_agent?: string;
   agent_name?: string;
   agent_key?: string;
+  extraction_mode?: string;
+  processing_mode?: string;
+  llm_called?: boolean;
   fallback_used?: boolean;
   fallback_reason?: string;
+  model?: string;
+  source_character_count?: number;
+  cache_status?: string;
+  stored_chunks?: number;
+  request_batches?: number;
+  completed_chunks?: number;
+  llm_chunks?: number;
+  fallback_chunks?: number;
+  failed_chunks?: number;
+  overlap_lines?: number;
+  analysis_coverage?: number;
+  quality_status?: string;
+  chunk_execution?: {
+    processing_mode?: string;
+    stored_chunks?: number;
+    request_batches?: number;
+    completed_chunks?: number;
+    llm_chunks?: number;
+    fallback_chunks?: number;
+    failed_chunks?: number;
+    overlap_lines?: number;
+    analysis_coverage?: number;
+    quality_status?: string;
+  };
+  coverage?: {
+    paragraphs_total?: number;
+    paragraphs_analyzed?: number;
+    paragraphs_with_rules?: number;
+    paragraphs_without_business_rules?: number;
+    source_coverage?: number;
+  };
   business_rules_count?: number;
 }
 
@@ -50,7 +87,24 @@ const cleanMarkdownText = (value?: string | null, fallback = 'Not available.') =
   return text || fallback;
 };
 
-const yesNo = (value?: boolean) => (value ? 'Yes' : 'No');
+const humanizeToken = (value?: string | null, fallback = 'Unknown') => {
+  const text = (value || '').trim();
+  if (!text) return fallback;
+  return text
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ');
+};
+
+const numericPercent = (value?: number) => {
+  if (typeof value !== 'number' || Number.isNaN(value)) return 'Unknown';
+  return `${Math.round(value * 100)}%`;
+};
+
+const chunkValue = (rule: BusinessRule, key: keyof NonNullable<BusinessRule['chunk_execution']>) => (
+  rule[key as keyof BusinessRule] ?? rule.chunk_execution?.[key] ?? 0
+);
 
 const markdownList = (items?: string[]) => {
   if (!items || items.length === 0) return '* None detected.';
@@ -458,11 +512,13 @@ const BusinessLogic = () => {
                   <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400 whitespace-nowrap">{files[filename].length} Rules</span>
                 </div>
                 <div className="mb-2 grid grid-cols-2 gap-2 text-[10px] uppercase tracking-wide text-slate-500">
-                  <span>Lang: {files[filename][0]?.detected_language || 'Unknown'}</span>
-                  <span>Fallback: {yesNo(files[filename][0]?.fallback_used)}</span>
+                  <span>Lang: {humanizeToken(files[filename][0]?.detected_language)}</span>
+                  <span>Role: {humanizeToken(files[filename][0]?.file_role)}</span>
+                  <span>Mode: {humanizeToken(files[filename][0]?.processing_mode || files[filename][0]?.extraction_mode)}</span>
+                  <span>Chunks: {chunkValue(files[filename][0], 'stored_chunks') || '0'}</span>
                 </div>
                 <p className="mb-1 truncate text-[10px] text-slate-500">
-                  Agent: {files[filename][0]?.agent_name || files[filename][0]?.agent_key || 'Unknown'}
+                  Agent: {files[filename][0]?.selected_agent || files[filename][0]?.agent_name || files[filename][0]?.agent_key || 'Unknown'}
                 </p>
                 <p className="text-xs text-slate-400 line-clamp-2 italic">{files[filename][0].business_purpose || 'Analysis pending...'}</p>
               </button>
@@ -494,20 +550,64 @@ const BusinessLogic = () => {
                   </div>
                   <div className="mt-5 grid grid-cols-2 gap-3 text-xs text-slate-300 xl:grid-cols-4">
                     <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Agent</p>
-                      <p className="mt-1 truncate font-mono text-indigo-300">{fileMetadata.agent_name || fileMetadata.agent_key || 'Unknown'}</p>
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Language</p>
+                      <p className="mt-1 truncate font-mono text-slate-200">{humanizeToken(fileMetadata.detected_language)}</p>
                     </div>
                     <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Fallback</p>
-                      <p className="mt-1 font-mono text-slate-200">{yesNo(fileMetadata.fallback_used)}</p>
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Artifact</p>
+                      <p className="mt-1 truncate font-mono text-slate-200">{humanizeToken(fileMetadata.artifact_type)}</p>
                     </div>
                     <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Rules Extracted</p>
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">File Role</p>
+                      <p className="mt-1 truncate font-mono text-slate-200">{humanizeToken(fileMetadata.file_role)}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Selected Agent</p>
+                      <p className="mt-1 truncate font-mono text-indigo-300">{fileMetadata.selected_agent || fileMetadata.agent_name || fileMetadata.agent_key || 'Unknown'}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Processing Mode</p>
+                      <p className="mt-1 truncate font-mono text-slate-200">{humanizeToken(fileMetadata.processing_mode || fileMetadata.extraction_mode)}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Stored Chunks</p>
+                      <p className="mt-1 font-mono text-slate-200">{chunkValue(fileMetadata, 'stored_chunks')}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">LLM Chunks</p>
+                      <p className="mt-1 font-mono text-slate-200">{chunkValue(fileMetadata, 'llm_chunks')}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Fallback Chunks</p>
+                      <p className="mt-1 font-mono text-slate-200">{chunkValue(fileMetadata, 'fallback_chunks')}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Overlap</p>
+                      <p className="mt-1 font-mono text-slate-200">{chunkValue(fileMetadata, 'overlap_lines')} lines</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Analysis Coverage</p>
+                      <p className="mt-1 font-mono text-slate-200">{numericPercent(Number(chunkValue(fileMetadata, 'analysis_coverage')))}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Quality</p>
+                      <p className="mt-1 truncate font-mono text-slate-200">{humanizeToken(String(chunkValue(fileMetadata, 'quality_status') || fileMetadata.quality_status || 'Unknown'))}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Rules Count</p>
                       <p className="mt-1 font-mono text-slate-200">{fileMetadata.business_rules_count || currentFileRules.length}</p>
                     </div>
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 xl:col-span-2">
                       <p className="text-[10px] uppercase tracking-wide text-slate-500">Fallback Reason</p>
-                      <p className="mt-1 truncate font-mono text-slate-200">{fileMetadata.fallback_reason || 'None'}</p>
+                      <p className="mt-1 truncate font-mono text-slate-200" title={fileMetadata.fallback_reason || 'None'}>{fileMetadata.fallback_reason || 'None'}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Model</p>
+                      <p className="mt-1 truncate font-mono text-slate-200">{fileMetadata.model || 'Unknown'}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Source Chars</p>
+                      <p className="mt-1 font-mono text-slate-200">{fileMetadata.source_character_count || 'Unknown'}</p>
                     </div>
                   </div>
                 </div>
@@ -626,19 +726,59 @@ const BusinessLogic = () => {
           <div className="mb-5 grid grid-cols-2 gap-3 text-xs lg:grid-cols-4">
             <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
               <p className="text-[10px] uppercase tracking-wide text-slate-500">Detected Language</p>
-              <p className="mt-1 font-mono text-slate-200">{fileMetadata.detected_language || 'Unknown'}</p>
+              <p className="mt-1 font-mono text-slate-200">{humanizeToken(fileMetadata.detected_language)}</p>
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">Artifact Type</p>
+              <p className="mt-1 truncate font-mono text-slate-200">{humanizeToken(fileMetadata.artifact_type)}</p>
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">File Role</p>
+              <p className="mt-1 truncate font-mono text-slate-200">{humanizeToken(fileMetadata.file_role)}</p>
             </div>
             <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
               <p className="text-[10px] uppercase tracking-wide text-slate-500">Selected Agent</p>
-              <p className="mt-1 truncate font-mono text-indigo-300">{fileMetadata.agent_name || fileMetadata.agent_key || 'Unknown'}</p>
+              <p className="mt-1 truncate font-mono text-indigo-300">{fileMetadata.selected_agent || fileMetadata.agent_name || fileMetadata.agent_key || 'Unknown'}</p>
             </div>
             <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
-              <p className="text-[10px] uppercase tracking-wide text-slate-500">Fallback Used</p>
-              <p className="mt-1 font-mono text-slate-200">{yesNo(fileMetadata.fallback_used)}</p>
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">Processing Mode</p>
+              <p className="mt-1 truncate font-mono text-slate-200">{humanizeToken(fileMetadata.processing_mode || fileMetadata.extraction_mode)}</p>
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">Stored Chunks</p>
+              <p className="mt-1 font-mono text-slate-200">{chunkValue(fileMetadata, 'stored_chunks')}</p>
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">LLM Chunks</p>
+              <p className="mt-1 font-mono text-slate-200">{chunkValue(fileMetadata, 'llm_chunks')}</p>
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">Fallback Chunks</p>
+              <p className="mt-1 font-mono text-slate-200">{chunkValue(fileMetadata, 'fallback_chunks')}</p>
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">Overlap</p>
+              <p className="mt-1 font-mono text-slate-200">{chunkValue(fileMetadata, 'overlap_lines')} lines</p>
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">Analysis Coverage</p>
+              <p className="mt-1 font-mono text-slate-200">{numericPercent(Number(chunkValue(fileMetadata, 'analysis_coverage')))}</p>
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">Quality</p>
+              <p className="mt-1 truncate font-mono text-slate-200">{humanizeToken(String(chunkValue(fileMetadata, 'quality_status') || fileMetadata.quality_status || 'Unknown'))}</p>
             </div>
             <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
               <p className="text-[10px] uppercase tracking-wide text-slate-500">Rules Count</p>
               <p className="mt-1 font-mono text-slate-200">{fileMetadata.business_rules_count || currentFileRules.length}</p>
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3 lg:col-span-2">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">Fallback Reason</p>
+              <p className="mt-1 truncate font-mono text-slate-200" title={fileMetadata.fallback_reason || 'None'}>{fileMetadata.fallback_reason || 'None'}</p>
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">Cache</p>
+              <p className="mt-1 truncate font-mono text-slate-200">{humanizeToken(fileMetadata.cache_status, 'Stored')}</p>
             </div>
           </div>
 
