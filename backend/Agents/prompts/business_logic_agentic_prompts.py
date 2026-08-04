@@ -1,3 +1,4 @@
+# Owns all language-specific business logic prompts and common output JSON schema.
 from __future__ import annotations
 
 
@@ -21,6 +22,12 @@ Use this exact JSON structure:
       "rule_type": "validation|calculation|decision|data_rule|transaction|workflow|state_transition|external_dependency|other",
       "rule_text": "",
       "technical_reference": "",
+      "paragraph": "",
+      "source_start_line": 0,
+      "source_end_line": 0,
+      "source_excerpt": "",
+      "condition_or_trigger": "",
+      "business_outcome": "",
       "confidence": 0.0
     }
   ],
@@ -83,6 +90,11 @@ Rules:
 - Write in business/domain language.
 - If something is uncertain, put it in unresolved_items.
 - Confidence must be between 0.0 and 1.0.
+- Every business rule must include source_start_line, source_end_line, paragraph or semantic unit, source_excerpt, condition_or_trigger, and business_outcome.
+- When source is split into CONTEXT-ONLY SOURCE and PRIMARY SOURCE, use context-only source only to understand preceding control flow.
+- Extract persistent business rules only from PRIMARY SOURCE.
+- The source line range for every rule must fall inside the PRIMARY SOURCE range shown in the source.
+- Do not emit rules from END-IF, END-EVALUATE, ELSE alone, paragraph labels alone, or overlap-only content.
 """
 
 
@@ -237,6 +249,13 @@ Raw source code:
 ```text
 {source_code}
 ```
+
+Chunk extraction rules:
+- The source may contain CONTEXT-ONLY SOURCE and PRIMARY SOURCE sections.
+- CONTEXT-ONLY SOURCE is overlap from the previous chunk. Use it only for context.
+- PRIMARY SOURCE is the only section allowed to produce saved business rules.
+- Include exact line numbers from the six-digit source prefixes.
+- Do not create a business rule if its evidence exists only in CONTEXT-ONLY SOURCE.
 
 Return only valid JSON using the required schema.
 """

@@ -1,9 +1,11 @@
 ﻿import os
 # Owns business logic extraction process orchestration and persistence. Do not put language-specific prompt text here.
+import hashlib
 import re
 from typing import Any
 import json
 from sqlalchemy.orm import Session
+from Chunking.chunking_orchestrator import ChunkingOrchestrator
 from Chunking.context.chunk_context_manager import ChunkContextManager
 from Persistence.sqlite.models import BusinessRule, ChunkAnalysis, FileChunk, FileRelation, FileStatus, ProjectFile
 from paths import UPLOADS_DIR
@@ -15,6 +17,16 @@ from Agents.implementations.agentic_business_logic_extractor import (
     AgenticBusinessLogicExtractor,
     BusinessLogicFileContext,
 )
+from services.business_logic_chunk_context_service import (
+    BusinessLogicChunkSource,
+    build_chunk_source,
+    chunk_diagnostics,
+    format_chunk_for_prompt,
+    split_chunk_source_for_prompt_budget,
+)
+from services.business_logic_reconciler import BusinessLogicReconciler
+from services.business_rule_quality_service import BusinessRuleQualityService
+from services.legacy_source_preprocessor import LegacySourcePreprocessor
 
 class LogicExtractionProcess:
     """
@@ -33,6 +45,9 @@ class LogicExtractionProcess:
         r")\b",
         re.IGNORECASE,
     )
+    EXTRACTOR_VERSION = "business-logic-v2"
+    PROMPT_VERSION = "cobol-business-v3"
+    TECHNICAL_ANALYSIS_VERSION = "technical-structure-v2"
 
     def __init__(
         self,
@@ -42,6 +57,10 @@ class LogicExtractionProcess:
     ):
         self.db = db_session
         self.context_mgr = ChunkContextManager(db_session)
+        self.preprocessor = LegacySourcePreprocessor()
+        self.quality_service = BusinessRuleQualityService()
+        self.reconciler = BusinessLogicReconciler()
+        self.max_input_tokens = int(os.getenv("BUSINESS_LOGIC_MAX_INPUT_TOKENS", "5500"))
 
         self.config = (
             llm_provider
@@ -101,11 +120,19 @@ class LogicExtractionProcess:
         total = len(files)
         completed = 0
         cached = 0
+        stale = 0
         failed = 0
         results = []
 
         for project_file in files:
             try:
+                source_code = self._load_source_code_for_file(project_file)
+                source_hash = self._source_hash(source_code)
+                source_profile = self.preprocessor.prepare(
+                    source_code=source_code,
+                    file_name=project_file.filename or project_file.filepath or "",
+                    detected_language=getattr(project_file, "detected_lang", "") or "",
+                )
                 existing_rules_count = (
                     self.db.query(BusinessRule)
                     .filter(
@@ -115,22 +142,36 @@ class LogicExtractionProcess:
                     .count()
                 )
 
+                cache_status = "new"
                 if existing_rules_count and not force:
-                    cached += 1
-                    results.append(
-                        {
-                            "file_id": project_file.id,
-                            "file_name": project_file.filename,
-                            "detected_language": (
-                                getattr(project_file, "detected_language", None)
-                                or getattr(project_file, "detected_lang", None)
-                                or ""
-                            ),
-                            "business_rules_count": existing_rules_count,
-                            "status": "cached",
-                        }
-                    )
-                    continue
+                    cached_entry = self._cached_metadata(run_id, project_file.id)
+                    cache_status = self._cache_status(cached_entry, source_hash)
+                    if cache_status != "fresh":
+                        stale += 1
+                        print(
+                            f"Business Logic cache stale for run={run_id} file={project_file.id}: "
+                            f"{cache_status}; preserving old rows until new result is reconciled."
+                        )
+                    else:
+                        cached += 1
+                        results.append(
+                            {
+                                **cached_entry,
+                                "file_id": project_file.id,
+                                "file_name": project_file.filename,
+                                "detected_language": source_profile.detected_language,
+                                "artifact_type": source_profile.artifact_type,
+                                "file_role": source_profile.file_role,
+                                "business_rules_count": existing_rules_count,
+                                "status": "cached",
+                                "cache_status": "fresh",
+                                "source_hash": source_hash,
+                                "extractor_version": self.EXTRACTOR_VERSION,
+                                "prompt_version": self.PROMPT_VERSION,
+                                "technical_analysis_version": self.TECHNICAL_ANALYSIS_VERSION,
+                            }
+                        )
+                        continue
 
                 if existing_rules_count and force:
                     (
@@ -142,21 +183,16 @@ class LogicExtractionProcess:
                         .delete(synchronize_session=False)
                     )
                     self.db.commit()
+                    self._clear_business_logic_chunk_outputs(run_id, project_file.id)
 
-                source_code = self._load_source_code_for_file(project_file)
-                technical_yaml = self._load_technical_yaml_for_file(
-                    run_id=run_id,
-                    file_id=project_file.id,
-                )
-                if not technical_yaml.strip():
-                    technical_yaml = self._generate_local_yaml_from_source(source_code)
-
-                if not self._is_legacy_source_chunk(project_file, source_code):
+                if not self._is_legacy_source_chunk(project_file, source_profile.source_code):
                     results.append(
                         {
                             "file_id": project_file.id,
                             "file_name": project_file.filename,
-                            "detected_language": project_file.detected_lang or "",
+                            "detected_language": source_profile.detected_language,
+                            "artifact_type": source_profile.artifact_type,
+                            "file_role": source_profile.file_role,
                             "status": "skipped",
                             "reason": "unsupported_or_empty_source",
                         }
@@ -170,17 +206,21 @@ class LogicExtractionProcess:
 
                 glossary_context = self._build_glossary_context(run_id)
 
-                context = self._build_business_file_context(
+                result = self._extract_file_from_stored_chunks(
+                    run_id=run_id,
                     project_file=project_file,
-                    technical_yaml=technical_yaml,
-                    source_code=source_code,
+                    source_profile=source_profile,
+                    source_hash=source_hash,
+                    extractor=extractor,
                     dependency_context=dependency_context,
                     glossary_context=glossary_context,
                 )
+                result["source_hash"] = source_hash
+                result["extractor_version"] = self.EXTRACTOR_VERSION
+                result["prompt_version"] = self.PROMPT_VERSION
+                result["technical_analysis_version"] = self.TECHNICAL_ANALYSIS_VERSION
 
-                result = extractor.extract(context)
-
-                self._persist_agentic_business_logic_result(
+                self._replace_business_rules_for_file(
                     run_id=run_id,
                     project_file=project_file,
                     result=result,
@@ -190,12 +230,27 @@ class LogicExtractionProcess:
                 results.append(
                     {
                         "file_id": project_file.id,
-                        "file_name": context.file_name,
-                        "detected_language": context.detected_language,
+                        "file_name": result.get("file_name") or project_file.filename,
+                        "detected_language": result.get("detected_language") or source_profile.detected_language,
+                        "artifact_type": result.get("artifact_type") or source_profile.artifact_type,
+                        "file_role": result.get("file_role") or source_profile.file_role,
+                        "selected_agent": result.get("selected_agent") or result.get("agent_name"),
                         "agent_name": result.get("agent_name"),
                         "agent_key": result.get("agent_key"),
+                        "extraction_mode": result.get("extraction_mode"),
+                        "processing_mode": result.get("processing_mode"),
+                        "llm_called": result.get("llm_called", False),
                         "fallback_used": result.get("fallback_used", False),
                         "fallback_reason": result.get("fallback_reason", ""),
+                        "model": result.get("model"),
+                        "source_character_count": result.get("source_character_count"),
+                        "source_hash": source_hash,
+                        "cache_status": cache_status,
+                        "extractor_version": self.EXTRACTOR_VERSION,
+                        "prompt_version": self.PROMPT_VERSION,
+                        "technical_analysis_version": self.TECHNICAL_ANALYSIS_VERSION,
+                        "coverage": result.get("coverage") or {},
+                        "chunk_execution": result.get("chunk_execution") or {},
                         "business_rules_count": len(result.get("business_rules") or []),
                         "status": "completed",
                     }
@@ -218,6 +273,7 @@ class LogicExtractionProcess:
             "total_files": total,
             "completed_files": completed,
             "cached_files": cached,
+            "stale_files": stale,
             "failed_files": failed,
             "results": results,
         }
@@ -245,6 +301,469 @@ class LogicExtractionProcess:
     def _summary_path(run_id: str) -> Path:
         backend_root = Path(__file__).resolve().parents[1]
         return backend_root / "output" / "business_logic" / run_id / "summary.json"
+
+    def _cached_metadata(self, run_id: str, file_id: int | str) -> dict[str, Any]:
+        summary = self.extraction_summary(run_id)
+        for item in summary.get("results") or []:
+            if not isinstance(item, dict):
+                continue
+            if str(item.get("file_id")) == str(file_id):
+                return dict(item)
+        return {}
+
+    def _cache_status(self, cached_entry: dict[str, Any], source_hash: str) -> str:
+        if not cached_entry:
+            return "missing_metadata"
+        if cached_entry.get("source_hash") != source_hash:
+            return "source_changed"
+        if cached_entry.get("extractor_version") != self.EXTRACTOR_VERSION:
+            return "extractor_version_changed"
+        if cached_entry.get("prompt_version") != self.PROMPT_VERSION:
+            return "prompt_version_changed"
+        if cached_entry.get("technical_analysis_version") != self.TECHNICAL_ANALYSIS_VERSION:
+            return "technical_analysis_version_changed"
+        return "fresh"
+
+    @staticmethod
+    def _source_hash(source_code: str) -> str:
+        digest = hashlib.sha256((source_code or "").encode("utf-8", errors="ignore")).hexdigest()
+        return f"sha256:{digest}"
+
+    def _extract_file_from_stored_chunks(
+        self,
+        *,
+        run_id: str,
+        project_file,
+        source_profile: Any,
+        source_hash: str,
+        extractor: AgenticBusinessLogicExtractor,
+        dependency_context: str,
+        glossary_context: str,
+    ) -> dict[str, Any]:
+        chunks = self._load_or_create_chunks_for_file(
+            run_id=run_id,
+            file_id=project_file.id,
+            file_name=project_file.filename or project_file.filepath or "",
+            source_code=source_profile.source_code,
+            language=source_profile.detected_language,
+        )
+        diagnostics = chunk_diagnostics(chunks)
+        print(f"Existing chunks found: {len(chunks)} for run={run_id} file={project_file.id}")
+        print("Reusing stored FileChunk records")
+        for item in diagnostics:
+            print(
+                "BL chunk file={file_id} index={chunk_index} primary={primary_start_line}-{primary_end_line} "
+                "total_lines={total_lines} overlap_lines={overlap_lines} chars={chars} units={semantic_units}".format(
+                    file_id=project_file.id,
+                    **item,
+                )
+            )
+
+        chunk_results: list[dict[str, Any]] = []
+        stored_chunks = len(chunks)
+        request_batches = 0
+        llm_chunks = 0
+        fallback_chunks = 0
+        failed_chunks = 0
+        overlap_lines = 0
+
+        for chunk in chunks:
+            chunk_source = self._normalized_chunk_source(build_chunk_source(chunk))
+            overlap_lines += len((chunk_source.overlap_source or "").splitlines())
+            chunk_yaml = self._load_technical_yaml_for_chunk(run_id, chunk)
+            if not chunk_yaml.strip():
+                chunk_profile = self.preprocessor.prepare(
+                    chunk_source.primary_source,
+                    file_name=project_file.filename or project_file.filepath or "",
+                    detected_language=source_profile.detected_language,
+                )
+                chunk_yaml = self.preprocessor.to_technical_yaml(chunk_profile)
+
+            batches = self._request_batches_for_chunk(
+                chunk_source=chunk_source,
+                technical_yaml=chunk_yaml,
+                dependency_context=dependency_context,
+                glossary_context=glossary_context,
+            )
+
+            for batch in batches:
+                request_batches += 1
+                print(
+                    f"Chunk {batch.chunk_index}/{stored_chunks} primary lines "
+                    f"{batch.primary_start_line}-{batch.primary_end_line} "
+                    f"overlap {len((batch.overlap_source or '').splitlines())}"
+                )
+                formatted_source = format_chunk_for_prompt(batch)
+                chunk_profile = self.preprocessor.prepare(
+                    batch.primary_source,
+                    file_name=project_file.filename or project_file.filepath or "",
+                    detected_language=source_profile.detected_language,
+                )
+                context = self._build_business_file_context(
+                    project_file=project_file,
+                    technical_yaml=self._chunk_prompt_yaml(
+                        chunk_yaml=chunk_yaml,
+                        batch=batch,
+                        source_profile=source_profile,
+                    ),
+                    source_code=formatted_source,
+                    dependency_context=dependency_context,
+                    glossary_context=glossary_context,
+                    source_profile=chunk_profile,
+                )
+                context.artifact_type = source_profile.artifact_type
+                context.file_role = source_profile.file_role
+                context.source_character_count = source_profile.source_character_count
+                context.primary_start_line = batch.primary_start_line
+                context.primary_end_line = batch.primary_end_line
+                context.semantic_units = batch.semantic_units
+
+                try:
+                    chunk_result = extractor.extract_chunk(
+                        context,
+                        chunk_index=batch.chunk_index,
+                        total_chunks=request_batches,
+                        primary_start_line=batch.primary_start_line,
+                        primary_end_line=batch.primary_end_line,
+                        semantic_units=batch.semantic_units,
+                    )
+                    accepted_rules, rejected_rules = self.quality_service.filter_rules_for_primary_range(
+                        chunk_result.get("business_rules") or [],
+                        batch.primary_start_line,
+                        batch.primary_end_line,
+                    )
+                    chunk_result["business_rules"] = accepted_rules
+                    chunk_result["warnings"] = rejected_rules
+                    chunk_result["status"] = "COMPLETED"
+                    if chunk_result.get("llm_called"):
+                        llm_chunks += 1
+                    if chunk_result.get("fallback_used"):
+                        fallback_chunks += 1
+                    self._write_chunk_result(run_id, project_file.id, batch.chunk_index, chunk_result)
+                    chunk_results.append(chunk_result)
+                except Exception as exc:
+                    failed_chunks += 1
+                    failed = {
+                        "chunk_index": batch.chunk_index,
+                        "primary_start_line": batch.primary_start_line,
+                        "primary_end_line": batch.primary_end_line,
+                        "semantic_units": batch.semantic_units,
+                        "status": "FAILED",
+                        "error": str(exc),
+                        "business_rules": [],
+                        "warnings": [{"reason": "chunk_failed", "rule_text": str(exc)}],
+                    }
+                    self._write_chunk_result(run_id, project_file.id, batch.chunk_index, failed)
+                    chunk_results.append(failed)
+
+        successful_results = [item for item in chunk_results if item.get("status") == "COMPLETED"]
+        file_metadata = {
+            "file_id": project_file.id,
+            "file_name": project_file.filename,
+            "detected_language": source_profile.detected_language,
+            "artifact_type": source_profile.artifact_type,
+            "file_role": source_profile.file_role,
+            "major_paragraphs": [getattr(paragraph, "name", "") for paragraph in source_profile.paragraphs[:20]],
+        }
+        final_result = self.reconciler.reconcile(successful_results, file_metadata)
+        final_rules, rejected_final = self.quality_service.filter_rules(final_result.get("business_rules") or [])
+        final_result["business_rules"] = final_rules
+        final_result.setdefault("unresolved_items", [])
+        final_result["unresolved_items"].extend(
+            {
+                "item": item.get("rule_text", ""),
+                "reason": item.get("reason", "final_quality_rejected"),
+                "technical_reference": project_file.filename,
+            }
+            for item in rejected_final
+        )
+
+        completed_chunks = len(successful_results)
+        analysis_coverage = round(completed_chunks / request_batches, 4) if request_batches else 0.0
+        processing_mode = "chunked_hybrid" if fallback_chunks else "chunked_llm"
+        if llm_chunks == 0 and fallback_chunks:
+            processing_mode = "chunked_deterministic"
+        quality_status = "PASSED" if failed_chunks == 0 else "PARTIAL"
+        chunk_execution = {
+            "processing_mode": processing_mode,
+            "stored_chunks": stored_chunks,
+            "request_batches": request_batches,
+            "completed_chunks": completed_chunks,
+            "llm_chunks": llm_chunks,
+            "fallback_chunks": fallback_chunks,
+            "failed_chunks": failed_chunks,
+            "overlap_lines": overlap_lines,
+            "analysis_coverage": analysis_coverage,
+            "quality_status": quality_status,
+            "diagnostics": diagnostics,
+        }
+
+        final_result.update(
+            {
+                "file_id": project_file.id,
+                "file_name": project_file.filename,
+                "detected_language": source_profile.detected_language,
+                "artifact_type": source_profile.artifact_type,
+                "file_role": source_profile.file_role,
+                "selected_agent": self._selected_agent_from_results(successful_results),
+                "agent_name": self._selected_agent_from_results(successful_results),
+                "agent_key": next((item.get("agent_key") for item in successful_results if item.get("agent_key")), ""),
+                "extraction_mode": processing_mode,
+                "processing_mode": processing_mode,
+                "llm_called": llm_chunks > 0,
+                "fallback_used": fallback_chunks > 0,
+                "fallback_reason": self._fallback_reason(successful_results),
+                "model": self._model_from_results(successful_results),
+                "source_character_count": source_profile.source_character_count,
+                "source_hash": source_hash,
+                "extractor_version": self.EXTRACTOR_VERSION,
+                "prompt_version": self.PROMPT_VERSION,
+                "technical_analysis_version": self.TECHNICAL_ANALYSIS_VERSION,
+                "technical_yaml": self._manifest_technical_yaml(chunk_execution),
+                "coverage": {
+                    "paragraphs_total": len(source_profile.paragraphs or []),
+                    "paragraphs_analyzed": len(source_profile.paragraphs or []),
+                    "paragraphs_with_rules": len({
+                        str(rule.get("paragraph") or "").upper()
+                        for rule in final_rules
+                        if rule.get("paragraph")
+                    }),
+                    "paragraphs_without_business_rules": max(
+                        0,
+                        len(source_profile.paragraphs or [])
+                        - len({
+                            str(rule.get("paragraph") or "").upper()
+                            for rule in final_rules
+                            if rule.get("paragraph")
+                        }),
+                    ),
+                    "source_coverage": analysis_coverage,
+                },
+                "chunk_execution": chunk_execution,
+            }
+        )
+
+        self._write_chunk_manifest(
+            run_id=run_id,
+            file_id=project_file.id,
+            manifest={
+                "run_id": run_id,
+                "file_id": project_file.id,
+                "file_name": project_file.filename,
+                "source_hash": source_hash,
+                "extractor_version": self.EXTRACTOR_VERSION,
+                "prompt_version": self.PROMPT_VERSION,
+                "technical_analysis_version": self.TECHNICAL_ANALYSIS_VERSION,
+                **chunk_execution,
+            },
+        )
+        print("Chunk reconciliation completed")
+        print("Final quality gate passed" if quality_status == "PASSED" else "Final quality gate partial")
+        return final_result
+
+    def _load_or_create_chunks_for_file(
+        self,
+        run_id: str,
+        file_id: int,
+        file_name: str,
+        source_code: str,
+        language: str,
+    ) -> list[FileChunk]:
+        chunks = (
+            self.db.query(FileChunk)
+            .filter_by(run_id=run_id, file_id=file_id)
+            .order_by(FileChunk.chunk_index)
+            .all()
+        )
+
+        if chunks:
+            return chunks
+
+        print(f"No FileChunk rows found for run={run_id} file={file_id}; creating them once.")
+        orchestrator = ChunkingOrchestrator(self.db)
+        orchestrator.process_file_pipeline(
+            run_id=run_id,
+            file_id=file_id,
+            filename=file_name,
+            content=source_code,
+            lang=language,
+        )
+
+        return (
+            self.db.query(FileChunk)
+            .filter_by(run_id=run_id, file_id=file_id)
+            .order_by(FileChunk.chunk_index)
+            .all()
+        )
+
+    def _request_batches_for_chunk(
+        self,
+        *,
+        chunk_source: BusinessLogicChunkSource,
+        technical_yaml: str,
+        dependency_context: str,
+        glossary_context: str,
+    ) -> list[BusinessLogicChunkSource]:
+        if self._fits_business_logic_prompt(
+            source_text=format_chunk_for_prompt(chunk_source),
+            technical_yaml=technical_yaml,
+            dependency_context=dependency_context,
+            glossary_context=glossary_context,
+            max_input_tokens=self.max_input_tokens,
+        ):
+            return [chunk_source]
+
+        fixed_chars = len("\n".join([technical_yaml or "", dependency_context or "", glossary_context or ""]))
+        max_primary_chars = max(1200, (self.max_input_tokens * 3) - fixed_chars - len(chunk_source.overlap_source or "") - 1200)
+        return split_chunk_source_for_prompt_budget(chunk_source, max_primary_chars=max_primary_chars)
+
+    @staticmethod
+    def _fits_business_logic_prompt(
+        source_text: str,
+        technical_yaml: str,
+        dependency_context: str,
+        glossary_context: str,
+        max_input_tokens: int,
+    ) -> bool:
+        combined = "\n".join(
+            [
+                source_text or "",
+                technical_yaml or "",
+                dependency_context or "",
+                glossary_context or "",
+            ]
+        )
+        estimated_tokens = max(1, len(combined) // 3)
+        return estimated_tokens <= max_input_tokens
+
+    def _normalized_chunk_source(self, chunk_source: BusinessLogicChunkSource) -> BusinessLogicChunkSource:
+        overlap_source = self.preprocessor.normalize_source(chunk_source.overlap_source)[0] if chunk_source.overlap_source else ""
+        primary_source = self.preprocessor.normalize_source(chunk_source.primary_source)[0] if chunk_source.primary_source else ""
+        return BusinessLogicChunkSource(
+            chunk_index=chunk_source.chunk_index,
+            primary_start_line=chunk_source.primary_start_line,
+            primary_end_line=chunk_source.primary_end_line,
+            overlap_start_line=chunk_source.overlap_start_line,
+            overlap_end_line=chunk_source.overlap_end_line,
+            overlap_source=overlap_source,
+            primary_source=primary_source,
+            semantic_units=chunk_source.semantic_units,
+            request_index=chunk_source.request_index,
+            parent_chunk_index=chunk_source.parent_chunk_index,
+        )
+
+    def _load_technical_yaml_for_chunk(self, run_id: str, chunk: FileChunk) -> str:
+        analysis = (
+            self.db.query(ChunkAnalysis)
+            .filter(
+                ChunkAnalysis.run_id == run_id,
+                ChunkAnalysis.chunk_id == chunk.id,
+            )
+            .first()
+        )
+        return str(getattr(analysis, "technical_yaml", "") or "") if analysis else ""
+
+    @staticmethod
+    def _chunk_prompt_yaml(
+        *,
+        chunk_yaml: str,
+        batch: BusinessLogicChunkSource,
+        source_profile: Any,
+    ) -> str:
+        semantic_units = ", ".join(batch.semantic_units) if batch.semantic_units else "file:FILE"
+        return (
+            f"file_role: {getattr(source_profile, 'file_role', 'unknown')}\n"
+            f"artifact_type: {getattr(source_profile, 'artifact_type', 'unknown')}\n"
+            f"chunk: {batch.chunk_index}\n"
+            f"primary_start_line: {batch.primary_start_line}\n"
+            f"primary_end_line: {batch.primary_end_line}\n"
+            f"semantic_units: {semantic_units}\n"
+            f"{chunk_yaml or ''}"
+        )
+
+    def _write_chunk_result(
+        self,
+        run_id: str,
+        file_id: int | str,
+        chunk_index: int | str,
+        payload: dict[str, Any],
+    ) -> None:
+        path = self._chunk_result_dir(run_id, file_id) / f"{self._chunk_file_name(chunk_index)}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    def _write_chunk_manifest(
+        self,
+        run_id: str,
+        file_id: int | str,
+        manifest: dict[str, Any],
+    ) -> None:
+        path = self._business_logic_file_dir(run_id, file_id) / "manifest.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    def _clear_business_logic_chunk_outputs(self, run_id: str, file_id: int | str) -> None:
+        root = self._business_logic_file_dir(run_id, file_id)
+        if not root.exists():
+            return
+        for path in sorted(root.rglob("*"), reverse=True):
+            if path.is_file():
+                path.unlink()
+            elif path.is_dir():
+                try:
+                    path.rmdir()
+                except OSError:
+                    pass
+        try:
+            root.rmdir()
+        except OSError:
+            pass
+
+    def _business_logic_file_dir(self, run_id: str, file_id: int | str) -> Path:
+        backend_root = Path(__file__).resolve().parents[1]
+        return backend_root / "output" / "business_logic" / run_id / str(file_id)
+
+    def _chunk_result_dir(self, run_id: str, file_id: int | str) -> Path:
+        return self._business_logic_file_dir(run_id, file_id) / "chunks"
+
+    @staticmethod
+    def _chunk_file_name(chunk_index: int | str) -> str:
+        text = str(chunk_index)
+        if text.isdigit():
+            return f"{int(text):03d}"
+        return text.replace(".", "_")
+
+    @staticmethod
+    def _selected_agent_from_results(results: list[dict[str, Any]]) -> str:
+        return next(
+            (
+                item.get("selected_agent") or item.get("agent_name")
+                for item in results
+                if item.get("selected_agent") or item.get("agent_name")
+            ),
+            "GenericBusinessLogicAgent",
+        )
+
+    @staticmethod
+    def _model_from_results(results: list[dict[str, Any]]) -> str:
+        return next((item.get("model") for item in results if item.get("model")), "")
+
+    @staticmethod
+    def _fallback_reason(results: list[dict[str, Any]]) -> str:
+        reasons = [
+            str(item.get("fallback_reason") or "").strip()
+            for item in results
+            if item.get("fallback_used") and str(item.get("fallback_reason") or "").strip()
+        ]
+        return "; ".join(dict.fromkeys(reasons))
+
+    @staticmethod
+    def _manifest_technical_yaml(chunk_execution: dict[str, Any]) -> str:
+        return "business_logic_chunk_execution:\n" + "\n".join(
+            f"  {key}: {value}"
+            for key, value in chunk_execution.items()
+            if key != "diagnostics"
+        )
 
     def _persist_agentic_business_logic_result(
         self,
@@ -319,7 +838,33 @@ class LogicExtractionProcess:
 
             self.db.add(rule)
 
-        self.db.commit()
+        self.db.flush()
+
+    def _replace_business_rules_for_file(
+        self,
+        run_id: str,
+        project_file,
+        result: dict,
+    ) -> None:
+        file_id = getattr(project_file, "id", None)
+        try:
+            (
+                self.db.query(BusinessRule)
+                .filter(
+                    BusinessRule.run_id == run_id,
+                    BusinessRule.file_id == file_id,
+                )
+                .delete(synchronize_session=False)
+            )
+            self._persist_agentic_business_logic_result(
+                run_id=run_id,
+                project_file=project_file,
+                result=result,
+            )
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
 
     def _build_business_file_context(
         self,
@@ -328,6 +873,7 @@ class LogicExtractionProcess:
         source_code: str,
         dependency_context: str = "",
         glossary_context: str = "",
+        source_profile: Any | None = None,
     ) -> BusinessLogicFileContext:
         detected_language = (
             getattr(project_file, "detected_language", None)
@@ -335,6 +881,8 @@ class LogicExtractionProcess:
             or getattr(project_file, "language", None)
             or "unknown"
         )
+        if source_profile is not None:
+            detected_language = getattr(source_profile, "detected_language", detected_language)
 
         file_name = (
             getattr(project_file, "filename", None)
@@ -351,6 +899,11 @@ class LogicExtractionProcess:
             technical_yaml=technical_yaml or "",
             dependency_context=dependency_context or "",
             glossary_context=glossary_context or "",
+            artifact_type=getattr(source_profile, "artifact_type", "") if source_profile is not None else "",
+            file_role=getattr(source_profile, "file_role", "") if source_profile is not None else "",
+            source_character_count=getattr(source_profile, "source_character_count", 0) if source_profile is not None else len(source_code or ""),
+            line_map=getattr(source_profile, "line_map", None) if source_profile is not None else None,
+            paragraphs=getattr(source_profile, "paragraphs", None) if source_profile is not None else None,
         )
 
     def _build_agentic_extractor(self, project) -> AgenticBusinessLogicExtractor:
@@ -707,10 +1260,8 @@ class LogicExtractionProcess:
         return bool(detected and detected != "unknown")
 
     def _generate_local_yaml_from_source(self, source_code: str | None) -> str:
-        class _SourceChunk:
-            content = source_code or ""
-
-        return self._generate_local_yaml(_SourceChunk())
+        profile = self.preprocessor.prepare(source_code or "")
+        return self.preprocessor.to_technical_yaml(profile)
 
     def _is_logic_candidate(self, content: str | None) -> bool:
         return bool(content and self.LOGIC_RE.search(content))

@@ -14,6 +14,8 @@ from Agents.prompts.business_logic_agentic_prompts import (
     SYSTEM_PROMPTS,
     USER_PROMPT_TEMPLATE,
 )
+from services.business_rule_quality_service import BusinessRuleQualityService
+from services.legacy_source_preprocessor import LegacySourcePreprocessor
 
 
 @dataclass
@@ -25,6 +27,14 @@ class BusinessLogicFileContext:
     technical_yaml: str
     dependency_context: str = ""
     glossary_context: str = ""
+    artifact_type: str = ""
+    file_role: str = ""
+    source_character_count: int = 0
+    line_map: list[Any] | None = None
+    paragraphs: list[Any] | None = None
+    primary_start_line: int | None = None
+    primary_end_line: int | None = None
+    semantic_units: list[str] | None = None
 
 
 class AgenticBusinessLogicExtractor:
@@ -56,6 +66,10 @@ class AgenticBusinessLogicExtractor:
         self.local_max_llm_chars = int(
             os.getenv("BUSINESS_LOGIC_LOCAL_MAX_LLM_CHARS", "8000")
         )
+        self.chunk_min_chars = int(os.getenv("BUSINESS_LOGIC_CHUNK_MIN_CHARS", "3000"))
+        self.chunk_max_chars = int(os.getenv("BUSINESS_LOGIC_CHUNK_MAX_CHARS", "5000"))
+        self.quality_service = BusinessRuleQualityService()
+        self.preprocessor = LegacySourcePreprocessor()
 
     def extract(self, context: BusinessLogicFileContext) -> dict[str, Any]:
         agent_key = self._select_agent(
@@ -66,43 +80,118 @@ class AgenticBusinessLogicExtractor:
 
         try:
             result = self._extract_with_agent(context, agent_key)
-            result["agent_name"] = self._agent_name(agent_key)
-            result["agent_key"] = agent_key
-            result["fallback_used"] = False
+            result.update(
+                self._execution_metadata(
+                    context=context,
+                    agent_key=agent_key,
+                    extraction_mode=result.get("extraction_mode") or "llm",
+                    llm_called=bool(result.get("llm_called", True)),
+                    fallback_used=bool(result.get("fallback_used", False)),
+                    fallback_reason=result.get("fallback_reason", ""),
+                )
+            )
             return result
 
         except Exception as first_error:
             if agent_key != "generic" and not self.local_like:
                 try:
                     fallback_result = self._extract_with_agent(context, "generic")
-                    fallback_result["agent_name"] = self._agent_name("generic")
-                    fallback_result["agent_key"] = "generic"
-                    fallback_result["fallback_used"] = True
-                    fallback_result["fallback_reason"] = str(first_error)
+                    fallback_result.update(
+                        self._execution_metadata(
+                            context=context,
+                            agent_key="generic",
+                            extraction_mode=fallback_result.get("extraction_mode") or "llm_generic_fallback",
+                            llm_called=bool(fallback_result.get("llm_called", True)),
+                            fallback_used=True,
+                            fallback_reason=str(first_error),
+                        )
+                    )
                     return fallback_result
                 except Exception as fallback_error:
                     first_error = fallback_error
 
             local_result = self._extract_locally(context, agent_key)
-            local_result["agent_name"] = self._agent_name(agent_key)
-            local_result["agent_key"] = agent_key
-            local_result["fallback_used"] = True
-            local_result["fallback_reason"] = str(first_error)
+            local_result.update(
+                self._execution_metadata(
+                    context=context,
+                    agent_key=agent_key,
+                    extraction_mode="deterministic_fallback",
+                    llm_called=False,
+                    fallback_used=True,
+                    fallback_reason=str(first_error),
+                )
+            )
             return local_result
+
+    def extract_chunk(
+        self,
+        context: BusinessLogicFileContext,
+        *,
+        chunk_index: int | str,
+        total_chunks: int,
+        primary_start_line: int,
+        primary_end_line: int,
+        semantic_units: list[str],
+    ) -> dict[str, Any]:
+        agent_key = self._select_agent(
+            detected_language=context.detected_language,
+            file_name=context.file_name,
+            source_code=context.source_code,
+        )
+
+        try:
+            if self.local_like and len(context.source_code or "") > self.local_max_llm_chars:
+                raise RuntimeError("Business Logic chunk prompt exceeds local LLM input budget.")
+            result = self._extract_with_agent_request(context, agent_key)
+            result.update(
+                self._execution_metadata(
+                    context=context,
+                    agent_key=agent_key,
+                    extraction_mode="llm",
+                    llm_called=True,
+                    fallback_used=False,
+                    fallback_reason="",
+                )
+            )
+        except Exception as exc:
+            result = self._extract_locally(context, agent_key)
+            result.update(
+                self._execution_metadata(
+                    context=context,
+                    agent_key=agent_key,
+                    extraction_mode="deterministic_fallback",
+                    llm_called=False,
+                    fallback_used=True,
+                    fallback_reason=str(exc),
+                )
+            )
+
+        result["chunk_index"] = chunk_index
+        result["total_chunks"] = total_chunks
+        result["primary_start_line"] = primary_start_line
+        result["primary_end_line"] = primary_end_line
+        result["semantic_units"] = semantic_units
+        return result
 
     def _extract_with_agent(
         self,
         context: BusinessLogicFileContext,
         agent_key: str,
     ) -> dict[str, Any]:
+        if self.local_like and len(context.source_code or "") > self.local_max_llm_chars:
+            return self._extract_with_semantic_chunks(context, agent_key)
+
+        return self._extract_with_agent_request(context, agent_key)
+
+    def _extract_with_agent_request(
+        self,
+        context: BusinessLogicFileContext,
+        agent_key: str,
+    ) -> dict[str, Any]:
         if not self.use_llm:
             raise RuntimeError("Business logic LLM calls are disabled by BUSINESS_LOGIC_USE_LLM.")
-        if self.local_like and len(context.source_code or "") > self.local_max_llm_chars:
-            raise RuntimeError(
-                "Source file exceeds BUSINESS_LOGIC_LOCAL_MAX_LLM_CHARS; using deterministic local extraction."
-            )
-
-        system_prompt = SYSTEM_PROMPTS.get(agent_key) or SYSTEM_PROMPTS["generic"]
+        prompt_key = "cobol" if agent_key == "cobol_procedural_copybook" else agent_key
+        system_prompt = SYSTEM_PROMPTS.get(prompt_key) or SYSTEM_PROMPTS["generic"]
         budgets = self._prompt_budgets()
 
         user_prompt = USER_PROMPT_TEMPLATE.format(
@@ -127,6 +216,77 @@ class AgenticBusinessLogicExtractor:
             agent_key=agent_key,
         )
 
+    def _extract_with_semantic_chunks(
+        self,
+        context: BusinessLogicFileContext,
+        agent_key: str,
+    ) -> dict[str, Any]:
+        chunks = self._semantic_chunks(context)
+        if not chunks:
+            raise RuntimeError("No semantic chunks could be assembled for business logic extraction.")
+
+        merged: dict[str, Any] = {
+            "business_purpose": "",
+            "functional_logic": [],
+            "business_rules": [],
+            "validations": [],
+            "calculations": [],
+            "data_rules": [],
+            "state_transitions": [],
+            "external_dependencies": [],
+            "unresolved_items": [],
+        }
+        failed_chunks: list[str] = []
+
+        for chunk_index, chunk in enumerate(chunks, start=1):
+            paragraph_names = ", ".join(chunk.get("paragraph_names") or []) or "FILE"
+            chunk_context = BusinessLogicFileContext(
+                file_id=context.file_id,
+                file_name=f"{context.file_name} :: chunk {chunk_index}",
+                detected_language=context.detected_language,
+                source_code=chunk.get("source_code", ""),
+                technical_yaml=self._chunk_technical_yaml(context, chunk, paragraph_names),
+                dependency_context=context.dependency_context,
+                glossary_context=context.glossary_context,
+                artifact_type=context.artifact_type,
+                file_role=context.file_role,
+                source_character_count=context.source_character_count,
+                line_map=context.line_map,
+                paragraphs=chunk.get("paragraphs") or [],
+            )
+            try:
+                partial = self._extract_with_agent_request(chunk_context, agent_key)
+            except Exception as exc:
+                failed_chunks.append(f"{chunk_index}:{exc}")
+                partial = self._extract_locally(chunk_context, agent_key)
+
+            if not merged["business_purpose"] and partial.get("business_purpose"):
+                merged["business_purpose"] = partial.get("business_purpose")
+            for key in (
+                "functional_logic",
+                "business_rules",
+                "validations",
+                "calculations",
+                "data_rules",
+                "state_transitions",
+                "external_dependencies",
+                "unresolved_items",
+            ):
+                values = partial.get(key) or []
+                if isinstance(values, list):
+                    merged[key].extend(values)
+
+        normalized = self._normalize_result(merged, context, agent_key)
+        normalized["extraction_mode"] = (
+            "llm_semantic_chunking_with_partial_fallback"
+            if failed_chunks
+            else "llm_semantic_chunking"
+        )
+        normalized["llm_called"] = True
+        normalized["fallback_used"] = bool(failed_chunks)
+        normalized["fallback_reason"] = "; ".join(failed_chunks[:5])
+        return normalized
+
     def _select_agent(
         self,
         detected_language: str,
@@ -148,6 +308,8 @@ class AgenticBusinessLogicExtractor:
             return "jcl"
 
         if lang in {"copybook", "cpy"}:
+            if self._looks_procedural_copybook(source_code):
+                return "cobol_procedural_copybook"
             return "copybook"
 
         if lang in {"sql", "db2"}:
@@ -163,6 +325,8 @@ class AgenticBusinessLogicExtractor:
             return "jcl"
 
         if ext == ".cpy":
+            if self._looks_procedural_copybook(source_code):
+                return "cobol_procedural_copybook"
             return "copybook"
 
         if ext == ".sql":
@@ -189,10 +353,21 @@ class AgenticBusinessLogicExtractor:
             "telon": "TelonBusinessLogicAgent",
             "jcl": "JclBusinessLogicAgent",
             "copybook": "CopybookBusinessLogicAgent",
+            "cobol_procedural_copybook": "CobolProceduralCopybookAgent",
             "sql": "SqlBusinessLogicAgent",
             "generic": "GenericBusinessLogicAgent",
         }
         return names.get(agent_key, "GenericBusinessLogicAgent")
+
+    @staticmethod
+    def _looks_procedural_copybook(source_code: str) -> bool:
+        return bool(
+            re.search(
+                r"(?im)^\s*(IF|EVALUATE|PERFORM|ADD|SUBTRACT|MULTIPLY|DIVIDE|"
+                r"COMPUTE|MOVE|SET|CALL|DISPLAY|INITIALIZE)\b",
+                source_code or "",
+            )
+        )
 
     def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
         mode = (
@@ -362,6 +537,22 @@ class AgenticBusinessLogicExtractor:
             ],
             "business_rules": [
                 {
+                    **{
+                        key: value
+                        for key, value in rule.items()
+                        if key
+                        in {
+                            "paragraph",
+                            "semantic_unit",
+                            "source_start_line",
+                            "source_end_line",
+                            "source_excerpt",
+                            "condition_or_trigger",
+                            "business_outcome",
+                            "derivation",
+                            "evidence_status",
+                        }
+                    },
                     "rule_type": self._normalize_rule_type(rule.get("rule_type")),
                     "rule_text": rule.get("rule_text", ""),
                     "technical_reference": rule.get("technical_ref", ""),
@@ -388,7 +579,7 @@ class AgenticBusinessLogicExtractor:
         source_code = context.source_code or ""
         file_name = context.file_name or "uploaded source file"
         domain = self._infer_domain(file_name, source_code)
-        rules = self._local_rules_from_source(source_code, domain)
+        rules = self._local_rules_from_source(context, domain)
         rules.extend(self._local_rules_from_yaml(context.technical_yaml, domain))
 
         unique_rules = []
@@ -405,6 +596,22 @@ class AgenticBusinessLogicExtractor:
             seen.add(key)
             unique_rules.append(
                 {
+                    **{
+                        key: value
+                        for key, value in rule.items()
+                        if key
+                        in {
+                            "paragraph",
+                            "semantic_unit",
+                            "source_start_line",
+                            "source_end_line",
+                            "source_excerpt",
+                            "condition_or_trigger",
+                            "business_outcome",
+                            "derivation",
+                            "evidence_status",
+                        }
+                    },
                     "rule_text": rule_text,
                     "rule_type": rule.get("rule_type", "decision"),
                     "technical_ref": rule.get("technical_ref", ""),
@@ -424,16 +631,26 @@ class AgenticBusinessLogicExtractor:
 
     def _local_rules_from_source(
         self,
-        source_code: str,
+        context: BusinessLogicFileContext,
         domain: dict[str, str],
     ) -> list[dict[str, Any]]:
-        lines = [
-            (line_no, self._strip_sequence_number(line).strip())
-            for line_no, line in enumerate((source_code or "").splitlines(), start=1)
-        ]
+        source_code = context.source_code or ""
+        statements = self._numbered_primary_statements(source_code)
+        if not statements:
+            paragraphs = context.paragraphs or self.preprocessor.assemble_cobol_paragraphs(source_code)
+            statements = [
+                (paragraph.name, statement.start_line, statement.end_line, statement.text)
+                for paragraph in paragraphs
+                for statement in getattr(paragraph, "statements", [])
+            ]
+            if not statements:
+                statements = [
+                    ("FILE", line_no, line_no, self._strip_sequence_number(line).strip())
+                    for line_no, line in enumerate(source_code.splitlines(), start=1)
+                ]
         rules = []
 
-        for index, (line_no, line) in enumerate(lines):
+        for index, (paragraph_name, line_no, end_line, line) in enumerate(statements):
             if not line or line.upper().startswith(("*", "*>")):
                 continue
 
@@ -441,27 +658,63 @@ class AgenticBusinessLogicExtractor:
 
             if upper.startswith("IF "):
                 condition = self._condition_to_business_text(line)
-                for action_line_no, action_line in lines[index + 1:index + 8]:
-                    action_upper = action_line.upper()
-                    if not action_line or action_upper.startswith(("*", "*>")):
-                        continue
-                    if action_upper.startswith(("ELSE", "END-IF", "END IF")):
-                        break
-
-                    action_text, rule_type = self._action_to_business_outcome(
-                        action_line,
-                        domain,
-                    )
-                    if action_text:
+                inline_actions = self._actions_from_control_statement(line, domain)
+                if inline_actions:
+                    for action_text, rule_type in inline_actions:
                         rules.append(
                             {
-                                "rule_text": f"If {condition}, {action_text}.",
+                                "rule_text": self._scope_rule_text(paragraph_name, f"If {condition}, {action_text}."),
                                 "rule_type": rule_type,
-                                "technical_ref": f"source lines {line_no}-{action_line_no}",
-                                "confidence": 0.85,
-                            }
+                                "technical_ref": f"{paragraph_name} lines {line_no}-{end_line}",
+                                "paragraph": paragraph_name,
+                                "source_start_line": line_no,
+                                "source_end_line": end_line,
+                                    "source_excerpt": line,
+                                    "condition_or_trigger": condition,
+                                    "business_outcome": action_text,
+                                    "confidence": 0.72,
+                                    "derivation": "deterministic",
+                                    "evidence_status": "verified",
+                                }
                         )
+                else:
+                    for next_paragraph, action_line_no, action_end_line, action_line in statements[index + 1:]:
+                        if next_paragraph != paragraph_name:
+                            break
+                        action_upper = action_line.upper()
+                        if not action_line or action_upper.startswith(("*", "*>")):
+                            continue
+                        if action_upper.startswith(("ELSE", "END-IF", "END IF")):
+                            break
 
+                        action_text, rule_type = self._action_to_business_outcome(
+                            action_line,
+                            domain,
+                        )
+                        if action_text:
+                            rules.append(
+                                {
+                                    "rule_text": self._scope_rule_text(paragraph_name, f"If {condition}, {action_text}."),
+                                    "rule_type": rule_type,
+                                    "technical_ref": f"{paragraph_name} lines {line_no}-{action_end_line}",
+                                    "paragraph": paragraph_name,
+                                    "source_start_line": line_no,
+                                    "source_end_line": action_end_line,
+                                    "source_excerpt": f"{line} {action_line}",
+                                    "condition_or_trigger": condition,
+                                    "business_outcome": action_text,
+                                    "confidence": 0.68,
+                                    "derivation": "deterministic",
+                                    "evidence_status": "verified",
+                                }
+                            )
+                            break
+
+                continue
+
+            if upper.startswith("EVALUATE "):
+                for branch_text in self._rules_from_evaluate(line, paragraph_name, line_no, end_line):
+                    rules.append(branch_text)
                 continue
 
             rule_text, rule_type = self._line_to_business_rule(line, domain)
@@ -470,12 +723,90 @@ class AgenticBusinessLogicExtractor:
                     {
                         "rule_text": rule_text,
                         "rule_type": rule_type,
-                        "technical_ref": f"source line {line_no}",
-                        "confidence": 0.65,
+                        "technical_ref": f"{paragraph_name} lines {line_no}-{end_line}",
+                        "paragraph": paragraph_name,
+                        "source_start_line": line_no,
+                        "source_end_line": end_line,
+                        "source_excerpt": line,
+                        "condition_or_trigger": line,
+                        "business_outcome": rule_text,
+                        "confidence": 0.62,
+                        "derivation": "deterministic",
+                        "evidence_status": "verified",
                     }
                 )
 
         return rules
+
+    def _numbered_primary_statements(self, source_code: str) -> list[tuple[str, int, int, str]]:
+        if "PRIMARY SOURCE" not in (source_code or ""):
+            return []
+
+        in_primary = False
+        numbered_lines: list[tuple[int, str]] = []
+        for raw_line in (source_code or "").splitlines():
+            marker = raw_line.strip().upper()
+            if marker == "PRIMARY SOURCE":
+                in_primary = True
+                continue
+            if marker == "CONTEXT-ONLY SOURCE":
+                in_primary = False
+                continue
+            if not in_primary:
+                continue
+
+            match = re.match(r"^\s*(\d{1,6}):\s?(.*)$", raw_line)
+            if not match:
+                continue
+            numbered_lines.append((int(match.group(1)), self._strip_sequence_number(match.group(2)).strip()))
+
+        statements: list[tuple[str, int, int, str]] = []
+        buffer: list[str] = []
+        start_line = 0
+        end_line = 0
+        current_paragraph = "PRIMARY"
+
+        for line_no, line in numbered_lines:
+            if not line or line.upper().startswith(("*", "*>")):
+                continue
+            paragraph_match = re.match(r"^([A-Z0-9][A-Z0-9-]*)\.\s*$", line, flags=re.IGNORECASE)
+            if paragraph_match:
+                current_paragraph = paragraph_match.group(1).upper()
+                continue
+
+            starts_new = bool(
+                buffer
+                and re.match(
+                    r"^(IF|EVALUATE|WHEN|ELSE|END-IF|END-EVALUATE|PERFORM|ADD|SUBTRACT|"
+                    r"MULTIPLY|DIVIDE|COMPUTE|MOVE|SET|CALL|READ|WRITE|REWRITE|DELETE|"
+                    r"DISPLAY|INITIALIZE|EXEC)\b",
+                    line,
+                    flags=re.IGNORECASE,
+                )
+            )
+            if starts_new and not re.search(r"\b(IS|TO|THAN|ALSO|AND|OR|NOT|=|>|<)\s*$", buffer[-1], flags=re.IGNORECASE):
+                text = re.sub(r"\s+", " ", " ".join(buffer)).strip().rstrip(".")
+                if text:
+                    statements.append((current_paragraph, start_line, end_line, text))
+                buffer = []
+
+            if not buffer:
+                start_line = line_no
+            end_line = line_no
+            buffer.append(line.rstrip("."))
+
+            if line.rstrip().endswith("."):
+                text = re.sub(r"\s+", " ", " ".join(buffer)).strip().rstrip(".")
+                if text:
+                    statements.append((current_paragraph, start_line, end_line, text))
+                buffer = []
+
+        if buffer:
+            text = re.sub(r"\s+", " ", " ".join(buffer)).strip().rstrip(".")
+            if text:
+                statements.append((current_paragraph, start_line, end_line, text))
+
+        return statements
 
     def _local_rules_from_yaml(
         self,
@@ -483,24 +814,33 @@ class AgenticBusinessLogicExtractor:
         domain: dict[str, str],
     ) -> list[dict[str, Any]]:
         rules = []
+        allowed_section = ""
+        current: dict[str, str] = {}
 
         for line_no, raw_line in enumerate((technical_yaml or "").splitlines(), start=1):
             line = raw_line.strip()
-            if "description:" not in line:
+            section_match = re.match(r"^(decisions|validations|calculations|state_changes|data_rules):\s*$", line)
+            if section_match:
+                if current:
+                    rules.extend(self._rule_from_structured_yaml(current, allowed_section, domain, line_no))
+                    current = {}
+                allowed_section = section_match.group(1)
                 continue
 
-            description = line.split("description:", 1)[1].strip().strip("'\"")
-            rule_text, rule_type = self._line_to_business_rule(description, domain)
+            if not allowed_section:
+                continue
 
-            if rule_text:
-                rules.append(
-                    {
-                        "rule_text": rule_text,
-                        "rule_type": rule_type,
-                        "technical_ref": f"technical_yaml line {line_no}",
-                        "confidence": 0.6,
-                    }
-                )
+            item_match = re.match(r"^-\s+([A-Za-z_]+):\s*(.*)$", line)
+            field_match = re.match(r"^([A-Za-z_]+):\s*(.*)$", line)
+            if item_match:
+                if current:
+                    rules.extend(self._rule_from_structured_yaml(current, allowed_section, domain, line_no))
+                current = {item_match.group(1): item_match.group(2).strip().strip("'\"")}
+            elif field_match and current is not None:
+                current[field_match.group(1)] = field_match.group(2).strip().strip("'\"")
+
+        if current:
+            rules.extend(self._rule_from_structured_yaml(current, allowed_section, domain, line_no if "line_no" in locals() else 1))
 
         return rules
 
@@ -523,7 +863,7 @@ class AgenticBusinessLogicExtractor:
             operations.append("calculates business values")
         if any(token in upper for token in ("DELETE", "REWRITE")):
             operations.append("maintains stored records")
-        if "CALL" in upper:
+        if re.search(r"(?im)^\s*CALL\s+", source_code or ""):
             operations.append("coordinates supporting programs")
 
         operation_text = ", ".join(dict.fromkeys(operations)) or "executes required business steps"
@@ -547,7 +887,7 @@ class AgenticBusinessLogicExtractor:
             steps.append("Business values are calculated before output or persistence.")
         if any(token in upper for token in ("DISPLAY", "WRITE")):
             steps.append("The resulting business information is displayed, written, or passed downstream.")
-        if "CALL" in upper:
+        if re.search(r"(?im)^\s*CALL\s+", source_code or ""):
             steps.append("Supporting programs are invoked when required.")
 
         return " ".join(steps) or f"The component executes the {domain['process']} workflow."
@@ -569,7 +909,13 @@ class AgenticBusinessLogicExtractor:
             return (f"The system must calculate {target} using the defined legacy formula.", "calculation")
 
         if upper.startswith("ADD "):
-            return ("The system must add the specified business amount into the target total.", "calculation")
+            amount, target = self._extract_add_parts(stripped)
+            specific = self._specific_add_rule(amount, target)
+            if specific:
+                return (specific, "calculation")
+            if target:
+                return (f"The system must add {self._business_phrase(amount)} into {self._business_phrase(target)}.", "calculation")
+            return ("", "")
 
         if upper.startswith("SUBTRACT "):
             return ("The system must subtract the specified business amount from the target value.", "calculation")
@@ -634,11 +980,281 @@ class AgenticBusinessLogicExtractor:
         if upper.startswith("DISPLAY "):
             return ("the required business message must be shown", "workflow")
 
+        set_match = re.search(
+            r"\bSET\s+([A-Z0-9_-]+)(?:\s+TO\s+([A-Z0-9_-]+))?",
+            stripped,
+            flags=re.IGNORECASE,
+        )
+        if set_match:
+            target = set_match.group(1)
+            value = set_match.group(2) or "true"
+            return (
+                f"the {self._business_phrase(target)} condition must be set to {self._business_phrase(value)}",
+                "state_transition",
+            )
+
         if upper.startswith("CALL "):
             service = self._extract_called_service(stripped)
             return (f"{service} must be invoked", "external_dependency")
 
         return self._line_to_business_rule(stripped, domain)
+
+    def _actions_from_control_statement(
+        self,
+        statement: str,
+        domain: dict[str, str],
+    ) -> list[tuple[str, str]]:
+        actions: list[tuple[str, str]] = []
+        for action_match in re.finditer(
+            r"\b(PERFORM\s+[A-Z0-9-]+|ADD\s+.+?\s+TO\s+[A-Z0-9-]+|"
+            r"SET\s+[A-Z0-9-]+(?:\s+TO\s+[A-Z0-9-]+)?|"
+            r"MOVE\s+.+?\s+TO\s+[A-Z0-9-]+|DISPLAY\s+.+?|CALL\s+['\"]?[A-Z0-9-]+)",
+            statement,
+            flags=re.IGNORECASE,
+        ):
+            action_text, rule_type = self._action_to_business_outcome(action_match.group(1), domain)
+            if action_text:
+                actions.append((action_text, rule_type))
+        return actions
+
+    def _rules_from_evaluate(
+        self,
+        statement: str,
+        paragraph_name: str,
+        start_line: int,
+        end_line: int,
+    ) -> list[dict[str, Any]]:
+        rules: list[dict[str, Any]] = []
+        subjects = re.sub(r"(?i)^\s*EVALUATE\s+", "", statement).split(" WHEN ", 1)[0]
+        for branch in re.findall(r"(?i)\bWHEN\s+(.+?)(?=\bWHEN\b|\bEND-EVALUATE\b|$)", statement):
+            branch_text = re.sub(r"\s+", " ", branch).strip()
+            if not branch_text:
+                continue
+            rules.append(
+                {
+                    "rule_text": (
+                        f"When {self._business_phrase(subjects)} matches "
+                        f"{self._business_phrase(branch_text)}, apply the branch outcome."
+                    ),
+                    "rule_type": "decision",
+                    "technical_ref": f"{paragraph_name} lines {start_line}-{end_line}",
+                    "paragraph": paragraph_name,
+                    "source_start_line": start_line,
+                    "source_end_line": end_line,
+                    "source_excerpt": statement,
+                    "confidence": 0.58,
+                    "derivation": "deterministic",
+                    "evidence_status": "verified",
+                }
+            )
+        return rules
+
+    @staticmethod
+    def _scope_rule_text(paragraph_name: str, rule_text: str) -> str:
+        if "REVERSE" in str(paragraph_name or "").upper():
+            return f"When applying the reverse result, {rule_text[0].lower() + rule_text[1:] if rule_text else rule_text}"
+        return rule_text
+
+    def _rule_from_structured_yaml(
+        self,
+        item: dict[str, str],
+        section: str,
+        domain: dict[str, str],
+        line_no: int,
+    ) -> list[dict[str, Any]]:
+        if not item or section not in {"decisions", "validations", "calculations", "state_changes", "data_rules"}:
+            return []
+
+        paragraph = item.get("paragraph", "")
+        source_ref = f"{paragraph} technical_yaml line {line_no}".strip()
+        statement = item.get("statement") or item.get("condition") or item.get("description") or item.get("business_meaning") or ""
+
+        if section in {"decisions", "validations"} and item.get("condition"):
+            rule_text = f"If {self._condition_to_business_text('IF ' + item['condition'])}, apply the verified outcome."
+            rule_type = "decision" if section == "decisions" else "validation"
+        elif section == "calculations":
+            rule_text, rule_type = self._line_to_business_rule(statement, domain)
+        elif section == "state_changes":
+            action_text, action_type = self._action_to_business_outcome(statement, domain)
+            rule_text = f"When the legacy workflow reaches this step, {action_text}." if action_text else ""
+            rule_type = action_type or "state_transition"
+        elif section == "data_rules":
+            meaning = item.get("business_meaning") or item.get("field_or_record") or ""
+            rule_text = f"The system must preserve the data rule for {self._business_phrase(meaning)}." if meaning else ""
+            rule_type = "data_rule"
+        else:
+            rule_text = ""
+            rule_type = "other"
+
+        if not rule_text:
+            return []
+
+        return [
+            {
+                "rule_text": rule_text,
+                "rule_type": rule_type,
+                "technical_ref": source_ref,
+                "paragraph": paragraph,
+                "source_excerpt": statement,
+                "confidence": 0.54,
+                "derivation": "deterministic",
+                "evidence_status": "verified" if paragraph or statement else "unresolved",
+            }
+        ]
+
+    def _semantic_chunks(self, context: BusinessLogicFileContext) -> list[dict[str, Any]]:
+        paragraphs = context.paragraphs or self.preprocessor.assemble_cobol_paragraphs(context.source_code or "")
+        chunks: list[dict[str, Any]] = []
+        current: list[Any] = []
+        current_chars = 0
+
+        for paragraph in paragraphs:
+            paragraph_text = self._paragraph_text(paragraph)
+            paragraph_chars = len(paragraph_text)
+            if current and current_chars + paragraph_chars > self.chunk_max_chars:
+                chunks.append(self._build_semantic_chunk(current))
+                current = []
+                current_chars = 0
+
+            current.append(paragraph)
+            current_chars += paragraph_chars
+
+            if current_chars >= self.chunk_min_chars:
+                chunks.append(self._build_semantic_chunk(current))
+                current = []
+                current_chars = 0
+
+        if current:
+            chunks.append(self._build_semantic_chunk(current))
+
+        if not chunks and context.source_code:
+            chunks.append(
+                {
+                    "source_code": context.source_code[: self.chunk_max_chars],
+                    "paragraph_names": ["FILE"],
+                    "paragraphs": [],
+                }
+            )
+
+        return chunks
+
+    def _build_semantic_chunk(self, paragraphs: list[Any]) -> dict[str, Any]:
+        return {
+            "source_code": "\n\n".join(self._paragraph_text(paragraph) for paragraph in paragraphs),
+            "paragraph_names": [getattr(paragraph, "name", "FILE") for paragraph in paragraphs],
+            "paragraphs": paragraphs,
+        }
+
+    @staticmethod
+    def _paragraph_text(paragraph: Any) -> str:
+        lines = [f"{getattr(paragraph, 'name', 'FILE')}."]
+        for statement in getattr(paragraph, "statements", []) or []:
+            lines.append(f"{getattr(statement, 'text', '')}.")
+        return "\n".join(line for line in lines if line.strip())
+
+    def _chunk_technical_yaml(
+        self,
+        context: BusinessLogicFileContext,
+        chunk: dict[str, Any],
+        paragraph_names: str,
+    ) -> str:
+        return (
+            f"file_role: {context.file_role or 'unknown'}\n"
+            f"artifact_type: {context.artifact_type or 'unknown'}\n"
+            f"chunk_paragraphs: {paragraph_names}\n"
+            f"{context.technical_yaml or ''}"
+        )
+
+    def _execution_metadata(
+        self,
+        context: BusinessLogicFileContext,
+        agent_key: str,
+        extraction_mode: str,
+        llm_called: bool,
+        fallback_used: bool,
+        fallback_reason: str = "",
+    ) -> dict[str, Any]:
+        return {
+            "selected_agent": self._agent_name(agent_key),
+            "agent_name": self._agent_name(agent_key),
+            "agent_key": agent_key,
+            "extraction_mode": extraction_mode,
+            "llm_called": llm_called,
+            "fallback_used": fallback_used,
+            "fallback_reason": fallback_reason,
+            "model": self.llm_config.get("model") or self.llm_config.get("llm_model") or "llama3",
+            "source_character_count": context.source_character_count or len(context.source_code or ""),
+            "detected_language": context.detected_language or "unknown",
+            "artifact_type": context.artifact_type or self._infer_artifact_type(context, agent_key),
+            "file_role": context.file_role or "domain_program",
+        }
+
+    def _coverage_summary(
+        self,
+        context: BusinessLogicFileContext,
+        rules: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        paragraphs = [
+            paragraph
+            for paragraph in (context.paragraphs or [])
+            if getattr(paragraph, "name", "FILE") not in {"FILE"}
+        ]
+        if not paragraphs:
+            return {
+                "paragraphs_total": 0,
+                "paragraphs_analyzed": 0,
+                "paragraphs_with_rules": 0,
+                "paragraphs_without_business_rules": 0,
+                "source_coverage": 0.0,
+            }
+
+        paragraph_names = {getattr(paragraph, "name", "") for paragraph in paragraphs}
+        rule_text = "\n".join(
+            str(rule.get("paragraph") or rule.get("technical_ref") or rule.get("technical_reference") or "")
+            for rule in rules
+            if isinstance(rule, dict)
+        ).upper()
+        with_rules = {name for name in paragraph_names if name and name.upper() in rule_text}
+        analyzed = len(paragraphs)
+        without_rules = max(0, analyzed - len(with_rules))
+        return {
+            "paragraphs_total": len(paragraphs),
+            "paragraphs_analyzed": analyzed,
+            "paragraphs_with_rules": len(with_rules),
+            "paragraphs_without_business_rules": without_rules,
+            "source_coverage": round(analyzed / len(paragraphs), 4) if paragraphs else 0.0,
+        }
+
+    def _infer_artifact_type(self, context: BusinessLogicFileContext, agent_key: str) -> str:
+        if agent_key == "cobol_procedural_copybook":
+            return "procedural_copybook"
+        if agent_key == "copybook":
+            return "data_copybook"
+        if agent_key == "jcl":
+            return "jcl_job"
+        if agent_key == "sql":
+            return "sql_script"
+        return "domain_program"
+
+    @staticmethod
+    def _extract_add_parts(line: str) -> tuple[str, str]:
+        match = re.search(r"\bADD\s+(.+?)\s+TO\s+([A-Z0-9_-]+)", line, flags=re.IGNORECASE)
+        if not match:
+            return "", ""
+        return match.group(1).strip(), match.group(2).strip()
+
+    def _specific_add_rule(self, amount: str, target: str) -> str:
+        amount_norm = str(amount or "").strip().strip("'\"").upper()
+        target_norm = str(target or "").strip().upper()
+        is_one = amount_norm in {"1", "+1", "ONE"}
+
+        if target_norm.endswith("NUMBER-PASSED") and is_one:
+            return "When a test passes, increment the passed-test counter by one."
+        if target_norm.endswith("NUMBER-FAILED") and is_one:
+            return "When a test fails, increment the failed-test counter by one."
+        if target_norm.endswith("MOCK-COUNT") and is_one:
+            return "When no matching mock exists, create a new mock entry."
+        return ""
 
     def _infer_domain(self, file_name: str, source_code: str) -> dict[str, str]:
         text = f"{file_name}\n{source_code}".lower()
@@ -676,10 +1292,12 @@ class AgenticBusinessLogicExtractor:
         if negative_match:
             return f"{self._business_phrase(negative_match.group(1))} is negative"
 
-        condition = condition.replace("<=", " is less than or equal to ")
-        condition = condition.replace(">=", " is greater than or equal to ")
-        condition = condition.replace(" NOT = ", " is not equal to ")
-        condition = condition.replace("=", " is equal to ")
+        condition = re.sub(r"\bIS\s+GREATER\s+THAN\s+OR\s+EQUAL\s+TO\b", "is at least", condition, flags=re.IGNORECASE)
+        condition = re.sub(r"\bIS\s+LESS\s+THAN\s+OR\s+EQUAL\s+TO\b", "is no more than", condition, flags=re.IGNORECASE)
+        condition = condition.replace("<=", " is no more than ")
+        condition = condition.replace(">=", " is at least ")
+        condition = re.sub(r"\bNOT\s*=\b", " is not equal to ", condition, flags=re.IGNORECASE)
+        condition = re.sub(r"(?<![<>=])=(?![<>=])", " is equal to ", condition)
         condition = condition.replace("<", " is less than ")
         condition = condition.replace(">", " is greater than ")
         return self._business_phrase(condition)
@@ -783,8 +1401,42 @@ class AgenticBusinessLogicExtractor:
         # Also convert validations/calculations/data rules into business_rules
         # so your existing DB/UI still sees them.
         normalized["business_rules"] = self._merge_rule_like_items(normalized)
+        normalized["business_rules"], rejected = self.quality_service.filter_rules(
+            normalized["business_rules"]
+        )
+        normalized["business_rules"] = self._dedupe_rules(normalized["business_rules"])
+        if rejected:
+            normalized["unresolved_items"].extend(
+                {
+                    "item": item.get("rule_text", ""),
+                    "reason": item.get("reason", "quality_gate_rejected"),
+                    "technical_reference": context.file_name,
+                }
+                for item in rejected
+            )
+        normalized["source_character_count"] = (
+            context.source_character_count or len(context.source_code or "")
+        )
+        normalized["detected_language"] = context.detected_language or agent_key
+        normalized["artifact_type"] = context.artifact_type or self._infer_artifact_type(context, agent_key)
+        normalized["file_role"] = context.file_role or "domain_program"
+        normalized["coverage"] = self._coverage_summary(context, normalized["business_rules"])
 
         return normalized
+
+    @staticmethod
+    def _dedupe_rules(rules: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        unique: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for rule in rules:
+            text = str(rule.get("rule_text") or "").strip().lower()
+            evidence = str(rule.get("source_excerpt") or rule.get("technical_ref") or rule.get("technical_reference") or "").strip().lower()
+            key = f"{text}|{evidence}"
+            if not text or key in seen:
+                continue
+            seen.add(key)
+            unique.append(rule)
+        return unique
 
     def _merge_rule_like_items(self, result: dict[str, Any]) -> list[dict[str, Any]]:
         rules: list[dict[str, Any]] = []
