@@ -63,6 +63,8 @@ export interface ScopeStatusResponse {
   status: string;
   current_stage: string;
   completed_stages: string[];
+  pending_stages?: string[];
+  skipped_completed_stages?: string[];
   blocked_stages: string[];
   estimated_total_tokens?: number;
   static_token_range?: string;
@@ -236,6 +238,21 @@ export interface ProjectSummary {
   language_counts?: Record<string, number>;
 }
 
+const normalizeProjectSummary = (project: any): ProjectSummary => ({
+  ...project,
+  run_id: String(project?.run_id || ''),
+  name: project?.name || project?.project_name || project?.run_id || 'Untitled Project',
+  status: project?.status === 'Project Initialized' ? 'CONFIGURING' : (project?.status || 'CONFIGURING'),
+  files_count: Number(project?.files_count || 0),
+  file_status_counts: project?.file_status_counts || {},
+  language_counts: project?.language_counts || {},
+});
+
+const normalizeProjectList = (payload: any): ProjectSummary[] => {
+  const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.projects) ? payload.projects : [];
+  return rows.filter((project) => project && project.run_id).map(normalizeProjectSummary);
+};
+
 const getDefaultApiBaseUrl = () => {
   if (typeof window === 'undefined') {
     return 'http://localhost:8000';
@@ -294,15 +311,16 @@ export const LLMHealthAPI = {
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
+config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 }, (error) => Promise.reject(error));
 
 export const ProjectAPI = {
-  create: async (config: ProjectConfig): Promise<{ run_id: string; name: string; status: string }> => {
+  create: async (config: ProjectConfig): Promise<ProjectSummary> => {
     const response = await api.post('/projects', config);
-    return response.data;
+    return normalizeProjectSummary(response.data);
   },
 
   getConfig: async (runId: string): Promise<ProjectConfig> => {
@@ -337,9 +355,19 @@ export const ProjectAPI = {
     return response.data;
   },
 
+  runPendingScopeStages: async (runId: string, scope: string) => {
+    const formData = new FormData();
+    formData.append('run_id', runId);
+    formData.append('scope', scope);
+    const response = await api.post('/discovery/launch', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
   list: async (): Promise<ProjectSummary[]> => {
     const response = await api.get('/projects');
-    return response.data;
+    return normalizeProjectList(response.data);
   },
 
   getDashboardStatus: async (runId: string): Promise<DashboardStatus> => {
@@ -353,7 +381,7 @@ export const ProjectAPI = {
   },
   get: async (runId: string): Promise<ProjectSummary> => {
     const response = await api.get(`/projects/${runId}`);
-    return response.data;
+    return normalizeProjectSummary(response.data);
   },
 
   delete: async (runId: string) => {
@@ -448,6 +476,11 @@ export const ProjectAPI = {
 
   getBusinessRules: async (runId: string) => {
     const response = await api.get(`/business-rules/${runId}`);
+    return response.data;
+  },
+
+  getBusinessExtractionStatus: async (runId: string) => {
+    const response = await api.get(`/business-rules/${runId}/extraction-status`);
     return response.data;
   },
 

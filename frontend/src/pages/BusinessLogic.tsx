@@ -82,6 +82,32 @@ interface BusinessRule {
   business_rules_count?: number;
 }
 
+interface BusinessExtractionStatus {
+  run_id: string;
+  status: 'NOT_STARTED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | string;
+  stage?: string;
+  progress?: number;
+  total_files?: number;
+  completed_files?: number;
+  cached_files?: number;
+  stale_files?: number;
+  failed_files?: number;
+  processed_files?: number;
+  current_file_id?: number | string;
+  current_file_name?: string;
+  current_file_index?: number;
+  stored_chunks?: number;
+  request_batches?: number;
+  completed_batches?: number;
+  current_batch_index?: number;
+  current_chunk_index?: number | string;
+  primary_start_line?: number;
+  primary_end_line?: number;
+  semantic_units?: string[];
+  force?: boolean;
+  error?: string;
+}
+
 const cleanMarkdownText = (value?: string | null, fallback = 'Not available.') => {
   const text = (value || '').trim();
   return text || fallback;
@@ -220,6 +246,7 @@ const BusinessLogic = () => {
   const [editingRuleId, setEditingRuleId] = useState<number | null>(null);
   const [ruleDrafts, setRuleDrafts] = useState<Record<number, string>>({});
   const [progress, setProgress] = useState(0);
+  const [extractionStatus, setExtractionStatus] = useState<BusinessExtractionStatus | null>(null);
   const [extractionNotice, setExtractionNotice] = useState<string | null>(null);
 
   const applyRules = (nextRules: BusinessRule[]) => {
@@ -252,10 +279,17 @@ const BusinessLogic = () => {
       setProgress(15);
       setLoading(true);
       try {
-        const existingRules = await ProjectAPI.getBusinessRules(runId);
-        await ProjectAPI.listProceduralFlows(runId).catch(() => null);
+        const [existingRules, status] = await Promise.all([
+          ProjectAPI.getBusinessRules(runId),
+          ProjectAPI.getBusinessExtractionStatus(runId).catch(() => null),
+          ProjectAPI.listProceduralFlows(runId).catch(() => null),
+        ]);
         if (cancelled) return;
 
+        if (status) {
+          setExtractionStatus(status);
+          setProgress(typeof status.progress === 'number' ? status.progress : existingRules.length > 0 ? 100 : 0);
+        }
         applyRules(existingRules);
         if (existingRules.length === 0) setExtractionNotice('No stored business rules yet. Use Extract to create them.');
       } catch (e) {
@@ -277,25 +311,55 @@ const BusinessLogic = () => {
   }, [runId]);
 
   useEffect(() => {
-    if (!loading && !autoExtracting) return;
-    const timer = window.setInterval(() => {
-      setProgress((current) => Math.min(92, current + 3));
-    }, 900);
-    return () => window.clearInterval(timer);
-  }, [loading, autoExtracting]);
+    if (!runId || !autoExtracting) return;
+
+    let cancelled = false;
+
+    const pollStatus = async () => {
+      try {
+        const status = await ProjectAPI.getBusinessExtractionStatus(runId);
+        if (cancelled) return;
+        setExtractionStatus(status);
+        if (typeof status.progress === 'number') {
+          setProgress(status.progress);
+        }
+      } catch {
+        // Keep the extraction request alive even if one status poll misses.
+      }
+    };
+
+    void pollStatus();
+    const timer = window.setInterval(pollStatus, 1200);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [runId, autoExtracting]);
 
   const handleExtract = async (force = false) => {
     if (!runId) return;
     if (force && !window.confirm('Regenerate business logic and replace the saved rules for this run?')) return;
 
-    setProgress(10);
+    setProgress(1);
+    setExtractionStatus({
+      run_id: runId,
+      status: 'RUNNING',
+      stage: force ? 'Starting business logic regeneration...' : 'Starting business logic extraction...',
+      progress: 1,
+      force,
+    });
     setLoading(true);
     setAutoExtracting(true);
     try {
       setExtractionNotice(null);
-      setProgress(55);
       const extractedRules = await ProjectAPI.extractBusinessRules(runId, force);
-      setProgress(85);
+      const finalStatus = await ProjectAPI.getBusinessExtractionStatus(runId).catch(() => null);
+      if (finalStatus) {
+        setExtractionStatus(finalStatus);
+        setProgress(typeof finalStatus.progress === 'number' ? finalStatus.progress : 100);
+      } else {
+        setProgress(100);
+      }
       applyRules(extractedRules);
       if (extractedRules.length > 0) {
         toast.success(force ? 'Business logic regenerated.' : 'Business logic loaded or extracted.');
@@ -378,6 +442,27 @@ const BusinessLogic = () => {
   const currentFileRules = selectedFile ? files[selectedFile] || [] : [];
   const fileMetadata = currentFileRules[0] || null;
   const canApproveBaseline = rules.length > 0 && !loading && !autoExtracting;
+  const backendProgress = typeof extractionStatus?.progress === 'number' ? extractionStatus.progress : progress;
+  const progressTitle = autoExtracting
+    ? 'Extracting business logic'
+    : loading
+      ? 'Loading saved rules'
+      : extractionStatus?.status === 'COMPLETED'
+        ? 'Business logic ready'
+        : 'Business logic status';
+  const progressStage = extractionStatus?.stage || (
+    autoExtracting ? 'Waiting for backend extraction status...' : loading ? 'Loading saved rules from backend...' : 'Saved output is loaded.'
+  );
+  const progressCounts = extractionStatus
+    ? `${extractionStatus.processed_files ?? 0}/${extractionStatus.total_files ?? 0} files processed`
+    : '';
+  const currentBatchLabel = extractionStatus?.request_batches
+    ? `Batch ${extractionStatus.completed_batches ?? 0}/${extractionStatus.request_batches}`
+    : '';
+  const currentLineLabel = extractionStatus?.primary_start_line && extractionStatus?.primary_end_line
+    ? `Lines ${extractionStatus.primary_start_line}-${extractionStatus.primary_end_line}`
+    : '';
+  const showProgressPanel = loading || autoExtracting || backendProgress > 0;
 
   const handleDownloadBusinessRules = () => {
     if (rules.length === 0) {
@@ -453,14 +538,32 @@ const BusinessLogic = () => {
         </div>
       </header>
 
-      {(loading || autoExtracting || progress > 0) && (
+      {showProgressPanel && (
         <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-          <div className="mb-2 flex items-center justify-between text-xs font-bold uppercase text-slate-500">
-            <span>{autoExtracting ? 'Extracting business logic' : loading ? 'Loading saved rules' : 'Business logic ready'}</span>
-            <span className="font-mono text-indigo-300">{progress}%</span>
+          <div className="mb-2 flex items-center justify-between gap-4 text-xs font-bold uppercase text-slate-500">
+            <span>{progressTitle}</span>
+            <span className="font-mono text-indigo-300">{backendProgress}%</span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-slate-800">
-            <div className="h-full rounded-full bg-indigo-500 transition-all duration-500" style={{ width: `${progress}%` }} />
+            <div className="h-full rounded-full bg-indigo-500 transition-all duration-500" style={{ width: `${backendProgress}%` }} />
+          </div>
+          <div className="mt-3 grid gap-2 text-xs text-slate-400 lg:grid-cols-3">
+            <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
+              <p className="mb-1 font-bold uppercase tracking-wide text-slate-500">Backend Stage</p>
+              <p className="text-slate-200">{progressStage}</p>
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
+              <p className="mb-1 font-bold uppercase tracking-wide text-slate-500">Current File</p>
+              <p className="break-all text-slate-200">
+                {extractionStatus?.current_file_name || 'Waiting for backend...'}
+              </p>
+              {progressCounts && <p className="mt-1 font-mono text-[11px] text-indigo-300">{progressCounts}</p>}
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
+              <p className="mb-1 font-bold uppercase tracking-wide text-slate-500">Chunk Progress</p>
+              <p className="text-slate-200">{currentBatchLabel || 'No active chunk batch'}</p>
+              {currentLineLabel && <p className="mt-1 font-mono text-[11px] text-indigo-300">{currentLineLabel}</p>}
+            </div>
           </div>
         </div>
       )}
@@ -548,68 +651,7 @@ const BusinessLogic = () => {
                       Source: {fileMetadata.detected_language || 'Unknown'}
                     </p>
                   </div>
-                  <div className="mt-5 grid grid-cols-2 gap-3 text-xs text-slate-300 xl:grid-cols-4">
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Language</p>
-                      <p className="mt-1 truncate font-mono text-slate-200">{humanizeToken(fileMetadata.detected_language)}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Artifact</p>
-                      <p className="mt-1 truncate font-mono text-slate-200">{humanizeToken(fileMetadata.artifact_type)}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-                      <p className="text-[10px] uppercase tracking-wide text-slate-500">File Role</p>
-                      <p className="mt-1 truncate font-mono text-slate-200">{humanizeToken(fileMetadata.file_role)}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Selected Agent</p>
-                      <p className="mt-1 truncate font-mono text-indigo-300">{fileMetadata.selected_agent || fileMetadata.agent_name || fileMetadata.agent_key || 'Unknown'}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Processing Mode</p>
-                      <p className="mt-1 truncate font-mono text-slate-200">{humanizeToken(fileMetadata.processing_mode || fileMetadata.extraction_mode)}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Stored Chunks</p>
-                      <p className="mt-1 font-mono text-slate-200">{chunkValue(fileMetadata, 'stored_chunks')}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-                      <p className="text-[10px] uppercase tracking-wide text-slate-500">LLM Chunks</p>
-                      <p className="mt-1 font-mono text-slate-200">{chunkValue(fileMetadata, 'llm_chunks')}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Fallback Chunks</p>
-                      <p className="mt-1 font-mono text-slate-200">{chunkValue(fileMetadata, 'fallback_chunks')}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Overlap</p>
-                      <p className="mt-1 font-mono text-slate-200">{chunkValue(fileMetadata, 'overlap_lines')} lines</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Analysis Coverage</p>
-                      <p className="mt-1 font-mono text-slate-200">{numericPercent(Number(chunkValue(fileMetadata, 'analysis_coverage')))}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Quality</p>
-                      <p className="mt-1 truncate font-mono text-slate-200">{humanizeToken(String(chunkValue(fileMetadata, 'quality_status') || fileMetadata.quality_status || 'Unknown'))}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Rules Count</p>
-                      <p className="mt-1 font-mono text-slate-200">{fileMetadata.business_rules_count || currentFileRules.length}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 xl:col-span-2">
-                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Fallback Reason</p>
-                      <p className="mt-1 truncate font-mono text-slate-200" title={fileMetadata.fallback_reason || 'None'}>{fileMetadata.fallback_reason || 'None'}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Model</p>
-                      <p className="mt-1 truncate font-mono text-slate-200">{fileMetadata.model || 'Unknown'}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Source Chars</p>
-                      <p className="mt-1 font-mono text-slate-200">{fileMetadata.source_character_count || 'Unknown'}</p>
-                    </div>
-                  </div>
+                
                 </div>
 
                 {/* Scrollable content */}

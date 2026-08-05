@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import requests
@@ -220,6 +221,9 @@ def _openrouter_error_message(response: requests.Response) -> str:
 
 
 def validate_cloud_chat_config(config: dict):
+    if str(os.getenv("BUSINESS_LOGIC_USE_LLM", "true")).lower() in {"0", "false", "no", "off"}:
+        return
+
     mode = (config.get("mode") or config.get("provider") or "local").lower()
     if mode not in {"openrouter", "api", "custom", "cloud"}:
         return
@@ -279,6 +283,9 @@ def validate_cloud_chat_config(config: dict):
 
 
 def validate_local_chat_config(config: dict):
+    if str(os.getenv("BUSINESS_LOGIC_USE_LLM", "true")).lower() in {"0", "false", "no", "off"}:
+        return
+
     mode = (config.get("mode") or config.get("provider") or "local").lower()
     if mode not in {"local", "ollama", "lmstudio", "lm-studio"}:
         return
@@ -436,6 +443,14 @@ async def get_rules(run_id: str, db: Session = Depends(get_db)):
     )
 
     return serialize_rules(db, rules, run_id)
+
+
+@router.get("/{run_id}/extraction-status")
+async def get_extraction_status(run_id: str, db: Session = Depends(get_db)):
+    project = db.query(Project).filter_by(run_id=run_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return LogicExtractionProcess.extraction_status_for_run(run_id)
 
 
 @router.post("/{run_id}/procedural-flow/extract")

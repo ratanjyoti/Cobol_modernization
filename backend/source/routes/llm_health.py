@@ -1,4 +1,6 @@
 import time
+from urllib.parse import urlparse, urlunparse
+
 import httpx
 from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict
@@ -29,6 +31,25 @@ class LocalLLMCheckResponse(BaseModel):
 
 def openai_base_url(base_url: str) -> str:
     return base_url if base_url.endswith("/v1") else f"{base_url}/v1"
+
+
+def localhost_variant(base_url: str) -> str | None:
+    parsed = urlparse(base_url)
+    if parsed.scheme not in {"http", "https"}:
+        return None
+
+    host = parsed.hostname or ""
+    is_private_ip = (
+        host.startswith("10.")
+        or host.startswith("192.168.")
+        or host.startswith("172.")
+    )
+    if not is_private_ip:
+        return None
+
+    port = f":{parsed.port}" if parsed.port else ""
+    netloc = f"127.0.0.1{port}"
+    return urlunparse((parsed.scheme, netloc, parsed.path, "", "", ""))
 
 
 def parse_openai_output(data: dict) -> str:
@@ -241,7 +262,7 @@ async def check_local_llm(payload: LocalLLMCheckRequest):
         )
 
     started = time.perf_counter()
-    timeout = httpx.Timeout(connect=4.0, read=45.0, write=8.0, pool=4.0)
+    timeout = httpx.Timeout(connect=5.0, read=90.0, write=10.0, pool=5.0)
     errors: list[str] = []
 
     try:
@@ -277,6 +298,33 @@ async def check_local_llm(payload: LocalLLMCheckRequest):
             error_detail="\n".join(errors + [str(exc)]),
         )
     except httpx.TimeoutException as exc:
+        fallback_base_url = localhost_variant(base_url)
+        if fallback_base_url and provider in {"auto", "openai-compatible"}:
+            try:
+                async with httpx.AsyncClient(timeout=timeout) as fallback_client:
+                    fallback_result = await check_openai_compatible(
+                        fallback_client,
+                        model,
+                        fallback_base_url,
+                        time.perf_counter(),
+                    )
+                if fallback_result.ok:
+                    fallback_result.status = "STALE_LOCAL_ENDPOINT"
+                    fallback_result.message = (
+                        "The configured local endpoint timed out, but the same model works on "
+                        f"{fallback_base_url}. Use that endpoint URL in Local Server Config."
+                    )
+                    fallback_result.error_detail = (
+                        f"Configured endpoint failed: {base_url}\n"
+                        f"Working endpoint: {fallback_base_url}\n"
+                        f"Original timeout: {exc}"
+                    )
+                    return fallback_result
+            except Exception as fallback_exc:
+                errors.append(
+                    f"Localhost fallback failed: {type(fallback_exc).__name__}: {str(fallback_exc)[:300]}"
+                )
+
         return LocalLLMCheckResponse(
             ok=False,
             provider=provider,

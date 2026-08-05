@@ -21,6 +21,7 @@ init_db()
 
 # Import the routers from your routes folder
 from source.routes import project, discovery, business_rule_routes, llm_health
+from source.routes.mission_control import router as mission_control_router
 from source.routes.prompt_routes import router as prompt_router
 from source.routes.code_generation_routes import router as code_generation_router
 
@@ -57,6 +58,14 @@ def get_allowed_origins():
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_allowed_origins(),
+    allow_origin_regex=(
+        r"https?://("
+        r"localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|"
+        r"10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|"
+        r"172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2}|"
+        r"[^/:]+"
+        r"):(3000|5173|8010)"
+    ),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -77,6 +86,7 @@ app.include_router(business_rule_routes.router)
 app.include_router(llm_health.router)
 app.include_router(prompt_router)
 app.include_router(code_generation_router)
+app.include_router(mission_control_router)
 
 # ==============================================================================
 # 3. GLOBAL ERROR HANDLING
@@ -176,6 +186,5 @@ async def confirm_rule(rule_id: int, data: dict, db: Session = Depends(get_db)):
 
 if __name__ == "__main__":
     import uvicorn
-    # Run the server on localhost:8000
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8010, reload=True)
 

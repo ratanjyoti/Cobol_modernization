@@ -15,6 +15,10 @@ export const NAV_METADATA = {
     title: 'Business Logic',
     description: 'The Translation Phase. We turn complex technical COBOL code into plain English "Business Rules" so you can verify the logic without needing to read the legacy code.'
   },
+  '/program-flow': {
+    title: 'Program Flow',
+    description: 'The Execution Map. Review entry points, branches, loops, data movement, calls, and exit paths extracted from the legacy source.'
+  },
   '/dashboard': {
     title: 'Migration Plan',
     description: 'The Blueprint. We map out how the legacy COBOL paragraphs will be reorganized into modern Java or C# classes and methods before any code is generated.'

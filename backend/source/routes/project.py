@@ -18,6 +18,7 @@ from Persistence.sqlite.project_repo import ProjectRepository
 from Persistence.sqlite.session import SessionLocal, get_db
 from paths import UPLOADS_DIR
 from services.migration_scope_service import MigrationScopeService
+from source.routes.mission_control import append_event
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 SERVICE_HEALTH_CACHE: dict[str, dict] = {}
@@ -178,12 +179,17 @@ def serialize_project_summary(project, files_count: int, file_status_counts: dic
         "language_counts": language_counts,
     }
 def serialize_file(project_file):
+    detected_lang = str(project_file.detected_lang or "").strip().lower()
+    has_detected_language = bool(detected_lang and detected_lang != "unknown")
+    stored_status = project_file.status.value if project_file.status else None
+    effective_status = "CONFIRMED" if stored_status == "CONFIRMED" or has_detected_language else stored_status
     return {
         "id": str(project_file.id),
         "filename": project_file.filename,
         "filepath": project_file.filepath,
         "detected_lang": project_file.detected_lang,
-        "status": project_file.status.value if project_file.status else None,
+        "status": effective_status,
+        "is_valid": effective_status == "CONFIRMED",
         "size": 0,
     }
 
@@ -584,6 +590,12 @@ async def create_project(config: dict, background_tasks: BackgroundTasks, db: Se
     result = process.create_new_project(config, user_id=1)
     if result.get("run_id"):
         background_tasks.add_task(refresh_service_health_cache, result["run_id"])
+        append_event(
+            f"Created project {result['run_id']}",
+            "info",
+            project_id=result["run_id"],
+            details={"name": result.get("name")},
+        )
     return result
 
 
@@ -605,6 +617,7 @@ async def delete_run(run_id: str, db: Session = Depends(get_db)):
     clear_neo4j_run(run_id, project)
     result = repo.delete_project(run_id)
     remove_tree_sync(UPLOADS_DIR / run_id)
+    append_event(f"Removed project {run_id}", "info", project_id=run_id)
     return {"status": "Success", **result}
 
 
@@ -706,6 +719,8 @@ async def get_scope_status(run_id: str):
             "status": "NOT_STARTED",
             "current_stage": "",
             "completed_stages": [],
+            "pending_stages": [],
+            "skipped_completed_stages": [],
             "blocked_stages": [],
             "actual_tokens_used": 0,
         }

@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from threading import Lock, Thread
 from fastapi.responses import FileResponse
 from Processes.code_generation_process import CodeGenerationProcess
-from Persistence.sqlite.session import get_db
+from Persistence.sqlite.session import SessionLocal, get_db
 from Processes.conversion_planning_process import ConversionPlanningProcess
 from Processes.code_fix_process import CodeFixProcess
 from services.migration_report_service import MigrationReportService
@@ -13,6 +14,8 @@ from Persistence.sqlite.models import Project
 from services.migration_scope_service import MigrationScopeService
 
 router = APIRouter(prefix="/code-generation", tags=["Code Generation"])
+RUNNING_PIPELINES: set[tuple[str, str]] = set()
+RUNNING_PIPELINES_LOCK = Lock()
 
 
 def _require_stage_allowed(db: Session, run_id: str, stage: str):
@@ -328,16 +331,84 @@ async def run_full_code_generation_pipeline(
     _require_stage_allowed(db, run_id, MigrationScopeService.STAGE_CODE_GENERATION)
     try:
         pipeline = FullCodeGenerationPipeline(db)
+        target = pipeline._normalize_target(target_language)
+        key = (run_id, target)
+        current_status = pipeline.get_status(run_id, target)
 
-        return pipeline.run(
+        with RUNNING_PIPELINES_LOCK:
+            already_running = key in RUNNING_PIPELINES
+
+        if already_running:
+            current_status["already_running"] = True
+            return current_status
+
+        existing_files = CodeGenerationProcess(db).list_generated_files(
+            run_id=run_id,
+            target_language=target,
+        )
+        if (
+            not force
+            and current_status.get("status") == "COMPLETED"
+            and int(existing_files.get("count") or 0) > 0
+        ):
+            current_status["cached"] = True
+            return current_status
+
+        pipeline._write_status(
+            run_id=run_id,
+            target_language=target,
+            status="RUNNING",
+            stage=f"Queued {pipeline._target_display_name(target)} code generation pipeline",
+            progress=max(1, int(current_status.get("progress") or 1)),
+            download_allowed=False,
+        )
+        with RUNNING_PIPELINES_LOCK:
+            RUNNING_PIPELINES.add(key)
+
+        worker = Thread(
+            target=run_full_code_generation_pipeline_task,
+            args=(run_id, target, force),
+            name=f"codegen-{run_id}-{target}",
+            daemon=True,
+        )
+        worker.start()
+        return pipeline.get_status(run_id, target)
+
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+def run_full_code_generation_pipeline_task(
+    run_id: str,
+    target_language: str,
+    force: bool = False,
+):
+    key = (run_id, target_language)
+    db = SessionLocal()
+    try:
+        FullCodeGenerationPipeline(db).run(
             run_id=run_id,
             target_language=target_language,
             project_id=run_id,
             force=force,
         )
-
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        try:
+            FullCodeGenerationPipeline(db)._write_status(
+                run_id=run_id,
+                target_language=target_language,
+                status="FAILED",
+                stage=f"Pipeline failed: {exc}",
+                progress=100,
+                download_allowed=False,
+                extra={"errors": [{"stage": "pipeline", "error": str(exc)}]},
+            )
+        except Exception:
+            pass
+    finally:
+        with RUNNING_PIPELINES_LOCK:
+            RUNNING_PIPELINES.discard(key)
+        db.close()
 
 
 @router.get("/{run_id}/pipeline-status")

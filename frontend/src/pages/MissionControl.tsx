@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import PageHeader from '../components/PageHeader';
 import SectionLabel from '../components/SectionLabel';
 import StatusBadge from '../components/StatusBadge';
+import { API_BASE_URL } from '../services/api';
 
 const explorerTabs = [
   { id: 'dependencies', icon: Share2, label: 'Deps', message: 'Mapping call hierarchy and file relationships...' },
@@ -14,33 +15,98 @@ const explorerTabs = [
   { id: 'ddd', icon: GitBranch, label: 'DDD', message: 'Defining domain boundaries and ownership...' },
 ];
 
+type MissionEvent = {
+  timestamp: string;
+  message: string;
+  level: string;
+  project_id?: string | null;
+};
+
+type MissionStatus = {
+  is_running: boolean;
+  progress: number;
+  active_project: string | null;
+  project_count: number;
+  file_count: number;
+  active_chunk: string;
+  self_healing_events: number;
+  tokens_used: string;
+  latest_event: MissionEvent | null;
+  events: MissionEvent[];
+};
+
+const initialStatus: MissionStatus = {
+  is_running: true,
+  progress: 0,
+  active_project: null,
+  project_count: 0,
+  file_count: 0,
+  active_chunk: 'Idle',
+  self_healing_events: 0,
+  tokens_used: 'n/a',
+  latest_event: null,
+  events: [],
+};
+
 const MissionControl = () => {
   const [isRunning, setIsRunning] = useState(true);
-  const [progress, setProgress] = useState(34);
+  const [status, setStatus] = useState<MissionStatus>(initialStatus);
   const [activeExplorerTab, setActiveExplorerTab] = useState('dependencies');
   const [isConfigOpen, setIsConfigOpen] = useState(false);
-  const [logs, setLogs] = useState<string[]>(['Connecting to WebSocket...', 'Listening for pipeline events...']);
+  const [logs, setLogs] = useState<string[]>(['Connecting to backend...', 'Listening for pipeline events...']);
   const [chatInput, setChatInput] = useState('');
 
   useEffect(() => {
-    if (!isRunning) return;
+    let active = true;
 
-    const interval = setInterval(() => {
-      const events = [
-        'Chunk 42: Parsing Procedure Division...',
-        'Dependency Graph: Linked ACCT-SVR to CUST-DB',
-        "AI: Extracting business rule 'Overdraft-Limit'",
-        'Self-Healing: Retrying Chunk 45 (Rate Limit 429)',
-        'Conversion: Generating AccountService.java',
-      ];
-      setLogs((prev) => [...prev, events[Math.floor(Math.random() * events.length)]].slice(-20));
-      setProgress((value) => (value < 100 ? value + 0.1 : 100));
-    }, 2000);
+    const fetchStatus = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/mission-control/status`);
+        if (!response.ok) {
+          throw new Error(`Request failed (${response.status})`);
+        }
 
-    return () => clearInterval(interval);
-  }, [isRunning]);
+        const payload = await response.json();
+        if (!active) {
+          return;
+        }
+
+        const nextStatus = {
+          ...payload,
+          progress: Number(payload.progress || 0),
+          project_count: Number(payload.project_count || 0),
+          file_count: Number(payload.file_count || 0),
+          self_healing_events: Number(payload.self_healing_events || 0),
+        } as MissionStatus;
+
+        setStatus(nextStatus);
+        const nextLogs = (payload.events || []).map((event: MissionEvent) => {
+          const stamp = event.timestamp ? new Date(event.timestamp).toLocaleTimeString() : 'now';
+          return `[${stamp}] ${event.message}`;
+        });
+        setLogs(nextLogs.length ? nextLogs.slice(-20) : ['Awaiting backend events...']);
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+        setLogs((prev) => [
+          ...(prev.length > 0 ? prev : ['Connecting to backend...']),
+          `Backend unavailable: ${error instanceof Error ? error.message : 'unknown error'}`,
+        ].slice(-20));
+      }
+    };
+
+    fetchStatus();
+    const interval = window.setInterval(fetchStatus, 3000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, []);
 
   const activeTab = explorerTabs.find((tab) => tab.id === activeExplorerTab) || explorerTabs[0];
+  const effectiveIsRunning = isRunning && status.is_running;
+  const progressValue = Math.max(0, Math.min(100, status.progress || 0));
 
   return (
     <div className="space-y-6">
@@ -50,8 +116,8 @@ const MissionControl = () => {
         action={(
           <div className="flex flex-wrap gap-2">
             <button onClick={() => setIsRunning(!isRunning)} className="btn-glow">
-              {isRunning ? <Pause size={18} /> : <Play size={18} />}
-              {isRunning ? 'Pause Run' : 'Resume Run'}
+              {effectiveIsRunning ? <Pause size={18} /> : <Play size={18} />}
+              {effectiveIsRunning ? 'Pause Run' : 'Resume Run'}
             </button>
             <button onClick={() => setIsConfigOpen(true)} className="btn-secondary flex items-center gap-2 px-4 py-3">
               <Settings size={18} />
@@ -59,7 +125,7 @@ const MissionControl = () => {
             </button>
           </div>
         )}
-        meta={<StatusBadge status={isRunning ? 'Running' : 'Pending'} />}
+        meta={<StatusBadge status={effectiveIsRunning ? 'Running' : 'Pending'} />}
       />
 
       <div className="kpi-bento">
@@ -67,34 +133,36 @@ const MissionControl = () => {
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="label">Overall Progress</p>
-              <p className="text-display mt-2">{progress.toFixed(1)}%</p>
-              <p className="text-body-sm mt-2">Active modernization run is processing chunk and dependency events.</p>
+              <p className="text-display mt-2">{progressValue.toFixed(1)}%</p>
+              <p className="text-body-sm mt-2">
+                {status.active_project ? `Active project: ${status.active_project}` : 'Waiting for a project to start.'}
+              </p>
             </div>
             <Activity className="text-[var(--corporate-accent)]" size={28} />
           </div>
           <div className="pipeline-card-progress mt-8">
-            <span style={{ width: `${progress}%` }} />
+            <span style={{ width: `${progressValue}%` }} />
           </div>
         </div>
         <div className="glass-card p-5">
           <Zap className="text-[var(--corporate-warning)]" size={22} />
           <p className="label mt-4">Tokens Used</p>
-          <p className="text-heading mt-2">1.2M / 5M</p>
+          <p className="text-heading mt-2">{status.tokens_used}</p>
         </div>
         <div className="glass-card p-5">
           <ShieldAlert className="text-[var(--corporate-success)]" size={22} />
           <p className="label mt-4">Self-Healing</p>
-          <p className="text-heading mt-2">12 Events</p>
+          <p className="text-heading mt-2">{status.self_healing_events} Events</p>
         </div>
         <div className="glass-card p-5">
           <Cpu className="text-[var(--corporate-accent)]" size={22} />
           <p className="label mt-4">Active Chunk</p>
-          <p className="text-heading mt-2">#42 / 80</p>
+          <p className="text-heading mt-2">{status.active_chunk}</p>
         </div>
         <div className="glass-card p-5">
           <MessageSquare className="text-[var(--corporate-success)]" size={22} />
           <p className="label mt-4">AI Analyst</p>
-          <p className="text-heading mt-2">Online</p>
+          <p className="text-heading mt-2">{status.latest_event?.message ? 'Online' : 'Idle'}</p>
         </div>
       </div>
 
@@ -122,12 +190,13 @@ const MissionControl = () => {
         <section className="min-w-0 space-y-6">
           <div className="glass-card p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <SectionLabel className="flex-1">Active Chunk</SectionLabel>
-              <StatusBadge status="Running" />
+              <SectionLabel className="flex-1">Active Project</SectionLabel>
+              <StatusBadge status={status.active_project ? 'Running' : 'Pending'} />
             </div>
             <div className="rounded-lg border border-[var(--corporate-border-strong)] bg-[var(--terminal-bg)] p-4 font-mono text-sm text-[var(--terminal-text)]">
-              <div><span className="opacity-60">Line 120:</span> PERFORM CALCULATE-BALANCE</div>
-              <div><span className="opacity-60">Line 121:</span> IF WS-BAL &lt; 0 ...</div>
+              <div><span className="opacity-60">Project Count:</span> {status.project_count}</div>
+              <div><span className="opacity-60">Files:</span> {status.file_count}</div>
+              <div><span className="opacity-60">Latest Event:</span> {status.latest_event?.message || 'No events yet'}</div>
             </div>
           </div>
 
@@ -147,7 +216,7 @@ const MissionControl = () => {
                   <span className={log.includes('Healing') ? 'text-[var(--corporate-warning)]' : 'text-[var(--corporate-success)]'}>{log}</span>
                 </div>
               ))}
-              {isRunning && <div className="animate-pulse text-[var(--corporate-accent)]">_ awaiting_next_chunk...</div>}
+              {effectiveIsRunning && <div className="animate-pulse text-[var(--corporate-accent)]">_ awaiting_next_chunk...</div>}
             </div>
           </div>
         </section>

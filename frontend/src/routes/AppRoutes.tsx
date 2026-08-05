@@ -14,6 +14,7 @@ import SourceFiles        from '../pages/SourceFiles';
 import SystemDiscovery    from '../pages/SystemDiscovery';
 import ReverseEngineering from '../pages/ReverseEngineering';
 import BusinessLogic      from '../pages/BusinessLogic';
+import ProgramFlow        from '../pages/ProgramFlow';
 
 // Modernization
 import ModernizationPlan  from '../pages/ModernizationPlan';
@@ -55,6 +56,7 @@ const AnimatedRoutes = () => {
           <Route path="source-files"         element={<Navigate to="/initial-setup" replace />} />
           <Route path="reverse-engineering"  element={<PageWrapper><ReverseEngineering /></PageWrapper>} />
           <Route path="business-logic"       element={<PageWrapper><BusinessLogic /></PageWrapper>} />
+          <Route path="program-flow"         element={<PageWrapper><ProgramFlow /></PageWrapper>} />
           <Route path="modernization-plan"   element={<PageWrapper><ModernizationPlan /></PageWrapper>} />
           <Route path="code-generation"      element={<PageWrapper><CodeGeneration /></PageWrapper>} />
           <Route path="chat"                 element={<PageWrapper><ModernizerChat /></PageWrapper>} />
@@ -77,4 +79,3 @@ const AppRoutes = () => (
 );
 
 export default AppRoutes;
-

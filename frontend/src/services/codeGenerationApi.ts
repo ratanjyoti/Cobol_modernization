@@ -211,6 +211,7 @@ export interface PipelineStatusResponse {
   validation?: unknown;
   report?: unknown;
   cached?: boolean;
+  already_running?: boolean;
 }
 export async function runFullCodeGeneration(
   runId: string,

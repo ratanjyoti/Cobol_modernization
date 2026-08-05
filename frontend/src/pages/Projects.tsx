@@ -6,7 +6,7 @@ import {
   Settings, Languages
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { ProjectAPI } from '../services/api';
+import { getApiErrorDetail, ProjectAPI } from '../services/api';
 import type { FileRecord, ProjectSummary } from '../services/api';
 import PageHeader from '../components/PageHeader';
 import SectionLabel from '../components/SectionLabel';
@@ -24,6 +24,12 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; text: string
 const formatDate = (value?: string | null) => {
   if (!value) return 'Not recorded';
   return new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: '2-digit' }).format(new Date(value));
+};
+
+const emitProjectSelectionChanged = (projectId: string | null) => {
+  window.dispatchEvent(
+    new CustomEvent('modernizer-project-changed', { detail: { projectId } })
+  );
 };
 
 const getProgress = (project: ProjectSummary) => {
@@ -44,6 +50,8 @@ const Projects = () => {
   const [activeRunId, setActiveRunId] = useState<string | null>(localStorage.getItem('active_run_id'));
   const [loading, setLoading] = useState(true);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [creatingProject, setCreatingProject] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     fetchProjects();
@@ -52,6 +60,7 @@ const Projects = () => {
   const fetchProjects = async () => {
     setLoading(true);
     try {
+      setLoadError('');
       const data = await ProjectAPI.list();
       setProjects(data);
       
@@ -65,8 +74,10 @@ const Projects = () => {
         setSelectedProject(null);
         setSelectedFiles([]);
       }
-    } catch {
-      toast.error('Failed to load projects');
+    } catch (error) {
+      const detail = getApiErrorDetail(error, 'Failed to load projects');
+      setLoadError(detail);
+      toast.error(detail);
     } finally {
       setLoading(false);
     }
@@ -77,6 +88,7 @@ const Projects = () => {
     try {
       setActiveRunId(runId); 
       localStorage.setItem('active_run_id', runId);
+      emitProjectSelectionChanged(runId);
       const projectFromList = projectList.find((project) => project.run_id === runId) || null;
       setSelectedProject(projectFromList);
       const [projectDetail, fileData] = await Promise.all([
@@ -85,8 +97,10 @@ const Projects = () => {
       ]);
       setSelectedProject(projectDetail);
       setSelectedFiles(fileData.files);
-    } catch {
-      toast.error('Failed to load project details');
+    } catch (error) {
+      const detail = getApiErrorDetail(error, 'Failed to load project details');
+      setLoadError(detail);
+      toast.error(detail);
     } finally {
       setDetailsLoading(false);
     }
@@ -95,8 +109,42 @@ const Projects = () => {
   const handleActivate = (runId: string) => {
     localStorage.setItem('active_run_id', runId);
     setActiveRunId(runId); 
+    emitProjectSelectionChanged(runId);
     toast.success(`Switched to ${projects.find((project) => project.run_id === runId)?.name || runId}`);
     navigate('/initial-setup');
+  };
+
+  const handleCreateProject = async () => {
+    if (creatingProject) return;
+
+    setCreatingProject(true);
+    try {
+      const created = await ProjectAPI.create({
+        project_name: `Run_${projects.length + 1}`,
+        mode: 'local',
+        provider: 'local',
+        speed_profile: 'Balanced',
+        reasoning_effort: 'Medium',
+        workers: 4,
+        migration_scope: localStorage.getItem('modernizer_migration_scope') || 'reverse_engineering',
+      });
+      const refreshed = await ProjectAPI.list();
+      const nextProjects = refreshed.some((project) => project.run_id === created.run_id)
+        ? refreshed
+        : [created, ...projects];
+
+      setProjects(nextProjects);
+      setActiveRunId(created.run_id);
+      localStorage.setItem('active_run_id', created.run_id);
+      emitProjectSelectionChanged(created.run_id);
+      await selectProject(created.run_id, nextProjects);
+      toast.success(`New project ${created.name} created`);
+      navigate('/initial-setup');
+    } catch (error) {
+      toast.error(getApiErrorDetail(error, 'Failed to create project'));
+    } finally {
+      setCreatingProject(false);
+    }
   };
 
   const handleDelete = async (runId: string) => {
@@ -109,6 +157,7 @@ const Projects = () => {
       if (activeRunId === runId) {
         localStorage.removeItem('active_run_id');
         setActiveRunId(null);
+        emitProjectSelectionChanged(null);
       }
       if (selectedProject?.run_id === runId) {
         const nextProject = remaining[0] || null;
@@ -141,11 +190,27 @@ const Projects = () => {
         description="Manage migration runs, backend status, active project context, and run history."
         meta={activeProject ? <StatusBadge status={activeProject.status} /> : undefined}
         action={(
-          <button onClick={() => navigate('/initial-setup')} className="btn-glow">
-            <Plus size={20} /> Select Project
+          <button onClick={handleCreateProject} disabled={creatingProject} className="btn-glow disabled:cursor-not-allowed disabled:opacity-60">
+            {creatingProject ? <Loader2 size={20} className="animate-spin" /> : <Plus size={20} />}
+            New Project
           </button>
         )}
       />
+
+      {loadError && (
+        <div className="glass-card rounded-2xl border border-red-500/40 bg-red-500/10 p-5 text-red-200">
+          <div className="flex items-start gap-3">
+            <AlertCircle size={18} className="mt-0.5 shrink-0" />
+            <div>
+              <p className="font-bold">Projects could not be loaded.</p>
+              <p className="mt-1 text-sm text-red-100/80">{loadError}</p>
+              <button onClick={fetchProjects} className="mt-3 rounded-xl border border-red-300/30 px-4 py-2 text-xs font-black text-white hover:bg-red-500/20">
+                Retry
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {activeProject && (
         <div className="glass-card p-8 rounded-3xl border-indigo-500/50 bg-indigo-500/5 border-2 relative overflow-hidden shadow-[0_0_20px_rgba(99,102,241,0.2)]">
@@ -255,7 +320,7 @@ const Projects = () => {
             })}
             {projects.length === 0 && (
               <div className="md:col-span-2 glass-card p-10 rounded-2xl border-slate-800 text-center text-slate-400">
-                No runs yet. Create a run from the Dashboard to start tracking it here.
+                No runs yet. Create a new project to start tracking it here.
               </div>
             )}
           </div>

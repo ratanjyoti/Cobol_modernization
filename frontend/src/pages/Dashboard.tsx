@@ -83,6 +83,15 @@ const emptyHealth: ServiceHealth = {
   neo4j: { active: false, detail: 'No active project selected.' },
 };
 
+const DASHBOARD_SCOPE_OPTIONS = [
+  { id: 'dependency_mapping', title: 'Dependency Mapping' },
+  { id: 'program_logic', title: 'Program Logic Extraction' },
+  { id: 'business_rules', title: 'Business Rule Extraction' },
+  { id: 'reverse_engineering', title: 'Full Reverse Engineering' },
+  { id: 'business_rules_ddd', title: 'Business Rules (DDD)' },
+  { id: 'full_migration_ddd', title: 'Full Migration' },
+];
+
 const formatTokenCount = (value?: number) => {
   if (!value) return '0 API tokens';
   return `${new Intl.NumberFormat().format(value)} estimated tokens`;
@@ -134,6 +143,8 @@ const Dashboard = () => {
   const [healthLoading, setHealthLoading] = useState(false);
   const [metricsLoading, setMetricsLoading] = useState(false);
   const [isDeletingRuns, setIsDeletingRuns] = useState(false);
+  const [selectedUpgradeScope, setSelectedUpgradeScope] = useState(localStorage.getItem('modernizer_migration_scope') || 'reverse_engineering');
+  const [isRunningPending, setIsRunningPending] = useState(false);
 
   const activeProject = useMemo(() => projects.find((p) => p.run_id === runId) || null, [projects, runId]);
 
@@ -228,6 +239,10 @@ const Dashboard = () => {
     }, 5000);
     return () => window.clearInterval(refreshId);
   }, [runId]);
+
+  useEffect(() => {
+    setSelectedUpgradeScope(migrationScope?.selected_scope || activeProject?.migration_scope || 'reverse_engineering');
+  }, [activeProject?.migration_scope, migrationScope?.selected_scope]);
 
   const fetchProjectHistory = async () => {
     try {
@@ -336,6 +351,27 @@ const Dashboard = () => {
     navigate('/initial-setup');
   };
 
+  const handleRunPendingStages = async () => {
+    if (!runId) {
+      toast.error('Select a project before changing scope');
+      return;
+    }
+
+    setIsRunningPending(true);
+    try {
+      await ProjectAPI.updateMigrationScope(runId, selectedUpgradeScope);
+      await ProjectAPI.runPendingScopeStages(runId, selectedUpgradeScope);
+      localStorage.setItem('modernizer_migration_scope', selectedUpgradeScope);
+      localStorage.setItem('modernizer_pipeline_status', 'active');
+      toast.success('Pending stages queued for the upgraded scope');
+      await loadDashboardMetrics(runId, { silent: true, includeHealth: false });
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Failed to start pending scope stages');
+    } finally {
+      setIsRunningPending(false);
+    }
+  };
+
   const handleDeleteAllRuns = async () => {
     if (projects.length === 0) {
       toast.error('No runs to delete');
@@ -385,6 +421,8 @@ const Dashboard = () => {
   const currentScopeTitle = migrationScope?.scope_title || tokenEstimate?.title || activeProject?.migration_scope || 'Scope not selected';
   const currentScopeRange = tokenEstimate?.static_token_range || migrationScope?.static_token_range || 'No estimate available';
   const currentScopeStatus = scopeStatus?.status || 'NOT_STARTED';
+  const completedScopeStages = scopeStatus?.completed_stages || [];
+  const pendingScopeStages = scopeStatus?.pending_stages || allowedStages.filter((stage) => !completedScopeStages.includes(stage));
 
   return (
     <div className="space-y-12 pb-24 animate-in fade-in duration-700">
@@ -466,17 +504,53 @@ const Dashboard = () => {
               <p className="mt-2 text-sm font-black text-white">{currentScopeStatus.replace(/_/g, ' ')}</p>
             </div>
           </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <select
+              value={selectedUpgradeScope}
+              onChange={(event) => setSelectedUpgradeScope(event.target.value)}
+              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm font-bold text-white outline-none transition-all focus:ring-2 focus:ring-indigo-500"
+            >
+              {DASHBOARD_SCOPE_OPTIONS.map((scope) => (
+                <option key={scope.id} value={scope.id}>{scope.title}</option>
+              ))}
+            </select>
+            <button onClick={handleRunPendingStages} disabled={!runId || isRunningPending} className="btn-glow disabled:cursor-not-allowed disabled:opacity-50">
+              {isRunningPending ? <Loader2 className="animate-spin" size={16} /> : <Zap size={16} />}
+              Change Scope
+            </button>
+          </div>
+          <button onClick={() => navigate('/code-generation')} className="mt-3 w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-xs font-black text-white transition-all hover:bg-slate-700">
+            View Previous Results
+          </button>
         </div>
 
         <div className="glass-card border border-slate-800 bg-slate-900/50 p-6 lg:col-span-7">
-          <SectionLabel>Allowed Workflow</SectionLabel>
-          <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            {allowedStages.slice(0, 10).map((stage) => (
-              <div key={stage} className="flex items-center gap-2 text-xs text-slate-300">
-                <CheckCircle2 size={14} className="text-emerald-300" />
-                <span>{stageLabels[stage] || stage}</span>
+          <SectionLabel>Scope Execution Plan</SectionLabel>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+              <p className="label text-emerald-300">Already Completed</p>
+              <div className="mt-3 space-y-2">
+                {(completedScopeStages.length ? completedScopeStages : []).map((stage) => (
+                  <div key={stage} className="flex items-center gap-2 text-xs text-slate-300">
+                    <CheckCircle2 size={14} className="text-emerald-300" />
+                    <span>{stageLabels[stage] || stage}</span>
+                  </div>
+                ))}
+                {completedScopeStages.length === 0 && <p className="text-xs text-slate-500">No completed stages recorded yet.</p>}
               </div>
-            ))}
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+              <p className="label">Pending</p>
+              <div className="mt-3 space-y-2">
+                {(pendingScopeStages.length ? pendingScopeStages : []).map((stage) => (
+                  <div key={stage} className="flex items-center gap-2 text-xs text-slate-300">
+                    <Clock size={14} className="text-amber-300" />
+                    <span>{stageLabels[stage] || stage}</span>
+                  </div>
+                ))}
+                {pendingScopeStages.length === 0 && <p className="text-xs text-slate-500">No pending stages for this scope.</p>}
+              </div>
+            </div>
           </div>
           {blockedStages.length > 0 && (
             <p className="mt-4 text-xs leading-5 text-slate-500">

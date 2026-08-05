@@ -544,7 +544,10 @@ const InitialSetup = () => {
 
       setRunId(newRunId);
       setProjects([
-        { run_id: newRunId, name: response.name, status: response.status, files_count: 0, migration_scope: migrationScope },
+        {
+          ...response,
+          migration_scope: response.migration_scope || migrationScope,
+        },
         ...projects,
       ]);
       void loadServiceHealth(newRunId);

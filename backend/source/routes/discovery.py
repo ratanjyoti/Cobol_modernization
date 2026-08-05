@@ -458,9 +458,10 @@ def run_technical_analysis_task(run_id: str):
             or settings.OPENROUTER_API_KEY
             or "local",
             "url": getattr(project, "custom_api_base_url", None)
-            or settings.OPENROUTER_BASE_URL,
+            or ("http://127.0.0.1:11434" if (getattr(project, "ai_mode", None) or getattr(project, "llm_provider", None) or "local").lower() == "local" else settings.OPENROUTER_BASE_URL),
             "model": getattr(project, "llm_model", None)
-            or settings.OPENROUTER_MODEL,
+            or ("llama3" if (getattr(project, "ai_mode", None) or getattr(project, "llm_provider", None) or "local").lower() == "local" else settings.OPENROUTER_MODEL),
+            "local_provider": getattr(project, "local_provider", None),
         }
         asyncio.run(AnalysisProcess(db, provider_config).analyze_project(run_id))
         print(f"Technical analysis completed for project {run_id}")
@@ -477,32 +478,31 @@ def run_chunking_then_analysis_task(run_id: str):
 
 
 def run_chunking_task(run_id: str):
-    """Process all confirmed files through the Smart Chunker."""
+    """Process all confirmed or confidently detected files through the Smart Chunker."""
     db = SessionLocal()
     try:
-        # 1. Get only files that the human confirmed the language for
         from Persistence.sqlite.models import ProjectFile, FileStatus
-        confirmed_files = db.query(ProjectFile).filter(
-            ProjectFile.run_id == run_id,
-            ProjectFile.status == FileStatus.CONFIRMED
-        ).all()
+        files = db.query(ProjectFile).filter(ProjectFile.run_id == run_id).all()
 
         orchestrator = ChunkingOrchestrator(db)
         
-        for f in confirmed_files:
-            # Construct path to the file
-            full_path = UPLOADS_DIR / run_id / f.filename
-            if full_path.exists():
-                with open(full_path, 'r', errors='ignore') as file_handle:
-                    content = file_handle.read()
-                    # This does the Sizing -> Slicing -> SQLite storing
-                    orchestrator.process_file(
-                        run_id=run_id,
-                        file_id=f.id,
-                        filename=f.filename,
-                        content=content,
-                        lang=f.detected_lang
-                    )
+        for f in files:
+            detected = str(f.detected_lang or "").strip().lower()
+            if f.status != FileStatus.CONFIRMED and (not detected or detected == "unknown"):
+                continue
+
+            for full_path in uploaded_file_candidates(run_id, f.filepath, f.filename):
+                if full_path.exists() and full_path.is_file():
+                    with open(full_path, 'r', errors='ignore') as file_handle:
+                        content = file_handle.read()
+                        orchestrator.process_file(
+                            run_id=run_id,
+                            file_id=f.id,
+                            filename=f.filepath or f.filename,
+                            content=content,
+                            lang=f.detected_lang or "unknown"
+                        )
+                    break
         print(f"Chunking completed for project {run_id}")
     except Exception as e:
         print(f"Chunking Error for {run_id}: {str(e)}")

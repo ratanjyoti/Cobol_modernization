@@ -29,6 +29,7 @@ const menuGroups = [
       { name: 'System Discovery', path: '/discovery',          icon: BrainCircuit, desc: 'Analyze calls, copybooks, SQL tables, and dependency relationships.' },
       { name: 'Analysis',         path: '/reverse-engineering',icon: Cpu,          desc: 'Review technical analysis, structure, and modernization insights.' },
       { name: 'Business Logic',   path: '/business-logic',     icon: FileText,     desc: 'Translate legacy code behavior into plain-English business rules.' },
+      { name: 'Program Flow',     path: '/program-flow',       icon: Workflow,     desc: 'Review entry points, branches, loops, calls, and exit paths.' },
     ],
   },
   {

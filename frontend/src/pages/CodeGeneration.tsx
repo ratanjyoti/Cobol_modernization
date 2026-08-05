@@ -88,6 +88,10 @@ const getCurrentRunId = () => {
   );
 };
 
+const pipelineStorageKey = (runId: string, targetLanguage: TargetLanguage) => (
+  `modernizer_codegen_pipeline_${runId}_${targetLanguage}`
+);
+
 const getLockedTargetLanguage = (runId: string): TargetLanguage => {
   const runSpecific = localStorage.getItem(`modernizer_target_language_${runId}`);
   const global = localStorage.getItem('modernizer_target_language');
@@ -240,6 +244,14 @@ const CodeGeneration = () => {
             validation_status: statusFromPayload(status.validation) || prev.validation_status,
           }));
           setPipelineRunning(status.status === 'RUNNING');
+          if (status.status === 'RUNNING') {
+            localStorage.setItem(pipelineStorageKey(runId, targetLanguage), 'running');
+          } else {
+            localStorage.removeItem(pipelineStorageKey(runId, targetLanguage));
+            if (status.status === 'COMPLETED' || status.download_allowed) {
+              await loadExistingData();
+            }
+          }
         }
       } catch (err) {
         console.error('Failed to load pipeline status:', err);
@@ -273,11 +285,12 @@ const CodeGeneration = () => {
 
         if (status.status !== 'RUNNING') {
           setPipelineRunning(false);
+          localStorage.removeItem(pipelineStorageKey(runId, targetLanguage));
           window.clearInterval(interval);
 
-          if (status.download_allowed) {
-            await loadExistingData();
-          }
+          await loadExistingData();
+        } else {
+          localStorage.setItem(pipelineStorageKey(runId, targetLanguage), 'running');
         }
       } catch (err) {
         console.error('Failed to poll pipeline status:', err);
@@ -315,6 +328,7 @@ const CodeGeneration = () => {
     setPipelineStatus(startingStatus);
 
     try {
+      localStorage.setItem(pipelineStorageKey(runId, targetLanguage), 'running');
       const result = await runFullCodeGeneration(runId, targetLanguage, force);
 
       setPipelineStatus(result);
@@ -327,10 +341,14 @@ const CodeGeneration = () => {
       }));
       setPipelineRunning(result.status === 'RUNNING');
 
-      if (result.status === 'COMPLETED' && result.download_allowed) {
+      if (result.status === 'RUNNING') {
+        setMessage(result.already_running ? 'Code generation is already running in the background.' : 'Code generation is running in the background. You can leave this tab and come back later.');
+      } else if (result.status === 'COMPLETED' && result.download_allowed) {
+        localStorage.removeItem(pipelineStorageKey(runId, targetLanguage));
         setMessage(result.cached ? 'Using saved generated code.' : 'Generated working code is ready to download.');
         await loadExistingData();
       } else {
+        localStorage.removeItem(pipelineStorageKey(runId, targetLanguage));
         setError(
           result.stage ||
             'Code generation completed but the output is not ready for download.',
@@ -338,6 +356,7 @@ const CodeGeneration = () => {
       }
     } catch (err) {
       setPipelineRunning(false);
+      localStorage.removeItem(pipelineStorageKey(runId, targetLanguage));
       setError(err instanceof Error ? err.message : 'Failed to generate working code');
     }
   };
