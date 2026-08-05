@@ -1,15 +1,24 @@
 node_modules/
-*.log
-.env
 __pycache__/
 *.pyc
 
-# SQLite runtime/test databases
-backend/data/sqlite/*.db
-backend/data/sqlite/*.db-journal
-backend/data/sqlite/*.sqlite
-backend/data/sqlite/*.sqlite3
-backend/data/sqlite/*-journal
-backend/data/uploads/
-.vercel
+*.log
+*.err.log
+*.out.log
+*~
+*.tmp
+*.bak
+
+.env
 .env*
+.vercel/
+
+backend/output/
+output/
+backend/data/uploads/
+backend/data/sqlite/codex_probe*.db
+backend/data/sqlite/codex_probe*.db-journal
+backend/data/sqlite/test_write.tmp
+
+frontend/dist/
+frontend/node_modules/
