@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 from typing import Any
 
 from services.migration_scope_service import MigrationScopeService
@@ -39,9 +40,11 @@ class ScopedMigrationProcess:
 
         scope = self.scope_service.normalize_scope(getattr(project, "migration_scope", None))
         definition = self.scope_service.get_scope(scope)
-        completed: list[str] = []
+        previously_completed = self._load_completed_stages(run_id)
+        completed = self._completed_stages_for_scope(run_id, scope, previously_completed)
+        skipped_completed: list[str] = []
 
-        self._write_status(run_id, scope, "RUNNING", "start", completed)
+        self._write_status(run_id, scope, "RUNNING", "start", completed, skipped_completed)
 
         for stage, runner in (
             (MigrationScopeService.STAGE_LANGUAGE_DETECTION, self._run_language_detection),
@@ -62,19 +65,23 @@ class ScopedMigrationProcess:
             if not self._allowed(scope, stage):
                 continue
             if stage in completed:
+                skipped_completed.append(stage)
+                self._write_status(run_id, scope, "RUNNING", stage, completed, skipped_completed)
                 continue
-            self._write_status(run_id, scope, "RUNNING", stage, completed)
+            self._write_status(run_id, scope, "RUNNING", stage, completed, skipped_completed)
             runner(run_id)
             completed.append(stage)
-            self._write_status(run_id, scope, "RUNNING", stage, completed)
+            self._write_status(run_id, scope, "RUNNING", stage, completed, skipped_completed)
 
-        self._write_status(run_id, scope, "COMPLETED", "completed", completed)
+        self._write_status(run_id, scope, "COMPLETED", "completed", completed, skipped_completed)
 
         return {
             "run_id": run_id,
             "scope": scope,
             "scope_title": definition.title,
             "completed_stages": completed,
+            "pending_stages": self._pending_stages(scope, completed),
+            "skipped_completed_stages": skipped_completed,
             "blocked_stages": self.scope_service.blocked_stages(scope),
         }
 
@@ -101,13 +108,13 @@ class ScopedMigrationProcess:
         from paths import UPLOADS_DIR
 
         orchestrator = ChunkingOrchestrator(self.db)
-        files = (
-            self.db.query(ProjectFile)
-            .filter(ProjectFile.run_id == run_id, ProjectFile.status == FileStatus.CONFIRMED)
-            .all()
-        )
+        files = self.db.query(ProjectFile).filter(ProjectFile.run_id == run_id).all()
 
         for project_file in files:
+            detected = str(project_file.detected_lang or "").strip().lower()
+            if project_file.status != FileStatus.CONFIRMED and (not detected or detected == "unknown"):
+                continue
+
             source_path = self._resolve_source_path(run_id, project_file)
             if not source_path:
                 continue
@@ -202,8 +209,10 @@ class ScopedMigrationProcess:
         status: str,
         current_stage: str,
         completed_stages: list[str],
+        skipped_completed_stages: list[str] | None = None,
     ) -> None:
         estimate = self.scope_service.estimate_tokens_for_run(self.db, run_id, scope)
+        pending_stages = self._pending_stages(scope, completed_stages)
         path = self.scope_service.status_path(run_id)
         path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -214,12 +223,140 @@ class ScopedMigrationProcess:
             "status": status,
             "current_stage": current_stage,
             "completed_stages": list(completed_stages),
+            "pending_stages": pending_stages,
+            "skipped_completed_stages": list(skipped_completed_stages or []),
             "blocked_stages": self.scope_service.blocked_stages(scope),
             "estimated_total_tokens": estimate["estimated_total_tokens"],
             "static_token_range": estimate["static_token_range"],
             "actual_tokens_used": 0,
         }
         path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+    def _pending_stages(self, scope: str, completed_stages: list[str]) -> list[str]:
+        completed = set(completed_stages)
+        return [
+            stage
+            for stage in self.scope_service.get_scope(scope).allowed_stages
+            if stage not in completed
+        ]
+
+    def _load_completed_stages(self, run_id: str) -> set[str]:
+        path = self.scope_service.status_path(run_id)
+        if not path.exists():
+            return set()
+
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, TypeError):
+            return set()
+
+        completed = payload.get("completed_stages") or []
+        if not isinstance(completed, list):
+            return set()
+
+        aliases = {
+            "technical": MigrationScopeService.STAGE_TECHNICAL_YAML,
+            "program_flow": MigrationScopeService.STAGE_PROCEDURAL_FLOW,
+            "procedural": MigrationScopeService.STAGE_PROCEDURAL_FLOW,
+            "ddd": MigrationScopeService.STAGE_DDD,
+            "planning": MigrationScopeService.STAGE_CONVERSION_PLANNING,
+            "conversion_plan": MigrationScopeService.STAGE_CONVERSION_PLANNING,
+            "reports": MigrationScopeService.STAGE_MIGRATION_REPORT,
+            "report": MigrationScopeService.STAGE_MIGRATION_REPORT,
+        }
+
+        normalized = set()
+        for stage in completed:
+            key = str(stage).strip()
+            if key:
+                normalized.add(aliases.get(key, key))
+        return normalized
+
+    def _completed_stages_for_scope(
+        self,
+        run_id: str,
+        scope: str,
+        known_completed: set[str] | None = None,
+    ) -> list[str]:
+        known_completed = known_completed or set()
+        completed = []
+
+        for stage in self.scope_service.get_scope(scope).allowed_stages:
+            if stage in known_completed or self._stage_has_artifact(run_id, stage):
+                completed.append(stage)
+
+        return completed
+
+    def _stage_has_artifact(self, run_id: str, stage: str) -> bool:
+        from sqlalchemy import func
+        from Persistence.sqlite.models import BusinessRule, ChunkAnalysis, FileChunk, FileRelation, ProjectComplexity, ProjectFile
+
+        if stage == MigrationScopeService.STAGE_LANGUAGE_DETECTION:
+            total = self.db.query(func.count(ProjectFile.id)).filter(ProjectFile.run_id == run_id).scalar() or 0
+            detected = self.db.query(func.count(ProjectFile.id)).filter(
+                ProjectFile.run_id == run_id,
+                ProjectFile.detected_lang.isnot(None),
+                ProjectFile.detected_lang != "",
+            ).scalar() or 0
+            return total > 0 and detected >= total
+
+        if stage == MigrationScopeService.STAGE_DEPENDENCY_MAPPING:
+            return (self.db.query(func.count(FileRelation.id)).filter(FileRelation.run_id == run_id).scalar() or 0) > 0
+
+        if stage == MigrationScopeService.STAGE_GRAPH_BUILD:
+            return self.db.query(ProjectComplexity).filter(ProjectComplexity.run_id == run_id).first() is not None
+
+        if stage == MigrationScopeService.STAGE_CHUNKING:
+            return (self.db.query(func.count(FileChunk.id)).filter(FileChunk.run_id == run_id).scalar() or 0) > 0
+
+        if stage == MigrationScopeService.STAGE_TECHNICAL_YAML:
+            return (self.db.query(func.count(ChunkAnalysis.id)).filter(
+                ChunkAnalysis.run_id == run_id,
+                ChunkAnalysis.analysis_status == "COMPLETED",
+            ).scalar() or 0) > 0
+
+        if stage == MigrationScopeService.STAGE_BUSINESS_LOGIC:
+            return (self.db.query(func.count(BusinessRule.id)).filter(BusinessRule.run_id == run_id).scalar() or 0) > 0
+
+        if stage == MigrationScopeService.STAGE_CONVERSION_PLANNING:
+            return self._has_files(self._output_root(run_id) / "plans" / self._target_language(run_id), "*.json")
+
+        if stage == MigrationScopeService.STAGE_CODE_GENERATION:
+            converted = self.db.query(func.count(FileChunk.id)).filter(
+                FileChunk.run_id == run_id,
+                FileChunk.converted_code.isnot(None),
+                FileChunk.converted_code != "",
+            ).scalar() or 0
+            return converted > 0 or self._has_files(self._output_root(run_id) / "project" / self._target_language(run_id))
+
+        if stage == MigrationScopeService.STAGE_QUALITY_GATE:
+            return (self._output_root(run_id) / "quality" / self._target_language(run_id) / "latest_quality.json").exists()
+
+        if stage == MigrationScopeService.STAGE_VALIDATION:
+            return (self._output_root(run_id) / "validation" / self._target_language(run_id) / "latest_validation.json").exists()
+
+        if stage == MigrationScopeService.STAGE_MIGRATION_REPORT:
+            report_dir = self._output_root(run_id) / "reports" / self._target_language(run_id)
+            return (report_dir / "migration_report.json").exists() or (report_dir / "MIGRATION_REPORT.md").exists()
+
+        return stage in {
+            MigrationScopeService.STAGE_PROCEDURAL_FLOW,
+            MigrationScopeService.STAGE_REVERSE_REPORT,
+            MigrationScopeService.STAGE_DDD,
+        } and stage in self._load_completed_stages(run_id)
+
+    @staticmethod
+    def _output_root(run_id: str) -> Path:
+        backend_root = Path(__file__).resolve().parents[1]
+        return backend_root / "output" / "generated_code" / run_id
+
+    @staticmethod
+    def _has_files(path: Path, pattern: str = "*") -> bool:
+        try:
+            return path.exists() and any(item.is_file() for item in path.rglob(pattern))
+        except OSError:
+            return False
 
     def _llm_config(self, run_id: str) -> dict[str, Any]:
         from Persistence.sqlite.models import Project

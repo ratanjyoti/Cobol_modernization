@@ -4,6 +4,9 @@ from Persistence.sqlite.models import FileRelation, Project, ProjectFile
 
 
 class GraphingProcess:
+
+    """this class synchronizes the resolved SQLite dependency model into a project-specific Neo4j graph for dependency visualization and impact analysis."""
+    
     def __init__(self, db_session):
         self.db = db_session
 

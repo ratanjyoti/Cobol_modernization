@@ -76,12 +76,13 @@ class DiscoveryProcess:
         return safe_path
 
     def _save_project_file(self, run_id: str, filename: str, filepath: str, detected_lang: str, size: int = 0):
+        normalized_lang = str(detected_lang or "").strip().lower()
         project_file = ProjectFile(
             run_id=run_id,
             filename=filename,
             filepath=filepath,
-            detected_lang=detected_lang,
-            status=FileStatus.PENDING_CONFIRMATION,
+            detected_lang=normalized_lang or detected_lang,
+            status=FileStatus.CONFIRMED if normalized_lang and normalized_lang != "unknown" else FileStatus.PENDING_CONFIRMATION,
         )
         self.db.add(project_file)
         self.db.flush() # Ensures project_file.id is generated
@@ -243,7 +244,7 @@ class DiscoveryProcess:
             "filepath": rel_path,
             "rel_path": rel_path,
             "lang": lang,
-            "status": FileStatus.PENDING_CONFIRMATION.value,
+            "status": project_file.status.value if project_file.status else FileStatus.PENDING_CONFIRMATION.value,
             "size": size,
             "chunks": chunk_count or 1
         }
@@ -493,7 +494,6 @@ class DiscoveryProcess:
 
     async def process_upload(self, run_id: str, zip_path: str, analyze_inline: bool = True):
         return await self.process_zip_upload(run_id, zip_path, analyze_inline)
-
 
 
 

@@ -3,6 +3,9 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy.orm import Session
+from Agents.implementations.agentic_code_conversion_orchestrator import (
+    AgenticCodeConversionOrchestrator,
+)
 
 from Agents.implementations.conversion_planner_agent import ConversionPlannerAgent
 from Agents.infrastructure.codegen_context_builder import CodegenContextBuilder
@@ -11,6 +14,7 @@ from Config.llm_config import settings
 from Persistence.sqlite.models import Project
 from services.symbol_registry_service import SymbolRegistryService
 
+"""this class is the orchestration layer between source analysis and code generation. It prepares and stores the blueprint that CodeGenerationProcess later follows."""
 
 class ConversionPlanningProcess:
     """

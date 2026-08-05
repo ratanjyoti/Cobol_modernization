@@ -9,6 +9,7 @@ from Chunking.context.chunk_context_manager import ChunkContextManager
 from Persistence.sqlite.models import ChunkAnalysis, FileChunk, ProjectFile, TechnicalAnalysis
 from paths import UPLOADS_DIR
 
+"""AnalysisProcess coordinates both chunk-level technical analysis and full-file deep analysis, then stores the results in SQLite."""
 
 class AnalysisProcess:
     def __init__(self, db_session: Session, llm_provider: str | dict, api_key: str = None):
@@ -104,6 +105,7 @@ class AnalysisProcess:
                     report = await self.deep_agent.analyze_deep(
                         content,
                         project_file.detected_lang or "unknown",
+                        project_id=run_id,
                     )
 
                     report_json = (

@@ -42,7 +42,7 @@ class OnboardingProcess:
         )
 
         self.repo.save(new_project)
-        return {"run_id": run_id, "name": project_name, "status": "Project Initialized"}
+        return {"run_id": run_id, "name": project_name, "status": "CONFIGURING"}
 
     def update_config(self, run_id: str, updates: dict):
         return self.repo.update_project(run_id, updates)

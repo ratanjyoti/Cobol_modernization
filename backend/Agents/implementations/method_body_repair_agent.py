@@ -1,99 +1,84 @@
+# Agents/implementations/method_body_repair_agent.py
+
 import json
 import re
 from typing import Any
-
 from Agents.infrastructure.prompt_store import PromptStore
-
 
 class MethodBodyRepairAgent:
     """
-    Repairs comment-only generated Java methods by asking the configured LLM
-    to return only the executable replacement method body.
+    ORCHESTRATOR: Manages method repair by combining 
+    Generic Blueprints from PromptStore with Language-Specific Rules.
     """
+
+    # Only these rules change per language. The Prompt logic remains constant.
+    LANGUAGE_RULES = {
+        "java": {
+            "name": "Java",
+            "body_instruction": "Return Java statements only. No method signature, no enclosing braces.",
+            "bad_patterns": [r"return\s+true\s*;", r"UnsupportedOperationException", r"\bTODO\b"],
+        },
+        "python": {
+            "name": "Python",
+            "body_instruction": "Return Python statements only. No def line. Use correct indentation.",
+            "bad_patterns": [r"\bpass\b", r"return\s+None\b", r"NotImplementedError", r"\bTODO\b"],
+        },
+        "csharp": {
+            "name": "C#",
+            "body_instruction": "Return C# statements only. No method signature, no enclosing braces.",
+            "bad_patterns": [r"return\s+true\s*;", r"NotImplementedException", r"\bTODO\b"],
+        },
+    }
 
     def __init__(self, llm_config: dict, prompt_store: PromptStore | None = None):
         self.llm_config = llm_config or {}
         self.prompt_store = prompt_store or PromptStore()
 
-    def repair_method_body(
-        self,
-        file_path: str,
-        class_name: str,
-        method_name: str,
-        method_header: str,
-        current_body: str,
-        source_evidence: str,
-        business_rules: list[dict[str, Any]],
-        locked_symbols: dict[str, Any],
-    ) -> dict[str, Any]:
-        system_prompt = """
-You are a senior legacy modernization engineer.
+    def repair_method_body(self, file_path: str, class_name: str, method_name: str, 
+                           method_header: str, current_body: str, source_evidence: str, 
+                           business_rules: list[dict[str, Any]], locked_symbols: dict[str, Any], 
+                           target_language: str = "java", project_id: str = "default") -> dict[str, Any]:
+        
+        target = self._normalize_target(target_language)
+        rules = self.LANGUAGE_RULES.get(target, self.LANGUAGE_RULES["java"])
 
-You repair Java method bodies generated from COBOL/Telon logic.
+        # 1. Fetch Generic Blueprints
+        system_prompt = self.prompt_store.get_prompt("method_repair_system", project_id)
+        user_template = self.prompt_store.get_prompt("method_repair_user", project_id)
 
-Rules:
-- Return valid JSON only.
-- Do not return markdown.
-- Do not return the full class.
-- Return only the replacement method body, without the outer method signature.
-- The body must contain executable Java statements.
-- Do not return comments-only logic.
-- Use locked symbol names when available.
-- Preserve the business rule intent.
-- If exact logic is uncertain, implement a safe deterministic equivalent and add a warning.
-"""
-
-        user_prompt = f"""
-Repair this generated Java method.
-
-File:
-{file_path}
-
-Class:
-{class_name}
-
-Method:
-{method_name}
-
-Method header:
-{method_header}
-
-Current bad body:
-{current_body}
-
-Source COBOL/Telon evidence:
-{source_evidence}
-
-Business rules:
-{json.dumps(business_rules[:20], indent=2, ensure_ascii=False)}
-
-Locked symbols:
-{json.dumps(locked_symbols, indent=2, ensure_ascii=False)}
-
-Return JSON in this exact shape:
-{{
-  "method_name": "{method_name}",
-  "replacement_body": "Java statements only, no outer method signature",
-  "warnings": []
-}}
-"""
+        # 2. Orchestrate: Inject Language Personality into the Blueprint
+        user_prompt = self.prompt_store.render(user_template, {
+            "lang_name": rules["name"],
+            "body_instruction": rules["body_instruction"],
+            "file_path": file_path,
+            "class_name": class_name,
+            "method_name": method_name,
+            "method_header": method_header,
+            "current_body": current_body,
+            "source_evidence": source_evidence,
+            "business_rules": json.dumps(business_rules[:20], indent=2),
+            "locked_symbols": json.dumps(self._trim_locked_symbols(locked_symbols), indent=2),
+        })
 
         response_text = self._call_llm(system_prompt, user_prompt)
-
         payload = self._parse_json(response_text)
 
+    
         replacement_body = str(payload.get("replacement_body") or "").strip()
 
         if not replacement_body:
             raise ValueError(f"LLM returned empty replacement body for {method_name}")
 
-        if self._is_comment_only(replacement_body):
-            raise ValueError(f"LLM returned comment-only replacement body for {method_name}")
+        if self._is_comment_only_or_placeholder(replacement_body, target):
+            raise ValueError(
+                f"LLM returned weak/comment-only/placeholder replacement body for {method_name}"
+            )
 
         return {
             "method_name": method_name,
-            "replacement_body": replacement_body,
+            "replacement_body": str(payload.get("replacement_body") or "").strip(),
             "warnings": payload.get("warnings") or [],
+            "target_language": target,
         }
 
     def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
@@ -186,40 +171,125 @@ Return JSON in this exact shape:
 
         raise ValueError(f"Could not parse method repair JSON: {cleaned[:500]}")
 
-    def _is_comment_only(self, body: str) -> bool:
-        text = re.sub(r"/\*.*?\*/", "", body, flags=re.DOTALL)
+    def _is_comment_only_or_placeholder(self, body: str, target_language: str) -> bool:
+        target = self._normalize_target(target_language)
+        text = str(body or "")
+
+        for pattern in self.LANGUAGE_RULES[target]["bad_patterns"]:
+            if re.search(pattern, text, flags=re.IGNORECASE):
+                return True
+
+        cleaned = self._remove_comments_and_blank_lines(text, target)
+
+        if not cleaned.strip():
+            return True
+
+        executable_patterns = {
+            "java": [
+                r"\bif\s*\(",
+                r"\bfor\s*\(",
+                r"\bwhile\s*\(",
+                r"\breturn\b",
+                r"\bthrow\b",
+                r"\bnew\b",
+                r"=",
+                r"\.\w+\s*\(",
+            ],
+            "python": [
+                r"\bif\s+",
+                r"\bfor\s+",
+                r"\bwhile\s+",
+                r"\breturn\b",
+                r"\braise\b",
+                r"=",
+                r"\.\w+\s*\(",
+                r"\w+\s*\(",
+            ],
+            "csharp": [
+                r"\bif\s*\(",
+                r"\bfor\s*\(",
+                r"\bforeach\s*\(",
+                r"\bwhile\s*\(",
+                r"\breturn\b",
+                r"\bthrow\b",
+                r"\bnew\b",
+                r"=",
+                r"\.\w+\s*\(",
+                r"\bawait\b",
+            ],
+        }
+
+        return not any(
+            re.search(pattern, cleaned)
+            for pattern in executable_patterns.get(target, [])
+        )
+
+    def _remove_comments_and_blank_lines(
+        self,
+        text: str,
+        target_language: str,
+    ) -> str:
+        target = self._normalize_target(target_language)
+
+        if target in {"java", "csharp"}:
+            text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+
+            lines = []
+            for line in text.splitlines():
+                stripped = line.strip()
+
+                if not stripped:
+                    continue
+
+                if stripped.startswith("//"):
+                    continue
+
+                stripped = re.sub(r"//.*$", "", stripped).strip()
+
+                if stripped:
+                    lines.append(stripped)
+
+            return "\n".join(lines)
 
         lines = []
-
         for line in text.splitlines():
             stripped = line.strip()
 
             if not stripped:
                 continue
 
-            if stripped.startswith("//"):
+            if stripped.startswith("#"):
                 continue
 
-            stripped = re.sub(r"//.*$", "", stripped).strip()
+            stripped = re.sub(r"#.*$", "", stripped).strip()
 
             if stripped:
                 lines.append(stripped)
 
-        cleaned = "\n".join(lines).strip()
+        return "\n".join(lines)
 
-        if not cleaned:
-            return True
+    def _trim_locked_symbols(self, locked_symbols: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(locked_symbols, dict):
+            return {}
 
-        executable_patterns = [
-            r"\bif\s*\(",
-            r"\bfor\s*\(",
-            r"\bwhile\s*\(",
-            r"\bswitch\s*\(",
-            r"\breturn\b",
-            r"\bthrow\b",
-            r"\bnew\b",
-            r"=",
-            r"\.\w+\s*\(",
-        ]
+        trimmed = dict(locked_symbols)
 
-        return not any(re.search(pattern, cleaned) for pattern in executable_patterns)
+        for key in ["type_mappings", "signatures"]:
+            value = trimmed.get(key)
+
+            if isinstance(value, list) and len(value) > 40:
+                trimmed[key] = value[:40]
+                trimmed[f"{key}_truncated"] = True
+
+        return trimmed
+
+    def _normalize_target(self, target_language: str) -> str:
+        value = str(target_language or "").lower().strip()
+
+        if value in {"python", "py", "fastapi"}:
+            return "python"
+
+        if value in {"csharp", "c#", "cs", "dotnet"}:
+            return "csharp"
+
+        return "java"

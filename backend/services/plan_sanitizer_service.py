@@ -1,12 +1,6 @@
-# Convert bad planned output paths into proper Java Maven paths.
-
 import re
 from pathlib import Path
 from typing import Any
-
-from altair import layer
-
-from altair import layer
 
 
 class PlanSanitizerService:
@@ -40,8 +34,10 @@ class PlanSanitizerService:
     ) -> dict[str, Any]:
         target = (target_language or "").lower().strip()
 
-        if target != "java":
+        if target not in {"java", "python", "csharp", "c#", "cs", "dotnet", "py", "fastapi"}:
             return raw_plan
+
+        target = self._normalize_target(target)
 
         plan = dict(raw_plan or {})
         classes = []
@@ -79,12 +75,27 @@ class PlanSanitizerService:
                 layer=layer,
             )
 
-            file_path = self._sanitize_java_file_path(
-                file_path=original_file_path,
-                class_name=class_name,
-                source_path=source_path,
-                layer=layer,
-            )
+            if target == "python":
+                file_path = self._sanitize_python_file_path(
+                    file_path=original_file_path,
+                    class_name=class_name,
+                    source_path=source_path,
+                    layer=layer,
+                )
+            elif target == "csharp":
+                file_path = self._sanitize_csharp_file_path(
+                    file_path=original_file_path,
+                    class_name=class_name,
+                    source_path=source_path,
+                    layer=layer,
+                )
+            else:
+                file_path = self._sanitize_java_file_path(
+                    file_path=original_file_path,
+                    class_name=class_name,
+                    source_path=source_path,
+                    layer=layer,
+                )
 
             sanitized["class_name"] = class_name
             sanitized["file_path"] = file_path
@@ -128,7 +139,8 @@ class PlanSanitizerService:
             sanitized_method["method_name"] = self._sanitize_method_name(
                 sanitized_method.get("method_name")
                 or sanitized_method.get("name")
-                or "execute"
+                or "execute",
+                target_language=target,
             )
 
             methods.append(sanitized_method)
@@ -146,8 +158,7 @@ class PlanSanitizerService:
     ) -> str:
         target = (target_language or "").lower().strip()
 
-        if target != "java":
-            return self._safe_relative_path(path)
+        target = self._normalize_target(target)
 
         layer = self._normalize_layer(file_type, source_file, path, path)
         class_name = self._sanitize_class_name(
@@ -157,12 +168,83 @@ class PlanSanitizerService:
             preserve_suffix=True,
         )
 
+        if target == "python":
+            return self._sanitize_python_file_path(path, class_name, source_file, layer)
+
+        if target == "csharp":
+            return self._sanitize_csharp_file_path(path, class_name, source_file, layer)
+
         return self._sanitize_java_file_path(
             file_path=path,
             class_name=class_name,
             source_path=source_file,
             layer=layer,
         )
+
+    def _sanitize_python_file_path(
+        self,
+        file_path: str,
+        class_name: str,
+        source_path: str,
+        layer: str,
+    ) -> str:
+        clean_path = self._safe_relative_path(file_path)
+        ext = Path(clean_path).suffix.lower()
+
+        if ext in self.INVALID_OUTPUT_EXTENSIONS or not clean_path.endswith(".py"):
+            return self._python_path_for_layer(class_name, layer)
+
+        normalized = clean_path.replace("\\", "/").lstrip("/")
+
+        if not normalized.startswith("generated_app/"):
+            return self._python_path_for_layer(class_name, layer)
+
+        path_obj = Path(normalized)
+        filename = f"{self._to_snake_case(class_name)}.py"
+
+        if path_obj.name == "__init__.py":
+            return normalized
+
+        folder = self._python_folder_for_layer(layer)
+        expected_prefix = f"generated_app/{folder}/" if folder else "generated_app/"
+
+        if not normalized.startswith(expected_prefix):
+            return self._python_path_for_layer(class_name, layer)
+
+        return path_obj.parent.joinpath(filename).as_posix()
+
+    def _sanitize_csharp_file_path(
+        self,
+        file_path: str,
+        class_name: str,
+        source_path: str,
+        layer: str,
+    ) -> str:
+        clean_path = self._safe_relative_path(file_path)
+        ext = Path(clean_path).suffix.lower()
+
+        if ext in self.INVALID_OUTPUT_EXTENSIONS or not clean_path.endswith(".cs"):
+            return self._csharp_path_for_layer(class_name, layer)
+
+        normalized = clean_path.replace("\\", "/").lstrip("/")
+        first_part = normalized.split("/", 1)[0]
+        valid_folders = {
+            "Controllers",
+            "Services",
+            "Repositories",
+            "Models",
+            "DTOs",
+            "Adapters",
+            "Batch",
+            "Exceptions",
+            "Tests",
+        }
+
+        if first_part not in valid_folders:
+            return self._csharp_path_for_layer(class_name, layer)
+
+        path_obj = Path(normalized)
+        return path_obj.parent.joinpath(f"{class_name}.cs").as_posix()
 
     def _sanitize_java_file_path(
         self,
@@ -231,6 +313,52 @@ class PlanSanitizerService:
             return f"src/test/java/com/modernizer/migration/{folder}/{class_name}.java"
 
         return f"{self.JAVA_BASE}/{folder}/{class_name}.java"
+
+    def _python_path_for_layer(self, class_name: str, layer: str) -> str:
+        folder = self._python_folder_for_layer(layer)
+        module_name = self._to_snake_case(class_name)
+
+        if folder:
+            return f"generated_app/{folder}/{module_name}.py"
+
+        return f"generated_app/{module_name}.py"
+
+    @staticmethod
+    def _python_folder_for_layer(layer: str) -> str:
+        return {
+            "program": "programs",
+            "service": "services",
+            "resource": "routers",
+            "controller": "routers",
+            "repository": "repositories",
+            "dto": "schemas",
+            "model": "models",
+            "domain": "models",
+            "copybook": "copybooks",
+            "batch": "batch",
+            "adapter": "adapters",
+            "exception": "exceptions",
+            "test": "tests",
+        }.get(layer, "services")
+
+    def _csharp_path_for_layer(self, class_name: str, layer: str) -> str:
+        folder = {
+            "program": "Services",
+            "service": "Services",
+            "resource": "Controllers",
+            "controller": "Controllers",
+            "repository": "Repositories",
+            "dto": "DTOs",
+            "model": "Models",
+            "domain": "Models",
+            "copybook": "Models",
+            "batch": "Batch",
+            "adapter": "Adapters",
+            "exception": "Exceptions",
+            "test": "Tests",
+        }.get(layer, "Services")
+
+        return f"{folder}/{class_name}.cs"
 
     def _normalize_layer(
         self,
@@ -398,7 +526,7 @@ class PlanSanitizerService:
 
         return name
 
-    def _sanitize_method_name(self, method_name: str) -> str:
+    def _sanitize_method_name(self, method_name: str, target_language: str = "java") -> str:
         value = str(method_name or "execute").strip()
 
         parts = re.split(r"[^A-Za-z0-9]+", value)
@@ -407,6 +535,33 @@ class PlanSanitizerService:
         if not parts:
             return "execute"
 
+        target = self._normalize_target(target_language)
+
+        if target == "python":
+            method = self._to_snake_case("_".join(parts))
+            reserved = {
+                "class",
+                "return",
+                "def",
+                "if",
+                "else",
+                "elif",
+                "for",
+                "while",
+                "try",
+                "except",
+                "with",
+                "pass",
+                "none",
+                "true",
+                "false",
+            }
+            if method in reserved:
+                method += "_method"
+            if method[0].isdigit():
+                method = f"method_{method}"
+            return method
+
         method = parts[0][:1].lower() + parts[0][1:]
 
         for part in parts[1:]:
@@ -414,6 +569,9 @@ class PlanSanitizerService:
 
         if method[0].isdigit():
             method = f"method{method}"
+
+        if target == "csharp":
+            method = method[:1].upper() + method[1:]
 
         reserved = {
             "class",
@@ -432,6 +590,26 @@ class PlanSanitizerService:
             method += "Method"
 
         return method
+
+    @staticmethod
+    def _to_snake_case(value: str) -> str:
+        text = str(value or "generated").replace("-", "_").replace(" ", "_")
+        text = re.sub(r"(?<!^)(?=[A-Z])", "_", text)
+        text = re.sub(r"[^A-Za-z0-9_]+", "_", text).strip("_").lower()
+        text = re.sub(r"_+", "_", text)
+        return text or "generated"
+
+    @staticmethod
+    def _normalize_target(target_language: str) -> str:
+        value = str(target_language or "").lower().strip()
+
+        if value in {"python", "py", "fastapi"}:
+            return "python"
+
+        if value in {"csharp", "c#", "cs", "dotnet"}:
+            return "csharp"
+
+        return "java"
 
     def _safe_relative_path(self, path: str) -> str:
         value = str(path or "").replace("\\", "/").strip().lstrip("/")

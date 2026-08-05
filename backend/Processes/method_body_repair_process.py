@@ -22,24 +22,32 @@ class MethodBodyRepairProcess:
         max_methods: int = 10,
         project_id: str | None = None,
     ) -> dict[str, Any]:
+        target = self._normalize_target(target_language)
+
         project_dir = (
             Path("output")
             / "generated_code"
             / run_id
             / "project"
-            / target_language
+            / target
         )
 
-        scan = self.method_quality.scan_project(project_dir)
+        scan = self.method_quality.scan_project(
+            project_dir=project_dir,
+            target_language=target,
+        )
 
-        bad_methods = scan.get("comment_only_methods", [])[:max_methods]
+        bad_methods = (
+            scan.get("comment_only_methods", [])
+            + scan.get("placeholder_methods", [])
+        )[:max_methods]
 
         if not bad_methods:
             return {
                 "run_id": run_id,
-                "target_language": target_language,
+                "target_language": target,
                 "repaired": 0,
-                "message": "No comment-only methods found.",
+                "message": "No weak methods/functions found.",
                 "scan": scan,
             }
 
@@ -50,7 +58,7 @@ class MethodBodyRepairProcess:
 
         registry = SymbolRegistryService(self.db).get_registry(
             run_id=run_id,
-            target_language=target_language,
+            target_language=target,
         )
 
         business_rules = [
@@ -86,12 +94,17 @@ class MethodBodyRepairProcess:
 
                 content = absolute_path.read_text(encoding="utf-8", errors="ignore")
 
-                class_name = self._extract_class_name(content) or Path(relative_path).stem
+                class_name = self._extract_class_or_module_name(
+                    content=content,
+                    relative_path=relative_path,
+                    target_language=target,
+                )
 
                 source_evidence = self._build_source_evidence(
                     run_id=run_id,
                     method_name=method["method_name"],
                     relative_path=relative_path,
+                    target_language=target,
                 )
 
                 result = agent.repair_method_body(
@@ -103,17 +116,19 @@ class MethodBodyRepairProcess:
                     source_evidence=source_evidence,
                     business_rules=business_rules,
                     locked_symbols=registry,
+                    target_language=target,
                 )
 
                 updated = self._replace_method_body(
                     content=content,
                     method_name=method["method_name"],
                     replacement_body=result["replacement_body"],
+                    target_language=target,
                 )
 
                 backup_path = self._backup_file(
                     run_id=run_id,
-                    target_language=target_language,
+                    target_language=target,
                     relative_path=relative_path,
                     content=content,
                 )
@@ -138,11 +153,14 @@ class MethodBodyRepairProcess:
                     }
                 )
 
-        after_scan = self.method_quality.scan_project(project_dir)
+        after_scan = self.method_quality.scan_project(
+            project_dir=project_dir,
+            target_language=target,
+        )
 
         report = {
             "run_id": run_id,
-            "target_language": target_language,
+            "target_language": target,
             "requested": len(bad_methods),
             "repaired": len(repaired),
             "errors": errors,
@@ -152,7 +170,7 @@ class MethodBodyRepairProcess:
             "after_scan": after_scan,
         }
 
-        self._write_report(run_id, target_language, report)
+        self._write_report(run_id, target, report)
 
         return report
 
@@ -161,12 +179,42 @@ class MethodBodyRepairProcess:
         content: str,
         method_name: str,
         replacement_body: str,
+        target_language: str,
     ) -> str:
+        target = self._normalize_target(target_language)
+
+        if target == "python":
+            return self._replace_python_function_body(
+                content=content,
+                function_name=method_name,
+                replacement_body=replacement_body,
+            )
+
+        return self._replace_brace_method_body(
+            content=content,
+            method_name=method_name,
+            replacement_body=replacement_body,
+            target_language=target,
+        )
+
+    def _replace_brace_method_body(
+        self,
+        content: str,
+        method_name: str,
+        replacement_body: str,
+        target_language: str,
+    ) -> str:
+        if target_language == "csharp":
+            visibility = r"(?:public|private|protected|internal)"
+        else:
+            visibility = r"(?:public|private|protected)"
+
         pattern = re.compile(
             rf"""
             (?P<header>
-                (?:public|private|protected)\s+
+                {visibility}\s+
                 (?:static\s+)?
+                (?:async\s+)?
                 [A-Za-z0-9_<>\[\],\s?.]+\s+
                 {re.escape(method_name)}\s*
                 \([^)]*\)\s*
@@ -197,6 +245,75 @@ class MethodBodyRepairProcess:
             + content[end_brace:]
         )
 
+    def _replace_python_function_body(
+        self,
+        content: str,
+        function_name: str,
+        replacement_body: str,
+    ) -> str:
+        pattern = re.compile(
+            rf"""
+            ^(?P<indent>[ \t]*)
+            (?P<header>
+                (?:async\s+)?
+                def\s+
+                {re.escape(function_name)}\s*
+                \([^)]*\)\s*
+                (?:->\s*[^:]+)?
+                :
+            )
+            """,
+            re.VERBOSE | re.MULTILINE,
+        )
+
+        match = pattern.search(content)
+
+        if not match:
+            raise ValueError(f"Could not locate Python function {function_name}")
+
+        indent = match.group("indent") or ""
+        body_indent = indent + "    "
+
+        body_start = match.end()
+        body_end = self._find_python_function_end(
+            content=content,
+            body_start=body_start,
+            parent_indent_len=len(indent),
+        )
+
+        indented_body = self._indent_body(replacement_body, body_indent)
+
+        return (
+            content[:body_start]
+            + "\n"
+            + indented_body
+            + "\n"
+            + content[body_end:]
+        )
+
+    def _find_python_function_end(
+        self,
+        content: str,
+        body_start: int,
+        parent_indent_len: int,
+    ) -> int:
+        lines = content[body_start:].splitlines(keepends=True)
+        offset = body_start
+
+        for line in lines:
+            if not line.strip():
+                offset += len(line)
+                continue
+
+            current_indent = len(line) - len(line.lstrip(" \t"))
+
+            if current_indent <= parent_indent_len:
+                return offset
+
+            offset += len(line)
+
+        return len(content)
+
     def _indent_body(self, body: str, indent: str) -> str:
         lines = [line.rstrip() for line in str(body or "").splitlines()]
 
@@ -209,6 +326,7 @@ class MethodBodyRepairProcess:
     def _find_matching_brace(self, text: str, open_index: int) -> int:
         depth = 0
         in_string = False
+        in_char = False
         escape = False
 
         for index in range(open_index, len(text)):
@@ -222,11 +340,15 @@ class MethodBodyRepairProcess:
                 escape = True
                 continue
 
-            if char == '"':
+            if char == '"' and not in_char:
                 in_string = not in_string
                 continue
 
-            if in_string:
+            if char == "'" and not in_string:
+                in_char = not in_char
+                continue
+
+            if in_string or in_char:
                 continue
 
             if char == "{":
@@ -240,23 +362,49 @@ class MethodBodyRepairProcess:
 
         return -1
 
-    def _extract_class_name(self, content: str) -> str:
-        match = re.search(r"\bclass\s+([A-Za-z_][A-Za-z0-9_]*)", content or "")
+    def _extract_class_or_module_name(
+        self,
+        content: str,
+        relative_path: str,
+        target_language: str,
+    ) -> str:
+        target = self._normalize_target(target_language)
 
-        return match.group(1) if match else ""
+        if target == "python":
+            class_match = re.search(
+                r"^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)",
+                content or "",
+                flags=re.MULTILINE,
+            )
+
+            if class_match:
+                return class_match.group(1)
+
+            return Path(relative_path).stem
+
+        match = re.search(
+            r"\bclass\s+([A-Za-z_][A-Za-z0-9_]*)",
+            content or "",
+        )
+
+        return match.group(1) if match else Path(relative_path).stem
 
     def _build_source_evidence(
         self,
         run_id: str,
         method_name: str,
         relative_path: str,
+        target_language: str,
     ) -> str:
         evidence = {
+            "run_id": run_id,
+            "target_language": target_language,
             "method_name": method_name,
             "relative_path": relative_path,
             "note": (
                 "Use the matching COBOL/Telon paragraph, technical YAML, "
-                "business rules, and locked symbols to reconstruct executable logic."
+                "business rules, locked symbols, and surrounding generated code "
+                "to reconstruct executable logic."
             ),
         }
 
@@ -301,3 +449,14 @@ class MethodBodyRepairProcess:
 
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+
+    def _normalize_target(self, target_language: str) -> str:
+        value = str(target_language or "").lower().strip()
+
+        if value in {"python", "py", "fastapi"}:
+            return "python"
+
+        if value in {"csharp", "c#", "cs", "dotnet"}:
+            return "csharp"
+
+        return "java"

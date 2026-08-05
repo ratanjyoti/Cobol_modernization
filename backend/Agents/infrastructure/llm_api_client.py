@@ -38,11 +38,12 @@ class OpenRouterClient:
         self.api_key = api_key or settings.OPENROUTER_API_KEY
         self.base_url = base_url or settings.OPENROUTER_BASE_URL
         self.model = model or settings.OPENROUTER_MODEL
-        if not self.api_key:
+        local_openai_compatible = str(self.base_url or "").rstrip("/").endswith("/v1")
+        if not self.api_key and not local_openai_compatible:
             raise RuntimeError("API key is not configured. Add an OpenRouter key in AI Configuration or backend/.env.")
         self.client = openai.OpenAI(
             base_url=self.base_url,
-            api_key=self.api_key,
+            api_key=self.api_key or "local",
             timeout=45,
         )
 

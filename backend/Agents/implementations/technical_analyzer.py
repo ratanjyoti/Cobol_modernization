@@ -5,6 +5,7 @@ from typing import Dict, List
 from pydantic import BaseModel
 
 from Agents.infrastructure.agent_base import AgentBase
+from Agents.infrastructure.prompt_store import PromptStore
 from Agents.models.analysis_models import TechnicalAnalysisReport
 
 class DataStructure(BaseModel):
@@ -18,100 +19,36 @@ class LogicStep(BaseModel):
 
 
 class TechnicalAnalyzerAgent(AgentBase):
-    def __init__(self, llm_client):
+    def __init__(self, llm_client, prompt_store: PromptStore | None = None):
         self.llm_client = llm_client
+        self.prompt_store = prompt_store or PromptStore()
 
-    async def analyze_skeleton(self, content: str, global_types: str):
-        prompt = f"""
-You are a Mainframe Technical Architect. Analyze the following COBOL code.
+    async def analyze_skeleton(self, content: str, global_types: str, project_id: str = "default"):
+        system_prompt = self.prompt_store.get_prompt("technical_analysis_system", project_id)
+        user_template = self.prompt_store.get_prompt("technical_analysis_user", project_id)
+        user_prompt = self.prompt_store.render(
+            user_template,
+            {
+                "content": content,
+                "global_types": global_types,
+            },
+        )
 
-CONTEXT:
-Global Type Mappings:
-{global_types}
-
-CODE:
-{content}
-
-TASK:
-Create a Technical YAML map of this chunk. Identify:
-1. Logic Flow: paragraph-to-paragraph or section-to-section execution.
-2. Data Mutations: variables updated and the condition/reason for update.
-3. External Hits: SQL tables, file operations, CICS calls, or program calls.
-4. Business Logic Candidates: IF, EVALUATE, COMPUTE, ADD, SUBTRACT, MULTIPLY, DIVIDE, READ, WRITE, REWRITE, DELETE, CALL, EXEC SQL.
-
-OUTPUT FORMAT:
-Return ONLY valid YAML.
-Do not include markdown fences.
-Do not include conversational text.
-"""
-
-        response = await self.llm_client.generate(prompt)
+        response = await self.llm_client.generate(system_prompt, user_prompt)
         return self._strip_code_fence(response)
 
-    async def analyze_deep(self, content: str, lang: str):
-        prompt = f"""
-You are a Mainframe Modernization Architect.
+    async def analyze_deep(self, content: str, lang: str, project_id: str = "default"):
+        system_prompt = self.prompt_store.get_prompt("technical_deep_system", project_id)
+        user_template = self.prompt_store.get_prompt("technical_deep_user", project_id)
+        user_prompt = self.prompt_store.render(
+            user_template,
+            {
+                "content": content,
+                "lang": lang,
+            },
+        )
 
-Produce a professional reverse engineering report for this {lang} code.
-
-CODE:
-{content}
-
-Return ONLY a valid JSON object with this exact structure:
-
-{{
-  "business_purpose": "Detailed 3-5 sentence paragraph describing the program goal.",
-  "data_structures": [
-    {{
-      "name": "record or structure name",
-      "description": "business meaning of this structure",
-      "fields": [
-        {{
-          "name": "field name",
-          "pic_clause": "PIC clause if available",
-          "business_meaning": "what this field means in the business",
-          "data_type": "numeric/alphanumeric/packed decimal/date/status/etc"
-        }}
-      ]
-    }}
-  ],
-  "processing_logic_flow": [
-    {{
-      "step_number": 1,
-      "description": "business/technical step explanation",
-      "technical_trigger": "paragraph, statement, or operation that causes this step"
-    }}
-  ],
-  "external_dependencies": [
-    {{
-      "name": "dependency name",
-      "type": "copybook/file/program/sql_table/cics_transaction/unknown",
-      "description": "why this dependency is used"
-    }}
-  ],
-  "complexity": {{
-    "rating": "Low/Medium/High",
-    "reasons": [
-      "reason 1",
-      "reason 2"
-    ]
-  }},
-  "modernization_recommendations": [
-    "specific migration recommendation 1",
-    "specific migration recommendation 2",
-    "specific migration recommendation 3"
-  ]
-}}
-
-Rules:
-- Return JSON only.
-- No markdown.
-- No comments.
-- Do not invent dependencies that are not supported by the code.
-- Preserve monetary precision and PIC information when visible.
-"""
-
-        response = await self.llm_client.generate(prompt)
+        response = await self.llm_client.generate(system_prompt, user_prompt)
         cleaned = self._strip_code_fence(response)
 
         try:

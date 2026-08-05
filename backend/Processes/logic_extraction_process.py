@@ -123,8 +123,23 @@ class LogicExtractionProcess:
         stale = 0
         failed = 0
         results = []
+        processed = 0
 
-        for project_file in files:
+        self._write_extraction_status(
+            run_id,
+            status="RUNNING",
+            stage="Preparing business logic extraction",
+            progress=1 if total else 100,
+            total_files=total,
+            completed_files=0,
+            cached_files=0,
+            stale_files=0,
+            failed_files=0,
+            processed_files=0,
+            force=force,
+        )
+
+        for file_position, project_file in enumerate(files, start=1):
             try:
                 source_code = self._load_source_code_for_file(project_file)
                 source_hash = self._source_hash(source_code)
@@ -143,6 +158,22 @@ class LogicExtractionProcess:
                 )
 
                 cache_status = "new"
+                self._write_extraction_status(
+                    run_id,
+                    status="RUNNING",
+                    stage=f"Checking saved business rules for {project_file.filename}",
+                    progress=self._file_progress(total, processed),
+                    total_files=total,
+                    completed_files=completed,
+                    cached_files=cached,
+                    stale_files=stale,
+                    failed_files=failed,
+                    processed_files=processed,
+                    current_file_id=project_file.id,
+                    current_file_name=project_file.filename,
+                    current_file_index=file_position,
+                    force=force,
+                )
                 if existing_rules_count and not force:
                     cached_entry = self._cached_metadata(run_id, project_file.id)
                     cache_status = self._cache_status(cached_entry, source_hash)
@@ -154,6 +185,7 @@ class LogicExtractionProcess:
                         )
                     else:
                         cached += 1
+                        processed += 1
                         results.append(
                             {
                                 **cached_entry,
@@ -170,6 +202,22 @@ class LogicExtractionProcess:
                                 "prompt_version": self.PROMPT_VERSION,
                                 "technical_analysis_version": self.TECHNICAL_ANALYSIS_VERSION,
                             }
+                        )
+                        self._write_extraction_status(
+                            run_id,
+                            status="RUNNING",
+                            stage=f"Loaded saved business rules for {project_file.filename}",
+                            progress=self._file_progress(total, processed),
+                            total_files=total,
+                            completed_files=completed,
+                            cached_files=cached,
+                            stale_files=stale,
+                            failed_files=failed,
+                            processed_files=processed,
+                            current_file_id=project_file.id,
+                            current_file_name=project_file.filename,
+                            current_file_index=file_position,
+                            force=force,
                         )
                         continue
 
@@ -197,6 +245,7 @@ class LogicExtractionProcess:
                             "reason": "unsupported_or_empty_source",
                         }
                     )
+                    processed += 1
                     continue
 
                 dependency_context = self._build_dependency_context_for_file(
@@ -214,6 +263,9 @@ class LogicExtractionProcess:
                     extractor=extractor,
                     dependency_context=dependency_context,
                     glossary_context=glossary_context,
+                    total_files=total,
+                    processed_files=processed,
+                    file_position=file_position,
                 )
                 result["source_hash"] = source_hash
                 result["extractor_version"] = self.EXTRACTOR_VERSION
@@ -227,6 +279,7 @@ class LogicExtractionProcess:
                 )
 
                 completed += 1
+                processed += 1
                 results.append(
                     {
                         "file_id": project_file.id,
@@ -255,9 +308,26 @@ class LogicExtractionProcess:
                         "status": "completed",
                     }
                 )
+                self._write_extraction_status(
+                    run_id,
+                    status="RUNNING",
+                    stage=f"Completed business rules for {project_file.filename}",
+                    progress=self._file_progress(total, processed),
+                    total_files=total,
+                    completed_files=completed,
+                    cached_files=cached,
+                    stale_files=stale,
+                    failed_files=failed,
+                    processed_files=processed,
+                    current_file_id=project_file.id,
+                    current_file_name=project_file.filename,
+                    current_file_index=file_position,
+                    force=force,
+                )
 
             except Exception as exc:
                 failed += 1
+                processed += 1
                 results.append(
                     {
                         "file_id": getattr(project_file, "id", None),
@@ -266,6 +336,23 @@ class LogicExtractionProcess:
                         "status": "failed",
                         "error": str(exc),
                     }
+                )
+                self._write_extraction_status(
+                    run_id,
+                    status="RUNNING",
+                    stage=f"Failed extracting {getattr(project_file, 'filename', 'source file')}",
+                    progress=self._file_progress(total, processed),
+                    total_files=total,
+                    completed_files=completed,
+                    cached_files=cached,
+                    stale_files=stale,
+                    failed_files=failed,
+                    processed_files=processed,
+                    current_file_id=getattr(project_file, "id", None),
+                    current_file_name=getattr(project_file, "filename", ""),
+                    current_file_index=file_position,
+                    error=str(exc),
+                    force=force,
                 )
 
         summary = {
@@ -278,7 +365,73 @@ class LogicExtractionProcess:
             "results": results,
         }
         self._write_extraction_summary(run_id, summary)
+        self._write_extraction_status(
+            run_id,
+            status="FAILED" if failed and not (completed or cached) else "COMPLETED",
+            stage="Business logic extraction finished",
+            progress=100,
+            total_files=total,
+            completed_files=completed,
+            cached_files=cached,
+            stale_files=stale,
+            failed_files=failed,
+            processed_files=processed,
+            force=force,
+        )
         return summary
+
+    def extraction_status(self, run_id: str) -> dict[str, Any]:
+        return self.extraction_status_for_run(run_id)
+
+    @classmethod
+    def extraction_status_for_run(cls, run_id: str) -> dict[str, Any]:
+        path = cls._status_path(run_id)
+        if path.exists():
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(payload, dict):
+                    payload.setdefault("run_id", run_id)
+                    return payload
+            except Exception:
+                pass
+
+        summary_path = cls._summary_path(run_id)
+        try:
+            summary = json.loads(summary_path.read_text(encoding="utf-8")) if summary_path.exists() else {}
+            if not isinstance(summary, dict):
+                summary = {}
+        except Exception:
+            summary = {}
+        if summary.get("results"):
+            return {
+                "run_id": run_id,
+                "status": "COMPLETED",
+                "stage": "Saved business rules loaded.",
+                "progress": 100,
+                "total_files": summary.get("total_files", 0),
+                "completed_files": summary.get("completed_files", 0),
+                "cached_files": summary.get("cached_files", 0),
+                "stale_files": summary.get("stale_files", 0),
+                "failed_files": summary.get("failed_files", 0),
+                "processed_files": (
+                    int(summary.get("completed_files") or 0)
+                    + int(summary.get("cached_files") or 0)
+                    + int(summary.get("failed_files") or 0)
+                ),
+            }
+
+        return {
+            "run_id": run_id,
+            "status": "NOT_STARTED",
+            "stage": "Business logic extraction has not started.",
+            "progress": 0,
+            "total_files": 0,
+            "completed_files": 0,
+            "cached_files": 0,
+            "stale_files": 0,
+            "failed_files": 0,
+            "processed_files": 0,
+        }
 
     def extraction_summary(self, run_id: str) -> dict[str, Any]:
         path = self._summary_path(run_id)
@@ -301,6 +454,38 @@ class LogicExtractionProcess:
     def _summary_path(run_id: str) -> Path:
         backend_root = Path(__file__).resolve().parents[1]
         return backend_root / "output" / "business_logic" / run_id / "summary.json"
+
+    @staticmethod
+    def _status_path(run_id: str) -> Path:
+        backend_root = Path(__file__).resolve().parents[1]
+        return backend_root / "output" / "business_logic" / run_id / "status.json"
+
+    def _write_extraction_status(
+        self,
+        run_id: str,
+        *,
+        status: str,
+        stage: str,
+        progress: int | float,
+        **extra: Any,
+    ) -> None:
+        payload = {
+            "run_id": run_id,
+            "status": status,
+            "stage": stage,
+            "progress": max(0, min(100, int(round(float(progress))))),
+            **extra,
+        }
+        path = self._status_path(run_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    @staticmethod
+    def _file_progress(total_files: int, processed_files: int, current_file_fraction: float = 0.0) -> int:
+        if total_files <= 0:
+            return 100
+        bounded_fraction = max(0.0, min(1.0, current_file_fraction))
+        return int(round(((processed_files + bounded_fraction) / total_files) * 100))
 
     def _cached_metadata(self, run_id: str, file_id: int | str) -> dict[str, Any]:
         summary = self.extraction_summary(run_id)
@@ -339,6 +524,9 @@ class LogicExtractionProcess:
         extractor: AgenticBusinessLogicExtractor,
         dependency_context: str,
         glossary_context: str,
+        total_files: int,
+        processed_files: int,
+        file_position: int,
     ) -> dict[str, Any]:
         chunks = self._load_or_create_chunks_for_file(
             run_id=run_id,
@@ -366,6 +554,7 @@ class LogicExtractionProcess:
         fallback_chunks = 0
         failed_chunks = 0
         overlap_lines = 0
+        chunk_jobs: list[tuple[BusinessLogicChunkSource, str]] = []
 
         for chunk in chunks:
             chunk_source = self._normalized_chunk_source(build_chunk_source(chunk))
@@ -385,13 +574,57 @@ class LogicExtractionProcess:
                 dependency_context=dependency_context,
                 glossary_context=glossary_context,
             )
-
             for batch in batches:
-                request_batches += 1
+                chunk_jobs.append((batch, chunk_yaml))
+
+        request_batches = len(chunk_jobs)
+        self._write_extraction_status(
+            run_id,
+            status="RUNNING",
+            stage=f"Prepared {request_batches} extraction batch(es) for {project_file.filename}",
+            progress=self._file_progress(total_files, processed_files, 0.05),
+            total_files=total_files,
+            processed_files=processed_files,
+            current_file_id=project_file.id,
+            current_file_name=project_file.filename,
+            current_file_index=file_position,
+            stored_chunks=stored_chunks,
+            request_batches=request_batches,
+            completed_batches=0,
+            current_batch_index=0,
+        )
+
+        for batch_number, (batch, chunk_yaml) in enumerate(chunk_jobs, start=1):
                 print(
                     f"Chunk {batch.chunk_index}/{stored_chunks} primary lines "
                     f"{batch.primary_start_line}-{batch.primary_end_line} "
                     f"overlap {len((batch.overlap_source or '').splitlines())}"
+                )
+                self._write_extraction_status(
+                    run_id,
+                    status="RUNNING",
+                    stage=(
+                        f"Extracting {project_file.filename}: batch {batch_number} of {request_batches} "
+                        f"(lines {batch.primary_start_line}-{batch.primary_end_line})"
+                    ),
+                    progress=self._file_progress(
+                        total_files,
+                        processed_files,
+                        (batch_number - 1) / request_batches if request_batches else 0.0,
+                    ),
+                    total_files=total_files,
+                    processed_files=processed_files,
+                    current_file_id=project_file.id,
+                    current_file_name=project_file.filename,
+                    current_file_index=file_position,
+                    stored_chunks=stored_chunks,
+                    request_batches=request_batches,
+                    completed_batches=batch_number - 1,
+                    current_batch_index=batch_number,
+                    current_chunk_index=batch.chunk_index,
+                    primary_start_line=batch.primary_start_line,
+                    primary_end_line=batch.primary_end_line,
+                    semantic_units=batch.semantic_units,
                 )
                 formatted_source = format_chunk_for_prompt(batch)
                 chunk_profile = self.preprocessor.prepare(
@@ -441,6 +674,29 @@ class LogicExtractionProcess:
                         fallback_chunks += 1
                     self._write_chunk_result(run_id, project_file.id, batch.chunk_index, chunk_result)
                     chunk_results.append(chunk_result)
+                    self._write_extraction_status(
+                        run_id,
+                        status="RUNNING",
+                        stage=f"Completed {project_file.filename}: batch {batch_number} of {request_batches}",
+                        progress=self._file_progress(
+                            total_files,
+                            processed_files,
+                            batch_number / request_batches if request_batches else 1.0,
+                        ),
+                        total_files=total_files,
+                        processed_files=processed_files,
+                        current_file_id=project_file.id,
+                        current_file_name=project_file.filename,
+                        current_file_index=file_position,
+                        stored_chunks=stored_chunks,
+                        request_batches=request_batches,
+                        completed_batches=batch_number,
+                        current_batch_index=batch_number,
+                        current_chunk_index=batch.chunk_index,
+                        primary_start_line=batch.primary_start_line,
+                        primary_end_line=batch.primary_end_line,
+                        semantic_units=batch.semantic_units,
+                    )
                 except Exception as exc:
                     failed_chunks += 1
                     failed = {
